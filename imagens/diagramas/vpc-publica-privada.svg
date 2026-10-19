@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" width="960" height="640" font-family="Arial, Helvetica, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">VPC bia-vpc: subnets públicas e privadas</title>
+  <desc id="d">A VPC bia-vpc (10.0.0.0/16) tem duas zonas, us-east-1a e us-east-1b. Cada zona tem uma subnet pública, com rota 0.0.0.0/0 para o Internet Gateway, e uma subnet privada, só com rota local. A bia-dev fica na pública 1a; a EC2 do cluster ECS em uma das públicas (1a ou 1b, a critério do Auto Scaling Group); o porteiro na pública 1b; o RDS na privada 1a. Não há NAT Gateway.</desc>
+  <defs>
+    <marker id="aGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2E7D32"/></marker>
+    <marker id="aBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F5FA8"/></marker>
+    <marker id="aRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B42318"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="640" fill="#FFFFFF"/>
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#232F3E">A rede: VPC com subnets públicas e privadas</text>
+
+  <!-- Internet -->
+  <rect x="400" y="50" width="160" height="38" rx="19" fill="#EEF1F4" stroke="#7D8998"/>
+  <text x="480" y="74" font-size="15" font-weight="bold" fill="#232F3E" text-anchor="middle">Internet</text>
+  <path d="M480,88 L480,110" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-start="url(#aGreen)" marker-end="url(#aGreen)"/>
+
+  <!-- VPC -->
+  <rect x="20" y="130" width="920" height="420" fill="#F7F9FB" stroke="#3334B9" stroke-width="2"/>
+  <text x="36" y="154" font-size="15" font-weight="bold" fill="#3334B9">VPC bia-vpc · 10.0.0.0/16</text>
+  <text x="600" y="154" font-size="13" fill="#3334B9">a "rede particular" do projeto na AWS</text>
+
+  <!-- IGW on the border -->
+  <rect x="380" y="112" width="200" height="36" fill="#E8F5E9" stroke="#2E7D32" stroke-width="1.5"/>
+  <text x="480" y="135" font-size="14" font-weight="bold" fill="#1B5E20" text-anchor="middle">Internet Gateway (bia-igw)</text>
+
+  <!-- AZ a -->
+  <rect x="40" y="168" width="430" height="366" fill="none" stroke="#7D8998" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <text x="56" y="190" font-size="14" font-weight="bold" fill="#3B4450">Zona us-east-1a</text>
+  <!-- AZ b -->
+  <rect x="490" y="168" width="430" height="366" fill="none" stroke="#7D8998" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <text x="506" y="190" font-size="14" font-weight="bold" fill="#3B4450">Zona us-east-1b</text>
+
+  <!-- Public 1a -->
+  <rect x="56" y="202" width="398" height="150" fill="#EAF6EA" stroke="#2E7D32" stroke-width="1.5"/>
+  <text x="70" y="224" font-size="14" font-weight="bold" fill="#1B5E20">Subnet pública 1a</text>
+  <text x="70" y="244" font-size="13" fill="#1B5E20">rota 0.0.0.0/0 → Internet Gateway · IP público automático</text>
+  <rect x="70" y="262" width="170" height="70" fill="#FFFFFF" stroke="#ED7100" stroke-width="1.5"/>
+  <text x="155" y="290" font-size="14" font-weight="bold" fill="#232F3E" text-anchor="middle">EC2 bia-dev</text>
+  <text x="155" y="312" font-size="13" fill="#3B4450" text-anchor="middle">máquina de trabalho</text>
+  <rect x="260" y="262" width="180" height="70" fill="#FFFFFF" stroke="#ED7100" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="350" y="284" font-size="13" fill="#3B4450" text-anchor="middle">ou aqui: o ASG pode pôr</text>
+  <text x="350" y="304" font-size="13" fill="#3B4450" text-anchor="middle">a EC2 do cluster em</text>
+  <text x="350" y="322" font-size="13" fill="#3B4450" text-anchor="middle">qualquer subnet pública</text>
+
+  <!-- Public 1b -->
+  <rect x="506" y="202" width="398" height="150" fill="#EAF6EA" stroke="#2E7D32" stroke-width="1.5"/>
+  <text x="520" y="224" font-size="14" font-weight="bold" fill="#1B5E20">Subnet pública 1b</text>
+  <text x="520" y="244" font-size="13" fill="#1B5E20">rota 0.0.0.0/0 → Internet Gateway · IP público automático</text>
+  <rect x="520" y="262" width="180" height="70" fill="#FFFFFF" stroke="#ED7100" stroke-width="1.5"/>
+  <text x="610" y="284" font-size="14" font-weight="bold" fill="#232F3E" text-anchor="middle">EC2 do cluster ECS</text>
+  <text x="610" y="304" font-size="12" fill="#3B4450" text-anchor="middle">(subnet pública 1a ou 1b)</text>
+  <text x="610" y="322" font-size="12" fill="#3B4450" text-anchor="middle">roda a BIA (porta 80)</text>
+  <rect x="716" y="262" width="174" height="70" fill="#FFFFFF" stroke="#ED7100" stroke-width="1.5"/>
+  <text x="803" y="290" font-size="14" font-weight="bold" fill="#232F3E" text-anchor="middle">EC2 porteiro</text>
+  <text x="803" y="312" font-size="13" fill="#3B4450" text-anchor="middle">bastion do Desafio 4</text>
+
+  <!-- Private 1a -->
+  <rect x="56" y="370" width="398" height="150" fill="#EAF1FB" stroke="#1F5FA8" stroke-width="1.5"/>
+  <text x="70" y="392" font-size="14" font-weight="bold" fill="#123E73">Subnet privada 1a</text>
+  <text x="70" y="412" font-size="13" fill="#123E73">só rota local (10.0.0.0/16) · sem saída para a internet</text>
+  <rect x="150" y="430" width="210" height="72" fill="#FFFFFF" stroke="#1F5FA8" stroke-width="1.5"/>
+  <text x="255" y="458" font-size="14" font-weight="bold" fill="#232F3E" text-anchor="middle">RDS bia (PostgreSQL)</text>
+  <text x="255" y="480" font-size="13" fill="#3B4450" text-anchor="middle">sem IP público · porta 5432</text>
+
+  <!-- Private 1b -->
+  <rect x="506" y="370" width="398" height="150" fill="#EAF1FB" stroke="#1F5FA8" stroke-width="1.5"/>
+  <text x="520" y="392" font-size="14" font-weight="bold" fill="#123E73">Subnet privada 1b</text>
+  <text x="520" y="412" font-size="13" fill="#123E73">só rota local (10.0.0.0/16)</text>
+  <text x="520" y="452" font-size="13" fill="#3B4450">Fica de reserva: o RDS exige um grupo</text>
+  <text x="520" y="472" font-size="13" fill="#3B4450">de subnets em 2 zonas diferentes.</text>
+
+  <!-- arrows IGW -> public -->
+  <path d="M430,148 L300,200" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#aGreen)"/>
+  <path d="M530,148 L660,200" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#aGreen)"/>
+
+  <!-- inner route public -> private (local) -->
+  <path d="M610,332 L610,350 L480,350 L480,466 L364,466" fill="none" stroke="#1F5FA8" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#aBlue)"/>
+  <text x="372" y="458" font-size="12" fill="#123E73">rota local · 5432</text>
+
+  <!-- Legend -->
+  <text x="30" y="574" font-size="14" font-weight="bold" fill="#232F3E">Sem NAT Gateway (de propósito):</text>
+  <text x="258" y="574" font-size="14" fill="#232F3E">as subnets privadas não têm caminho para a internet — o banco não precisa sair,</text>
+  <text x="30" y="594" font-size="14" fill="#232F3E">e o NAT cobraria por hora. Público × privado é decidido pela TABELA DE ROTAS, não pelo nome da subnet.</text>
+  <rect x="30" y="610" width="18" height="14" fill="#EAF6EA" stroke="#2E7D32"/>
+  <text x="54" y="622" font-size="13" fill="#232F3E">pública (tem rota para o IGW)</text>
+  <rect x="260" y="610" width="18" height="14" fill="#EAF1FB" stroke="#1F5FA8"/>
+  <text x="284" y="622" font-size="13" fill="#232F3E">privada (só rota local)</text>
+  <path d="M460,617 L490,617" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#aGreen)"/>
+  <text x="498" y="622" font-size="13" fill="#232F3E">tráfego com a internet</text>
+  <path d="M660,617 L690,617" fill="none" stroke="#1F5FA8" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#aBlue)"/>
+  <text x="698" y="622" font-size="13" fill="#232F3E">tráfego interno da VPC</text>
+</svg>

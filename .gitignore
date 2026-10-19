@@ -1,0 +1,7 @@
+.env
+!bia/client/.env
+node_modules/
+imagens/Codepipeline-pipelines.png
+imagens/Registro-br-painel-dominios.png
+imagens/Target-groups.png
+*credentials*.csv

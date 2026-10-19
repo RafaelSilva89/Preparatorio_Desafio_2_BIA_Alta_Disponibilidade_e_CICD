@@ -1,0 +1,2268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Roteiro passo a passo do Desafio 3 da formação AWS: servir o front-end da BIA pelo S3, com os scripts de build e deploy e o registro gravado no RDS.">
+<meta name="color-scheme" content="light dark">
+<title>Desafio 3 — BIA no S3</title>
+<script>
+  /* Aplica o tema salvo antes da primeira pintura: no rodape, quem escolheu
+     escuro veria um lampejo branco a cada carregamento. */
+  (function () {
+    try {
+      var t = localStorage.getItem("desafio3-guia-tema");
+      if (t === "dark" || t === "light") {
+        document.documentElement.setAttribute("data-theme", t);
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+
+<style>
+  :root {
+    --bg:        #E9EDEF;
+    --surface:   #FFFFFF;
+    --surface-2: #F3F6F7;
+    --ink:       #0E1619;
+    --ink-2:     #44555C;
+    --ink-3:     #6F8188;
+    --line:      #D3DBDE;
+    --line-2:    #E4EAEC;
+    --accent:    #0A6A72;
+    --accent-2:  #08535A;
+    --accent-soft:#DBECED;
+    --warn:      #A05712;
+    --warn-soft: #FAEDDC;
+    --ok:        #1E6F45;
+    --ok-soft:   #DEF0E6;
+    --stop:      #A13327;
+    --stop-soft: #FAE3E0;
+    --term-bg:   #0D1619;
+    --term-line: #1E2E34;
+    --term-ink:  #D6E3E7;
+    --term-dim:  #7C949B;
+    --shadow:    0 1px 2px rgba(14,22,25,.05), 0 8px 24px -16px rgba(14,22,25,.28);
+    --radius: 10px;
+    --maxw: 1180px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #0B1214;
+      --surface:   #121B1E;
+      --surface-2: #162126;
+      --ink:       #E7EFF1;
+      --ink-2:     #A8BBC1;
+      --ink-3:     #7C9199;
+      --line:      #24343A;
+      --line-2:    #1C282D;
+      --accent:    #5AC6CE;
+      --accent-2:  #8BDBE1;
+      --accent-soft:#10333A;
+      --warn:      #E2A75E;
+      --warn-soft: #2C2216;
+      --ok:        #6FCB95;
+      --ok-soft:   #13291D;
+      --stop:      #EA8B7D;
+      --stop-soft: #2E1A17;
+      --term-bg:   #08100F;
+      --term-line: #1B2A2F;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg:        #0B1214;
+    --surface:   #121B1E;
+    --surface-2: #162126;
+    --ink:       #E7EFF1;
+    --ink-2:     #A8BBC1;
+    --ink-3:     #7C9199;
+    --line:      #24343A;
+    --line-2:    #1C282D;
+    --accent:    #5AC6CE;
+    --accent-2:  #8BDBE1;
+    --accent-soft:#10333A;
+    --warn:      #E2A75E;
+    --warn-soft: #2C2216;
+    --ok:        #6FCB95;
+    --ok-soft:   #13291D;
+    --stop:      #EA8B7D;
+    --stop-soft: #2E1A17;
+    --term-bg:   #08100F;
+    --term-line: #1B2A2F;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -0.015em;
+  }
+
+  code, kbd, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  }
+
+  /* ---------- barra superior ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-in {
+    max-width: var(--maxw); margin: 0 auto; padding: 10px 24px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  }
+  .topbar-id { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+  .topbar-id strong { font-family: "Archivo", sans-serif; font-size: 15px; font-weight: 700; }
+  .topbar-id span { font-size: 12px; color: var(--ink-3); font-family: "IBM Plex Mono", monospace; }
+
+  .prog { display: flex; align-items: center; gap: 10px; }
+  .prog-track { width: 190px; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .prog-fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .prog-num {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500;
+    color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 78px;
+  }
+  .btn-ghost {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-3); background: none;
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer;
+  }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--ink-3); }
+
+  /* ---------- estrutura ---------- */
+  .shell { max-width: var(--maxw); margin: 0 auto; padding: 0 24px 96px; display: grid; gap: 40px; grid-template-columns: 218px minmax(0,1fr); }
+  @media (max-width: 940px) { .shell { grid-template-columns: 1fr; gap: 0; } }
+
+  nav.toc { position: sticky; top: 72px; align-self: start; padding: 32px 0; max-height: calc(100vh - 90px); overflow-y: auto; }
+  @media (max-width: 940px) { nav.toc { display: none; } }
+  .toc-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+  .toc a {
+    display: flex; gap: 9px; align-items: baseline; padding: 5px 0;
+    color: var(--ink-2); text-decoration: none; font-size: 13.5px; line-height: 1.35;
+    border-left: 2px solid transparent; padding-left: 10px; margin-left: -12px;
+  }
+  .toc a b { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-3); font-weight: 500; }
+  .toc a:hover { color: var(--ink); }
+  .toc a.on { color: var(--accent); border-left-color: var(--accent); font-weight: 500; }
+  .toc a.on b { color: var(--accent); }
+  .toc a.done b::after { content: "✓"; margin-left: 4px; color: var(--ok); }
+
+  main { padding: 32px 0 0; min-width: 0; }
+
+  /* ---------- abertura ---------- */
+  .hero { padding: 26px 0 34px; border-bottom: 1px solid var(--line); margin-bottom: 40px; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+  }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); line-height: 1.08; font-weight: 700; }
+  .lede { font-size: 17px; color: var(--ink-2); max-width: 64ch; margin-top: 16px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .fact {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px;
+  }
+  .fact b { color: var(--ink-3); font-weight: 500; }
+
+  /* ---------- fases ---------- */
+  .phase { margin: 0 0 60px; scroll-margin-top: 76px; }
+  .phase-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
+  .phase-n {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--accent); background: var(--accent-soft); border-radius: 6px;
+    padding: 6px 9px; line-height: 1; margin-top: 5px; white-space: nowrap;
+  }
+  .phase-head h2 { font-size: clamp(21px, 2.6vw, 27px); font-weight: 600; }
+  .phase-head p { margin: 6px 0 0; color: var(--ink-2); font-size: 15px; max-width: 68ch; }
+  .phase-count {
+    margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--ink-3); white-space: nowrap; padding-top: 9px; font-variant-numeric: tabular-nums;
+  }
+  .phase-count.full { color: var(--ok); }
+
+  /* ---------- passo ---------- */
+  .step {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px 22px; margin-bottom: 14px; box-shadow: var(--shadow); scroll-margin-top: 76px;
+  }
+  .step-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .step-id {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--ink-3); font-variant-numeric: tabular-nums;
+    text-decoration: none; transition: color .12s;
+  }
+  a.step-id:hover, a.step-id:focus-visible { color: var(--accent); }
+  .step h3 { font-size: 17px; font-weight: 600; }
+  .where {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .07em;
+    text-transform: uppercase; padding: 3px 7px; border-radius: 4px; margin-left: auto; white-space: nowrap;
+  }
+  .w-wsl { background: var(--accent-soft); color: var(--accent); }
+  .w-ec2 { background: var(--warn-soft); color: var(--warn); }
+  .w-web { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+  .step > p { color: var(--ink-2); font-size: 14.5px; margin: 8px 0 0; max-width: 72ch; }
+
+  /* ---------- comandos ---------- */
+  .cmd { position: relative; margin: 14px 0 0; }
+  .cmd-label, .out-label {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; display: block;
+  }
+  pre {
+    margin: 0; padding: 14px 16px; border-radius: 8px; overflow-x: auto;
+    font-size: 13px; line-height: 1.62; tab-size: 2;
+  }
+  .cmd pre { background: var(--term-bg); color: var(--term-ink); border: 1px solid var(--term-line); }
+  .cmd pre .p { color: #6FCB95; user-select: none; }
+  .cmd pre .c { color: var(--term-dim); }
+  .copy {
+    position: absolute; top: 22px; right: 8px; font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    background: rgba(255,255,255,.07); color: #9FB6BC; border: 1px solid rgba(255,255,255,.13);
+    border-radius: 5px; padding: 4px 8px; cursor: pointer; opacity: 0; transition: opacity .15s;
+  }
+  .cmd:hover .copy, .copy:focus-visible { opacity: 1; }
+  .copy.ok { color: #6FCB95; border-color: #6FCB95; opacity: 1; }
+  .out { margin-top: 14px; }
+  .out pre {
+    background: var(--surface-2); color: var(--ink-2);
+    border: 1px solid var(--line-2); border-left: 3px solid var(--ink-3);
+  }
+  .out.good pre { border-left-color: var(--ok); }
+  .out.bad pre { border-left-color: var(--stop); }
+  p code, li code, td code {
+    background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 4px;
+    padding: 1px 5px; font-size: .875em; color: var(--ink);
+  }
+
+  /* ---------- checklist ---------- */
+  .check { margin: 16px 0 0; padding: 14px 16px; background: var(--surface-2); border-radius: 8px; border: 1px solid var(--line-2); }
+  .check-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+  .check ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  .check li label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  .check input[type=checkbox] {
+    appearance: none; -webkit-appearance: none; flex: 0 0 auto;
+    width: 17px; height: 17px; margin: 3px 0 0; border: 1.5px solid var(--ink-3);
+    border-radius: 4px; background: var(--surface); cursor: pointer; position: relative; transition: .12s;
+  }
+  .check input[type=checkbox]:hover { border-color: var(--accent); }
+  .check input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .check input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5px; top: 1.5px; width: 4px; height: 9px;
+    border: solid var(--surface); border-width: 0 2px 2px 0; transform: rotate(43deg);
+  }
+  .check label span { font-size: 14.5px; color: var(--ink-2); line-height: 1.45; }
+  .check input:checked + span { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line); }
+
+  /* ---------- avisos ---------- */
+  .note { border-radius: 8px; padding: 13px 16px; margin: 14px 0 0; font-size: 14.5px; border: 1px solid; }
+  .note b { display: block; font-family: "Archivo", sans-serif; font-size: 13px; letter-spacing: .01em; margin-bottom: 3px; }
+  .note p { margin: 0; }
+  .note p + p { margin-top: 7px; }
+  .n-warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, transparent); color: var(--ink); }
+  .n-warn b { color: var(--warn); }
+  .n-tip  { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 32%, transparent); color: var(--ink); }
+  .n-tip b { color: var(--accent); }
+  .n-key  { background: var(--stop-soft); border-color: color-mix(in srgb, var(--stop) 32%, transparent); color: var(--ink); }
+  .n-key b { color: var(--stop); }
+
+  details.fallback { margin-top: 14px; border: 1px dashed var(--line); border-radius: 8px; padding: 0 14px; background: var(--surface-2); }
+  details.fallback summary { cursor: pointer; padding: 11px 0; font-size: 14px; font-weight: 500; color: var(--ink-2); }
+  details.fallback[open] summary { border-bottom: 1px solid var(--line-2); margin-bottom: 12px; }
+  details.fallback > *:last-child { margin-bottom: 14px; }
+
+  /* ---------- tabelas ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin-top: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 520px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-3); font-weight: 500; background: var(--surface-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .ascii { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-top: 16px; }
+  .ascii pre { background: none; color: var(--ink-2); font-size: 12px; line-height: 1.5; padding: 20px; }
+
+  footer { max-width: var(--maxw); margin: 0 auto; padding: 28px 24px 60px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+  footer p { margin: 0 0 6px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  @media (max-width: 620px) {
+    .shell, .topbar-in, footer { padding-left: 16px; padding-right: 16px; }
+    .step { padding: 16px; }
+    .where { margin-left: 0; }
+    .prog-track { width: 110px; }
+  }
+  /* ---------- impressao ---------- */
+  @media print {
+    /* Paleta clara forcada: quem le no escuro nao deve imprimir paginas pretas. */
+    :root, :root[data-theme="dark"], :root[data-theme="light"] {
+      --bg: #FFFFFF; --surface: #FFFFFF; --surface-2: #F5F7F8;
+      --ink: #000000; --ink-2: #263338; --ink-3: #55666C;
+      --line: #B9C4C8; --line-2: #DDE4E6;
+      --accent: #0A6A72; --accent-2: #08535A; --accent-soft: #EDF4F5;
+      --warn: #7A430E; --warn-soft: #FBF3E9; --ok: #165634; --ok-soft: #EDF6F1;
+      --stop: #7D2820; --stop-soft: #FBEEEC;
+      --term-bg: #F2F5F6; --term-line: #C8D2D5; --term-ink: #0E1619; --term-dim: #55666C;
+      --shadow: none;
+    }
+    .topbar, nav.toc, .copy, #tema, #reset { display: none !important; }
+    .shell { display: block; max-width: none; padding: 0; }
+    body { background: #fff; }
+    .step, .cmd, .out, .note, .check, .ascii, .tablewrap, details {
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    h2, h3, .step-top, .phase-head { break-after: avoid; page-break-after: avoid; }
+    .phase { margin-bottom: 24px; }
+    .step { box-shadow: none; border-color: #B9C4C8; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="topbar-id">
+      <strong>Desafio 3</strong>
+      <span>BIA no S3 · us-east-1</span>
+    </div>
+    <div class="prog">
+      <span class="prog-num" id="progNum">0 / 0</span>
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+    <button class="btn-ghost" id="tema" type="button">Tema: claro</button>
+    <button class="btn-ghost" id="reset" type="button">Limpar progresso</button>
+  </div>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc" aria-label="Fases do desafio">
+    <div class="toc-label">Roteiro</div>
+  </nav>
+
+  <main>
+
+    <header class="hero">
+      <div class="eyebrow">Desafios Fundamentais · Formação AWS · Dia 3</div>
+      <h1>Servir a BIA pelo S3, com a API do Dia&nbsp;2 e um registro no RDS</h1>
+      <p class="lede">
+        Roteiro de execução do Desafio 3 — do primeiro comando no WSL até a tarefa gravada no banco pelo site.
+        Cada passo traz <b>onde executar</b>, o <b>comando</b>, a <b>resposta esperada</b> e um <b>checklist</b> que você marca
+        antes de seguir. O progresso fica salvo neste navegador.
+      </p>
+      <div class="facts">
+        <span class="fact"><b>conta</b> xxxxxxxxxxxx</span>
+        <span class="fact"><b>região</b> us-east-1</span>
+        <span class="fact"><b>profile</b> formacao_aws</span>
+        <span class="fact"><b>bucket</b> seu-bucket-xxxx</span>
+        <span class="fact"><b>bia-dev</b> i-xxxxxxxxxxxx-dev</span>
+        <span class="fact"><b>API</b> xx.xx.xx.xx</span>
+        <span class="fact"><b>RDS</b> bia.xxxxxxxxxxxx</span>
+      </div>
+    </header>
+
+    <section class="phase" id="p-mapa" data-title="O ponto de partida">
+      <div class="phase-head">
+        <span class="phase-n">MAPA</span>
+        <div>
+          <h2>O ponto de partida real do seu ambiente</h2>
+          <p>
+            Antes de escrever o roteiro, o ambiente foi inspecionado com comandos de leitura. O que está abaixo é o estado
+            encontrado — e é diferente do que se costuma supor. Ler esta tabela evita metade dos erros das próximas fases.
+          </p>
+        </div>
+      </div>
+
+      <div class="ascii">
+<pre>
+        WSL / Ubuntu 24.04                          AWS · us-east-1
+ +-----------------------------+      +------------------------------------------------+
+ |  aws cli v2  (formacao_aws) |      |                                                |
+ |  node 25 / npm 11           | ssm  |   EC2 bia-dev  i-xxxxxxxxxxxx-dev              |
+ |                             |=====>|   docker compose: db:create + db:migrate       |
+ |  pasta do repo (GitHub)     |      |          |                                     |
+ |     +-- deploy.sh           |      |          | 5432                                |
+ |     +-- react.sh  s3.sh     |      |          v                                     |
+ |                             |      |   RDS "bia"  (nao publico)                     |
+ |  BIA_DIR (build do React)   |      |          ^                                     |
+ |     +-- client/build        |      |          | 5432                                |
+ |          |                  |      |   ECS cluster-bia / service-bia                |
+ |          | aws s3 sync      |      |   API "Bia 4.3.0"  http://xx.xx.xx.xx          |
+ |          v                  |      |          ^                                     |
+ |   s3://seu-bucket-xxxx  ----|----->|   S3 website  ---> navegador ---+              |
+ +-----------------------------+      |                                 |  chamadas    |
+                                      |                                 +--------------+
+      WSL --X--> RDS  (bloqueado)     +------------------------------------------------+
+</pre>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>O que</th><th>Estado encontrado</th><th>Impacto no roteiro</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Front-end da BIA</b></td>
+              <td>É <b>Vite</b>, não Create React App. <code>client/vite.config.js</code> gera em <code>client/build</code> e o código lê <code>import.meta.env.VITE_API_URL</code></td>
+              <td>A variável do build é <code>VITE_API_URL</code> (e não <code>REACT_APP_API_URL</code>), e a pasta do sync é <code>client/build</code> (não <code>dist</code>)</td>
+            </tr>
+            <tr>
+              <td><b>API (ECS)</b></td>
+              <td>No ar: <code>curl http://xx.xx.xx.xx/api/versao</code> devolve <code>Bia 4.3.0</code>, com <code>Access-Control-Allow-Origin: *</code></td>
+              <td>Não precisa subir nada e não haverá erro de CORS. Essa é a URL que o script recebe por argumento</td>
+            </tr>
+            <tr>
+              <td><b>Banco</b></td>
+              <td><code>/api/tarefas</code> responde <b>500</b> com <code>database "bia" does not exist</code></td>
+              <td>A API alcança o RDS, mas o database e as tabelas ainda não existem. É exatamente o trabalho da Fase 4</td>
+            </tr>
+            <tr>
+              <td><b>Bucket S3</b></td>
+              <td>Já existe, <b>vazio</b>, com website hosting, Block Public Access desligado e a policy <code>PublicReadGetObject</code></td>
+              <td>Não recrie o bucket. Só falta o <i>error document</i> e os arquivos</td>
+            </tr>
+            <tr>
+              <td><b>EC2 bia-dev</b></td>
+              <td><b>Sem instance profile</b> — e <code>aws ssm describe-instance-information</code> devolve lista vazia</td>
+              <td>O SSM não funciona hoje. A Fase 2 associa a role <code>role-acesso-ssm</code> à instância</td>
+            </tr>
+            <tr>
+              <td><b>SG bia-db</b></td>
+              <td>Porta 5432 liberada só para <code>sg-xxxxxxxxxxxx-web</code> (bia-web)</td>
+              <td>A bia-dev não chega no banco até a Fase 3 liberar o SG dela</td>
+            </tr>
+            <tr>
+              <td><b>Permissões IAM</b></td>
+              <td>Testado por <code>--dry-run</code>: leitura de EC2 e <code>AuthorizeSecurityGroupIngress</code> passam; <code>AssociateIamInstanceProfile</code>, <code>Start/Stop/RebootInstances</code>, <code>rds:Describe*</code>, <code>ecs:*</code> e <code>iam:*</code> são <b>negados</b></td>
+              <td>O usuário não tem o <code>AmazonEC2FullAccess</code> que as anotações sugeriam. Uma visita ao Console resolve as três policies de uma vez: passo 2.2</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note n-tip"><b>Esta tabela é o estado <i>antes</i> do desafio</b><p>É a fotografia de 31/08/2026, e é ela que justifica cada fase do roteiro. Depois de uma execução completa nada disso continua verdadeiro: o SSM responde <code>Online</code>, o bucket tem os arquivos do site e <code>/api/tarefas</code> devolve 200.</p><p>Ou seja, ao reexecutar o guia, <b>não</b> tente reconferir esta coluna — o esperado é justamente encontrar o estado final. Os passos que mudam de resposta numa segunda passagem trazem a própria nota dizendo o que muda e o que dá para pular.</p></div>
+
+      <div class="note n-tip">
+        <b>Como ler as etiquetas de cada passo</b>
+        <p><b>WSL</b> = terminal Ubuntu no seu Windows · <b>BIA-DEV</b> = dentro da EC2, depois do <code>start-session</code> · <b>CONSOLE</b> = navegador, no Console da AWS.</p>
+        <p>O prompt à esquerda do comando diz a mesma coisa, e é o sinal mais confiável de onde você está:</p>
+      </div>
+      <div class="ascii">
+<pre>
+  $                 -->  WSL, a sua maquina
+  sh-5.2$           -->  dentro da bia-dev, como ssm-user
+  [ec2-user ~]$     -->  dentro da bia-dev, como ec2-user
+</pre>
+      </div>
+      <div class="note n-warn">
+        <b>Variáveis não atravessam a sessão</b>
+        <p><code>$DEV_INSTANCE_ID</code>, <code>$API_URL</code> e <code>$BUCKET_NAME</code> existem <b>só no WSL</b>. Dentro da EC2 elas chegam vazias — por isso cada comando da Fase 4 traz os valores por extenso.</p>
+      </div>
+    </section>
+
+    <section class="phase" id="p0" data-title="Sessão e variáveis">
+      <div class="phase-head">
+        <span class="phase-n">FASE 0</span>
+        <div>
+          <h2>Autenticar a sessão e carregar as variáveis</h2>
+          <p>Tudo começa provando quem você é. O profile <code>default</code> desta máquina autentica como um usuário sem permissão de EC2 — o profile certo é o <code>formacao_aws</code>.</p>
+        </div>
+        <span class="phase-count" data-count-for="p0"></span>
+      </div>
+
+      <div class="step" id="passo-0-1">
+        <div class="step-top"><a class="step-id" href="#passo-0-1">0.1</a><h3>Conferir os profiles disponíveis</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws configure list-profiles</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>default
+formacao_aws</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>formacao_aws</code> aparece na lista</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-2">
+        <div class="step-top"><a class="step-id" href="#passo-0-2">0.2</a><h3>Renovar o login (credenciais temporárias)</h3><span class="where w-wsl">WSL</span></div>
+        <p>As credenciais do Dia 2 são temporárias e expiram. Se qualquer comando responder <code>Your session has expired</code>, volte aqui.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws login --profile formacao_aws</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Attempting to open your default browser...
+Updated profile formacao_aws to use arn:aws:iam::xxxxxxxxxxxx:user/usuario-xxxx credentials.
+Use "--profile formacao_aws" to use the new credentials.</pre></div>
+        <div class="note n-tip"><b>O navegador não abriu?</b><p>Não é erro fatal: o próprio comando imprime a URL de autorização. Copie e abra no navegador do Windows — o fluxo continua e o profile é atualizado ao final.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Login concluído no navegador</span></label></li>
+          <li><label><input type="checkbox"><span>Mensagem confirma o usuário <code>usuario-xxxx</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-3">
+        <div class="step-top"><a class="step-id" href="#passo-0-3">0.3</a><h3>Promover o profile a padrão da sessão</h3><span class="where w-wsl">WSL</span></div>
+        <p>Os scripts do projeto chamam <code>aws</code> sem <code>--profile</code>. Sem esta variável eles usam o <code>default</code> — que autentica como outro usuário e reporta que os recursos "não existem".</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>export AWS_PROFILE=formacao_aws
+<span class="p">$ </span>aws sts get-caller-identity</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>{
+    "UserId": "AIDAxxxxxxxxxxxxxxxxx",
+    "Account": "xxxxxxxxxxxx",
+    "Arn": "arn:aws:iam::xxxxxxxxxxxx:user/usuario-xxxx"
+}</pre></div>
+        <div class="note n-warn"><b>Pare se aparecer outro ARN</b><p>Se o <code>Arn</code> terminar em <code>user/fundamentos</code> (sem o <code>_aws</code>), você está no profile errado e todos os comandos de EC2 vão falhar com <code>AccessDenied</code>. Refaça o passo 0.2.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Conta <code>xxxxxxxxxxxx</code></span></label></li>
+          <li><label><input type="checkbox"><span>ARN termina em <code>user/usuario-xxxx</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-4">
+        <div class="step-top"><a class="step-id" href="#passo-0-4">0.4</a><h3>Salvar as variáveis do desafio em um arquivo</h3><span class="where w-wsl">WSL</span></div>
+        <p>Cada terminal novo perde os <code>export</code>. Guarde-os uma vez e recarregue com um comando só.</p>
+        <div class="note n-key"><b>Os valores em <code>xxxx</code> são máscaras — troque pelos seus antes de salvar</b><p>Este bloco é o único lugar do guia onde os identificadores do <b>seu</b> ambiente aparecem. Todo o resto usa as variáveis, então basta acertar aqui.</p><p>Onde encontrar cada um:</p><p><code>BUCKET_NAME</code> e <code>WEBSITE_URL</code> — o nome do bucket criado no Dia 3. · <code>DEV_INSTANCE_ID</code> e <code>API_URL</code> — <b>passo 1.1</b>, que lista as instâncias com IP e nome. · <code>SG_DEV</code> e <code>SG_DB</code> — <b>passos 3.1 e 3.2</b>. · O ID da conta aparece no <code>get-caller-identity</code> do <b>passo 0.3</b>.</p><p>Se algum ficar com a máscara, o erro vem na hora e é claro: <code>The security-group ID '' is malformed</code> ou <code>Invalid length for parameter</code>. Nada é executado pela metade.</p></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>mkdir -p ~/DESAFIOS-FUNDAMENTAIS &amp;&amp; cat &gt; ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh &lt;&lt;'FIM'
+export AWS_PROFILE=formacao_aws
+export AWS_REGION=us-east-1
+export AWS_DEFAULT_REGION=us-east-1
+
+export BUCKET_NAME=seu-bucket-xxxx
+export WEBSITE_URL=http://seu-bucket-xxxx.s3-website-us-east-1.amazonaws.com
+
+export DEV_INSTANCE_ID=i-xxxxxxxxxxxx-dev
+export SG_DEV=sg-xxxxxxxxxxxx-dev
+export SG_DB=sg-xxxxxxxxxxxx-db
+
+export API_URL=http://xx.xx.xx.xx
+
+# copia da BIA no disco do Linux, onde o build roda
+export BIA_DIR=$HOME/DESAFIOS-FUNDAMENTAIS/bia
+FIM</pre></div>
+        <div class="cmd"><span class="cmd-label">Carregar e conferir</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh
+<span class="p">$ </span>echo "$AWS_PROFILE | $BUCKET_NAME | $DEV_INSTANCE_ID | $API_URL"
+<span class="p">$ </span>ls -d "$BIA_DIR"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>formacao_aws | seu-bucket-xxxx | i-xxxxxxxxxxxx-dev | http://xx.xx.xx.xx
+$HOME/DESAFIOS-FUNDAMENTAIS/bia</pre></div>
+        <div class="note n-tip"><b>Só o <code>BIA_DIR</code> vira variável — e o motivo</b><p>O <code>BIA_DIR</code> é a cópia da BIA no <b>disco do Linux</b>, onde o <code>npm install</code> e o build acontecem. Ele precisa ser variável porque os scripts do desafio o leem em tempo de execução.</p><p>A pasta do <b>repositório</b> — onde os três scripts vão morar e que vai para o GitHub — não vira variável: na Fase 5 você entra nela com um <code>cd</code> e trabalha ali dentro. Assim o guia não carrega o caminho de ninguém, e funciona igual para quem clonar em outro lugar.</p><p>São dois lugares diferentes de propósito: <code>node_modules</code> tem dezenas de milhares de arquivos. Se a pasta do repositório estiver no disco do Windows — mais ainda se for uma pasta sincronizada na nuvem —, isso vira sincronização sem fim e um build bem mais lento, porque o WSL acessa o disco do Windows por uma camada de tradução.</p></div>
+        <div class="note n-tip"><b>Sempre que abrir um terminal novo</b><p>Rode <code>source ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh</code> antes de qualquer comando das próximas fases.</p></div>
+        <div class="note n-tip"><b>Já tinha um <code>variaveis.sh</code> de antes?</b><p>Rode o <code>cat &gt;</code> deste passo mesmo assim: ele reescreve o arquivo com o conteúdo atual, incluindo o <code>BIA_DIR</code>, que não existia nas primeiras versões deste guia. Versões antigas também traziam um <code>REPO_DIR</code> com caminho absoluto e um <code>PROJETO</code> que não era usado por nada — reescrever o arquivo se livra dos dois.</p></div>
+        <details class="fallback">
+          <summary>Parando no meio e voltando depois (desligar o notebook)</summary>
+          <p><b>Pode desligar sem medo.</b> Nada do que você fez até aqui mora na sua máquina: policies, instance profile, regra de Security Group e migrations ficam na AWS; os arquivos ficam no disco; e o progresso marcado neste guia fica salvo no seu navegador — mesmo navegador, mesmo perfil, sem limpar os dados do site.</p>
+          <p>Duas coisas <b>não</b> sobrevivem: as credenciais do <code>aws login</code>, que são temporárias, e as variáveis do terminal. O ritual de volta são três comandos:</p>
+          <div class="cmd"><span class="cmd-label">Ao retomar</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws login --profile formacao_aws
+<span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh
+<span class="p">$ </span>aws sts get-caller-identity</pre></div>
+          <p>Depois disso, refaça o <b>passo 1.1</b> antes de continuar: ele confirma se o IP da API mudou. Se estiver igual, siga da fase em que parou.</p>
+          <div class="note n-warn"><b>A AWS continua ligada — e cobrando</b><p>Desligar o notebook não pausa nada: as duas EC2 e o RDS seguem de pé. Para zerar o gasto enquanto você estiver fora, vá para a <b>Fase 9.3</b>, que tem os comandos de pausa e o efeito colateral de cada um.</p></div>
+          <div class="note n-warn"><b>O IP da API está gravado dentro do bundle</b><p>Se você parar a EC2 do cluster para economizar, ela volta com <b>outro IP público</b> — e o site publicado no S3 continua chamando o endereço antigo, que morreu. Nesse caso, ao retomar: passo 1.1 para pegar o IP novo, atualizar <code>API_URL</code> no <code>variaveis.sh</code> e rodar a Fase 6 de novo (build + sync).</p><p>É exatamente o problema que um Load Balancer resolve em produção: o endereço deixa de depender da máquina.</p></div>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Arquivo <code>variaveis.sh</code> criado</span></label></li>
+          <li><label><input type="checkbox"><span>As variáveis aparecem preenchidas no <code>echo</code></span></label></li>
+          <li><label><input type="checkbox"><span>Região é <code>us-east-1</code></span></label></li>
+          <li><label><input type="checkbox"><span>O <code>ls -d</code> encontrou a pasta do <code>BIA_DIR</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p1" data-title="A API do Dia 2">
+      <div class="phase-head">
+        <span class="phase-n">FASE 1</span>
+        <div>
+          <h2>Confirmar que a API do Dia 2 está no ar</h2>
+          <p>O React que vai para o S3 precisa saber para onde falar. Antes de gerar qualquer build, descubra e teste essa URL — ela é o argumento do seu script.</p>
+        </div>
+        <span class="phase-count" data-count-for="p1"></span>
+      </div>
+
+      <div class="step" id="passo-1-1">
+        <div class="step-top"><a class="step-id" href="#passo-1-1">1.1</a><h3>Listar as instâncias que estão de pé</h3><span class="where w-wsl">WSL</span></div>
+        <p>A API roda em uma EC2 do cluster ECS. Este comando mostra as duas máquinas que interessam: a <code>bia-dev</code> (onde a migrate vai rodar) e a instância do <code>cluster-bia</code> (onde a API responde).</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=instance-state-name,Values=running" \
+  --query 'Reservations[].Instances[].{Nome:Tags[?Key==`Name`]|[0].Value,Id:InstanceId,IP:PublicIpAddress,SG:SecurityGroups[0].GroupName}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>------------------------------------------------------------------------------------
+|                                DescribeInstances                                 |
++----------------------+------------------------+------------------+---------------+
+|          Id          |          IP            |      Nome        |      SG       |
++----------------------+------------------------+------------------+---------------+
+|  i-xxxxxxxxxxxx-dev |  xx.xx.xx.xx          |  bia-dev         |  bia-dev      |
+|  i-xxxxxxxxxxxx-ecs |  xx.xx.xx.xx        |  ECS Instance -  |  bia-web      |
+|                      |                        |  cluster-bia     |               |
++----------------------+------------------------+------------------+---------------+</pre></div>
+        <div class="note n-warn"><b>O IP público muda</b><p>Toda vez que a instância for parada e ligada de novo, o IP muda. Se o valor da coluna <code>IP</code> da linha do <code>cluster-bia</code> não for <code>xx.xx.xx.xx</code>, atualize <code>API_URL</code> no seu <code>variaveis.sh</code> antes de seguir.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>bia-dev</code> aparece como <code>running</code></span></label></li>
+          <li><label><input type="checkbox"><span>A instância do <code>cluster-bia</code> aparece com IP público</span></label></li>
+          <li><label><input type="checkbox"><span><code>API_URL</code> confere com o IP mostrado</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-2">
+        <div class="step-top"><a class="step-id" href="#passo-1-2">1.2</a><h3>Bater na API e ler a versão</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>curl -s -i "$API_URL/api/versao"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>HTTP/1.1 200 OK
+X-Powered-By: Express
+Access-Control-Allow-Origin: *
+Content-Type: text/html; charset=utf-8
+
+Bia 4.3.0</pre></div>
+        <div class="note n-tip"><b>O cabeçalho que salva a Fase 8</b><p><code>Access-Control-Allow-Origin: *</code> significa que a API já aceita chamadas vindas de qualquer origem — inclusive do endpoint do S3. Não haverá erro de CORS neste desafio.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>HTTP 200</span></label></li>
+          <li><label><input type="checkbox"><span>Corpo devolve <code>Bia 4.3.0</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>Access-Control-Allow-Origin: *</code> presente</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-3">
+        <div class="step-top"><a class="step-id" href="#passo-1-3">1.3</a><h3>Registrar o estado inicial do banco</h3><span class="where w-wsl">WSL</span></div>
+        <p>Este passo não conserta nada — ele fotografa o problema que a Fase 4 vai resolver. Guarde a resposta: ela é a prova de "antes".</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>curl -s -i "$API_URL/api/tarefas"</pre></div>
+        <div class="out bad"><span class="out-label">Resposta esperada agora (ainda é erro)</span><pre>HTTP/1.1 500 Internal Server Error
+Content-Type: application/json; charset=utf-8
+
+{"message":"database \"bia\" does not exist"}</pre></div>
+        <p>Repare no que esse erro conta: a API <b>chegou</b> no RDS e foi autenticada — se não chegasse, a resposta seria timeout ou <code>ECONNREFUSED</code>. O que falta é o database <code>bia</code> e as tabelas, que ninguém criou ainda.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Resposta é 500 com <code>database "bia" does not exist</code></span></label></li>
+          <li><label><input type="checkbox"><span>Entendi que isso prova rede OK e banco vazio</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-4">
+        <div class="step-top"><a class="step-id" href="#passo-1-4">1.4</a><h3>Conferir o serviço no ECS</h3><span class="where w-wsl">WSL</span></div>
+        <p>Passo opcional — hoje ele falha por permissão, e isso é esperado. Só funciona depois de anexar uma policy de ECS no passo 2.2.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecs describe-services \
+  --cluster cluster-bia --services service-bia \
+  --query 'services[0].{Status:status,Desejado:desiredCount,Rodando:runningCount}' \
+  --output table</pre></div>
+        <div class="out"><span class="out-label">Se você ainda não anexou a policy de ECS</span><pre>An error occurred (AccessDeniedException) when calling the DescribeServices
+operation: User: arn:aws:iam::xxxxxxxxxxxx:user/usuario-xxxx is not
+authorized to perform: ecs:DescribeServices</pre></div>
+        <div class="out good"><span class="out-label">Resposta depois da policy</span><pre>-------------------------------------
+|          DescribeServices         |
++-----------+-----------+-----------+
+| Desejado  |  Rodando  |  Status   |
++-----------+-----------+-----------+
+|  1        |  1        |  ACTIVE   |
++-----------+-----------+-----------+</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Sei que o teste que vale é o <code>curl</code> do passo 1.2 — o ECS aqui é conferência extra</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p2" data-title="Destravar SSM e IAM">
+      <div class="phase-head">
+        <span class="phase-n">FASE 2</span>
+        <div>
+          <h2>Destravar o SSM da bia-dev</h2>
+          <p>O desafio manda entrar na <code>bia-dev</code> por Session Manager. Hoje isso não funciona, e a fase resolve isso em três marcos: permissão, role associada e agente registrado.</p>
+        </div>
+        <span class="phase-count" data-count-for="p2"></span>
+      </div>
+
+      <div class="ascii">
+<pre>
+   permissao no IAM   -->   role associada   -->   agente registrado   -->   sessao aberta
+        (2.2)                   (2.3)                    (2.4)                   (2.5)
+   uma visita so ao         instantaneo:          5 a 20 min (ou           aws ssm
+   Console, 3 policies      "associated"          ~1 min com reboot)      start-session
+</pre>
+      </div>
+
+      <div class="step" id="passo-2-1">
+        <div class="step-top"><a class="step-id" href="#passo-2-1">2.1</a><h3>Diagnosticar por que o SSM não enxerga a bia-dev</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ssm describe-instance-information \
+  --query 'InstanceInformationList[].{Id:InstanceId,Ping:PingStatus}' --output json
+<span class="p">$ </span>aws ec2 describe-instances --instance-ids "$DEV_INSTANCE_ID" \
+  --query 'Reservations[0].Instances[0].IamInstanceProfile' --output json</pre></div>
+        <div class="out bad"><span class="out-label">Resposta esperada agora (é o problema)</span><pre>[]
+null</pre></div>
+        <p>Lista vazia no SSM e <code>null</code> no instance profile são o mesmo fato: sem uma role anexada, o agente não tem credencial para se registrar no Systems Manager.</p>
+        <div class="note n-tip"><b>Está reexecutando o guia? A resposta vem diferente</b><p>Numa segunda passagem você verá <code>"Ping": "Online"</code> e o ARN do instance profile, em vez de <code>[]</code> e <code>null</code>. Isso quer dizer que a Fase 2 já está feita — os passos 2.2, 2.3 e 2.4 não precisam ser refeitos. Pule direto para o <b>2.5</b>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Confirmei a lista vazia do SSM</span></label></li>
+          <li><label><input type="checkbox"><span>Confirmei que o instance profile é <code>null</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-2">
+        <div class="step-top"><a class="step-id" href="#passo-2-2">2.2</a><h3>Liberar as permissões — uma visita só ao Console</h3><span class="where w-web">CONSOLE</span></div>
+        <p>Três policies resolvem tudo o que falta no desafio inteiro. Entre no Console com o usuário administrador (ou o root): o próprio <code>usuario-xxxx</code> não pode alterar as próprias permissões, porque <code>iam:*</code> está negado para ele.</p>
+        <div class="out"><span class="out-label">Parte 1 — duas policies gerenciadas</span><pre>IAM  &gt;  Users  &gt;  usuario-xxxx  &gt;  Add permissions  &gt;  Attach policies directly
+
+    [x] AmazonRDSReadOnlyAccess    (ver o endpoint do banco, na Fase 3)
+    [x] AmazonECS_FullAccess       (ver o servico e a task definition do Dia 2)
+
+  &gt;  Next  &gt;  Add permissions</pre></div>
+        <div class="note n-warn"><b>Procurou por AmazonECS_ReadOnlyAccess e não achou?</b><p>Essa policy gerenciada não existe. Para ECS a AWS oferece a <code>AmazonECS_FullAccess</code>. Como o guia só faz leitura no ECS, a alternativa de menor privilégio é uma inline com <code>ecs:Describe*</code> e <code>ecs:List*</code>; a FullAccess resolve e pode ser removida no fim do laboratório.</p></div>
+        <p>Sem a parte 2, o comando do passo 2.3 responde <code>UnauthorizedOperation</code>: o usuário tem leitura de EC2, mas não as ações que mexem no estado da instância.</p>
+        <div class="out"><span class="out-label">Parte 2 — uma policy inline, na mesma tela</span><pre>IAM  &gt;  Users  &gt;  usuario-xxxx  &gt;  Add permissions  &gt;  Create inline policy  &gt;  JSON
+
+   nome da policy:  PermissaoSSMInstanceProfile</pre></div>
+        <div class="cmd"><span class="cmd-label">Cole este JSON</span><button class="copy" type="button">copiar</button><pre>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GerenciarInstanceProfileEEstadoDaEC2",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AssociateIamInstanceProfile",
+        "ec2:DisassociateIamInstanceProfile",
+        "ec2:ReplaceIamInstanceProfileAssociation",
+        "ec2:DescribeIamInstanceProfileAssociations",
+        "ec2:StartInstances",
+        "ec2:StopInstances",
+        "ec2:RebootInstances"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PassarARoleDoSSMParaEC2",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::xxxxxxxxxxxx:role/role-acesso-ssm",
+      "Condition": {
+        "StringEquals": { "iam:PassedToService": "ec2.amazonaws.com" }
+      }
+    }
+  ]
+}</pre></div>
+        <div class="note n-tip"><b>Por que o iam:PassRole precisa estar aí</b><p>Associar um instance profile é <i>entregar</i> uma role a uma máquina. A AWS trata isso como permissão à parte, para ninguém dar a si mesmo um privilégio maior através de uma EC2. Por isso anexar <code>AmazonEC2FullAccess</code> sozinho não resolveria: ele não inclui <code>PassRole</code>.</p></div>
+        <div class="cmd"><span class="cmd-label">Validar as três de uma vez, no terminal</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws rds describe-db-instances --query 'DBInstances[].DBInstanceIdentifier' --output text
+<span class="p">$ </span>aws ecs describe-services --cluster cluster-bia --services service-bia --query 'services[0].status' --output text
+<span class="p">$ </span>aws ec2 reboot-instances --instance-ids "$DEV_INSTANCE_ID" --dry-run</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>bia
+ACTIVE
+
+aws: [ERROR]: An error occurred (DryRunOperation) when calling the RebootInstances
+operation: Request would have succeeded, but DryRun flag is set.</pre></div>
+        <p>O <code>--dry-run</code> testa a permissão sem executar nada: <code>DryRunOperation</code> quer dizer "você pode". Se vier <code>UnauthorizedOperation</code>, a policy inline não foi salva.</p>
+        <div class="note n-tip"><b>A palavra <code>ERROR</code> aí é o sucesso</b><p>Leia a frase ao pé da letra: <i>"a requisição teria dado certo, mas a flag DryRun está ligada"</i>. A instância <b>não</b> foi reiniciada.</p><p>A API do EC2 nunca devolve "sucesso" num dry-run — ela sempre levanta uma exceção, e o nome dela é a resposta: <code>DryRunOperation</code> significa que você tem a permissão, <code>UnauthorizedOperation</code> significa que falta. Como o CLI trata qualquer exceção da API como erro, ele carimba <code>aws: [ERROR]</code> nos dois casos. O que importa é o nome entre parênteses.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>AmazonRDSReadOnlyAccess</code> anexada — <code>describe-db-instances</code> devolve <code>bia</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>AmazonECS_FullAccess</code> anexada — o serviço aparece como <code>ACTIVE</code></span></label></li>
+          <li><label><input type="checkbox"><span>Inline <code>PermissaoSSMInstanceProfile</code> criada — o dry-run responde <code>DryRunOperation</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-3">
+        <div class="step-top"><a class="step-id" href="#passo-2-3">2.3</a><h3>Associar a role role-acesso-ssm à instância</h3><span class="where w-wsl">WSL</span></div>
+        <p>A role já existe desde o Desafio 2, com a policy <code>AmazonSSMManagedInstanceCore</code> — falta vesti-la na máquina que está de pé.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 associate-iam-instance-profile \
+  --instance-id "$DEV_INSTANCE_ID" \
+  --iam-instance-profile Name=role-acesso-ssm</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>{
+    "IamInstanceProfileAssociation": {
+        "AssociationId": "iip-assoc-xxxxxxxxxxxxxxxxx",
+        "InstanceId": "i-xxxxxxxxxxxx-dev",
+        "IamInstanceProfile": {
+            "Arn": "arn:aws:iam::xxxxxxxxxxxx:instance-profile/role-acesso-ssm"
+        },
+        "State": "associating"
+    }
+}</pre></div>
+        <div class="cmd"><span class="cmd-label">Confirmar que virou associated</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-iam-instance-profile-associations \
+  --filters "Name=instance-id,Values=$DEV_INSTANCE_ID" \
+  --query 'IamInstanceProfileAssociations[].{Instancia:InstanceId,Perfil:IamInstanceProfile.Arn,Estado:State}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>-----------------------------------------------------------------------------------
+|                    DescribeIamInstanceProfileAssociations                       |
++------------+----------------------+---------------------------------------------+
+|   Estado   |      Instancia       |                   Perfil                    |
++------------+----------------------+---------------------------------------------+
+| associated | i-xxxxxxxxxxxx-dev  | ...:instance-profile/role-acesso-ssm        |
++------------+----------------------+---------------------------------------------+</pre></div>
+        <div class="note n-warn"><b>associated não é Online — e é aqui que quase todo mundo trava</b><p>São dois sistemas diferentes. O <code>associated</code> acima é a <b>API do EC2</b> dizendo que a role está anexada: isso vale imediatamente.</p><p>O <code>PingStatus</code> vem do <b>agente dentro da máquina</b>, que subiu sem credencial e só tenta de novo de tempos em tempos. Ver <code>None</code> logo depois de associar é o esperado — o passo 2.4 cuida disso. Não refaça a associação.</p></div>
+        <div class="note n-tip"><b>Já tinha associado antes? O comando responde IncorrectState</b><p><code>There is an existing association for instance i-...</code> não é erro: quer dizer que a role já está lá. Uma instância só aceita um instance profile por vez. Confirme com a tabela acima e siga para o 2.4 — para trocar de role, o comando seria <code>replace-iam-instance-profile-association</code>.</p></div>
+        <details class="fallback">
+          <summary>Atalho pelo Console — mesmo resultado, sem a policy inline do 2.2</summary>
+          <p>O Console chama exatamente esta mesma API, mas com a identidade do seu usuário administrador. A instância <b>não</b> precisa ser parada.</p>
+          <div class="out"><span class="out-label">Caminho no Console</span><pre>EC2  &gt;  Instances  &gt;  bia-dev  (i-xxxxxxxxxxxx-dev)
+     &gt;  Actions  &gt;  Security  &gt;  Modify IAM role
+     &gt;  IAM role: role-acesso-ssm
+     &gt;  Update IAM role</pre></div>
+          <p>Nesse caminho o reboot do passo 2.4 também terá de sair do Console, em <b>Instance state &gt; Reboot instance</b>.</p>
+        </details>
+        <details class="fallback">
+          <summary>Último recurso: entrar por SSH (fora do desenho do desafio)</summary>
+          <p>A porta 22 está aberta no SG <code>bia-dev</code> e a chave está no Windows, em <code>sua-chave.pem</code>. Resolve o acesso, mas não cumpre o "conectar por SSM" que o enunciado pede — use só se o Console estiver indisponível.</p>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>chmod 400 ~/sua-chave.pem
+<span class="p">$ </span>ssh -i ~/sua-chave.pem ec2-user@xx.xx.xx.xx</pre></div>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Comando devolveu <code>"State": "associating"</code></span></label></li>
+          <li><label><input type="checkbox"><span>A tabela mostra <code>associated</code> com <code>role-acesso-ssm</code></span></label></li>
+          <li><label><input type="checkbox"><span>Entendi que <code>PingStatus: None</code> neste momento é normal</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-4">
+        <div class="step-top"><a class="step-id" href="#passo-2-4">2.4</a><h3>Esperar o agente se registrar</h3><span class="where w-wsl">WSL</span></div>
+        <p>O agente subiu com a máquina, quando ainda não havia credencial nenhuma, e desde então tenta de novo em intervalos cada vez maiores. Ele <b>se registra sozinho</b> depois da associação — só não é imediato: costuma levar de 5 a 20 minutos.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>for i in $(seq 1 30); do
+    ping=$(aws ssm describe-instance-information \
+      --filters "Key=InstanceIds,Values=$DEV_INSTANCE_ID" \
+      --query 'InstanceInformationList[0].PingStatus' --output text)
+    echo "tentativa $i: $ping"
+    [ "$ping" = "Online" ] &amp;&amp; break
+    sleep 30
+  done</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>tentativa 1: None
+tentativa 2: None
+...
+tentativa 9: Online</pre></div>
+        <p>Enquanto der <code>None</code>, nada está errado: o agente ainda não chegou na próxima tentativa dele. O laço acima cobre cerca de 15 minutos.</p>
+        <div class="note n-tip"><b>Com pressa? O reboot resolve em ~1 minuto</b><p>Reiniciar força o agente a começar do zero, já com a role no lugar. Precisa da policy do passo 2.2.</p></div>
+        <div class="cmd"><span class="cmd-label">Atalho opcional</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 reboot-instances --instance-ids "$DEV_INSTANCE_ID"
+<span class="p">$ </span>sleep 60
+<span class="p">$ </span>aws ssm describe-instance-information \
+  --filters "Key=InstanceIds,Values=$DEV_INSTANCE_ID" \
+  --query 'InstanceInformationList[0].PingStatus' --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Online</pre></div>
+        <p>O <code>reboot-instances</code> não imprime nada quando dá certo — o silêncio é sucesso.</p>
+        <div class="note n-warn"><b>Passou de 20 minutos e continua None?</b><p>Confira, nesta ordem: a associação ainda está <code>associated</code> (comando do 2.3) e a máquina está <code>running</code> com os checks em <code>passed</code> (<code>aws ec2 describe-instance-status --instance-ids "$DEV_INSTANCE_ID"</code>). Se os dois estiverem certos, reinicie pelo atalho acima.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>PingStatus</code> chegou em <code>Online</code></span></label></li>
+          <li><label><input type="checkbox"><span>Entendi que esperar resolve e o reboot só acelera</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-5">
+        <div class="step-top"><a class="step-id" href="#passo-2-5">2.5</a><h3>Abrir a sessão e confirmar onde você está</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>echo "$DEV_INSTANCE_ID"
+<span class="p">$ </span>aws ssm start-session --target "$DEV_INSTANCE_ID"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>i-xxxxxxxxxxxx-dev
+Starting session with SessionId: usuario-xxxx-0a1b2c3d4e5f6a7b8
+sh-5.2$</pre></div>
+        <div class="note n-warn"><b>Erro <code>Invalid length for parameter Target, value: 0</code>?</b><p>A variável chegou vazia — o CLI recusou antes mesmo de falar com a AWS. Não é sessão expirada. São duas causas possíveis:</p><p><b>1.</b> Terminal novo no WSL sem carregar as variáveis: rode <code>source ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh</code>.</p><p><b>2.</b> Você já está <b>dentro</b> da máquina — repare que o prompt é <code>sh-5.2$</code>, o que prova que a sessão abriu. Não repita o comando: siga com o <code>whoami</code> e o <code>pwd</code> logo abaixo.</p></div>
+        <div class="cmd"><span class="cmd-label">Já dentro da máquina</span><button class="copy" type="button">copiar</button><pre><span class="p">sh-5.2$ </span>whoami
+<span class="p">sh-5.2$ </span>pwd
+<span class="p">sh-5.2$ </span>hostname -I
+<span class="p">sh-5.2$ </span>head -2 /etc/os-release</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>ssm-user
+/usr/bin
+172.31.xx.xx 172.17.0.1        (o segundo IP e a bridge do Docker, normal)
+NAME="Amazon Linux"
+VERSION="2023"</pre></div>
+        <div class="note n-tip"><b>Não precisa de <code>cd</code> aqui</b><p>A sessão abre como o usuário <code>ssm-user</code>, num diretório de serviço do agente — e tudo bem: este passo só confirma <i>em qual máquina</i> você está. Quem cuida do diretório de trabalho é o passo 4.1.</p></div>
+        <div class="cmd"><span class="cmd-label">Voltar para o WSL</span><button class="copy" type="button">copiar</button><pre><span class="p">sh-5.2$ </span>exit</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Exiting session with sessionId: usuario-xxxx-0a1b2c3d4e5f6a7b8.
+voce@maquina:~$</pre></div>
+        <div class="note n-tip"><b>De volta ao WSL</b><p>As Fases 3, 5, 6 e 7 rodam na <b>sua máquina</b>, não nesta. A Fase 4 traz você de volta para cá — lá a sessão é aberta de novo.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Sessão SSM abriu sem usar SSH</span></label></li>
+          <li><label><input type="checkbox"><span>Vi que entrei como <code>ssm-user</code>, e não como <code>ec2-user</code></span></label></li>
+          <li><label><input type="checkbox"><span>IP privado <code>172.31.xx.xx</code> confirma que é a bia-dev</span></label></li>
+          <li><label><input type="checkbox"><span>Sistema é Amazon Linux 2023</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p3" data-title="Rede e endpoint do RDS">
+      <div class="phase-head">
+        <span class="phase-n">FASE 3</span>
+        <div>
+          <h2>Abrir o caminho da bia-dev até o RDS</h2>
+          <p>O banco só aceita conexões vindas do Security Group <code>bia-web</code>. Para a migrate rodar da <code>bia-dev</code>, o SG dela precisa entrar nessa lista — sem nunca tornar o RDS público.</p>
+        </div>
+        <span class="phase-count" data-count-for="p3"></span>
+      </div>
+
+      <div class="note n-warn">
+        <b>Toda esta fase roda no WSL, não dentro da bia-dev</b>
+        <p>Se o seu prompt ainda for <code>sh-5.2$</code>, digite <code>exit</code> antes de continuar. Dentro da EC2 as variáveis do desafio não existem, e os comandos falham com <code>The security-group ID '' is malformed</code> ou <code>Invalid length for parameter</code>.</p>
+        <div class="cmd"><span class="cmd-label">Conferir onde você está e recarregar as variáveis</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh
+<span class="p">$ </span>echo "$SG_DB | $SG_DEV | $DEV_INSTANCE_ID"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>sg-xxxxxxxxxxxx-db | sg-xxxxxxxxxxxx-dev | i-xxxxxxxxxxxx-dev</pre></div>
+      </div>
+
+      <div class="ascii">
+<pre>
+        ORIGENS (tentando falar na porta 5432)            DESTINO
+
+ +----------------------------------+
+ |  bia-web     sg-xxxxxxxxxxxx-web | --- OK ----+
+ |  a API, rodando no ECS           |            |
+ +----------------------------------+            |   +------------------------------+
+                                                 +-->|  RDS "bia"  (nao publico)    |
+ +----------------------------------+            |   |  SG do banco: bia-db         |
+ |  bia-dev     sg-xxxxxxxxxxxx-dev | ---- X ----+   |  sg-xxxxxxxxxxxx-db          |
+ |  onde a migrate vai rodar        |      ^         |  escutando na 5432           |
+ +----------------------------------+      |         +------------------------------+
+                                           |
+   o compose.yml ja aponta para o RDS      |
+   certo, mas a conexao morre aqui:   -----+
+   o SG do banco nao conhece o SG
+   da bia-dev
+
+ SOLUCAO (passo 3.1) -- uma regra de entrada no sg-xxxxxxxxxxxx-db
+   porta    5432
+   origem   sg-xxxxxxxxxxxx-dev   (o Security Group, nao um IP)
+   efeito   a linha do bia-dev vira OK, sem expor o banco na internet
+</pre>
+      </div>
+      <p>O erro que essa falta produz não é um "acesso negado": a conexão simplesmente não volta, e a migrate fica pendurada até dar <code>ETIMEDOUT</code>. Por isso a regra vem <b>antes</b> da Fase 4 aqui — na aula ela aparece depois, como conserto do timeout.</p>
+
+      <div class="step" id="passo-3-1">
+        <div class="step-top"><a class="step-id" href="#passo-3-1">3.1</a><h3>Liberar a porta 5432 para o SG da bia-dev</h3><span class="where w-wsl">WSL</span></div>
+        <p>A origem da regra é um Security Group, não um IP. É assim que a AWS libera "qualquer máquina que use o SG bia-dev", sem depender de IP fixo.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 authorize-security-group-ingress \
+  --group-id "$SG_DB" \
+  --protocol tcp --port 5432 \
+  --source-group "$SG_DEV"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>{
+    "Return": true,
+    "SecurityGroupRules": [
+        {
+            "SecurityGroupRuleId": "sgr-0aaaaaaaaaaaaaaaa",
+            "GroupId": "sg-xxxxxxxxxxxx-db",
+            "IsEgress": false,
+            "IpProtocol": "tcp",
+            "FromPort": 5432,
+            "ToPort": 5432,
+            "ReferencedGroupInfo": { "GroupId": "sg-xxxxxxxxxxxx-dev" }
+        }
+    ]
+}</pre></div>
+        <div class="note n-tip"><b>Já rodou antes?</b><p>Se responder <code>InvalidPermission.Duplicate</code>, a regra já existe. Siga em frente.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Regra criada (<code>"Return": true</code>) ou já existente</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3-2">
+        <div class="step-top"><a class="step-id" href="#passo-3-2">3.2</a><h3>Conferir as duas origens no SG do banco</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-security-groups --group-ids "$SG_DB" \
+  --query 'SecurityGroups[0].IpPermissions[].UserIdGroupPairs[].GroupId' --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>sg-xxxxxxxxxxxx-web     sg-xxxxxxxxxxxx-dev</pre></div>
+        <p><code>sg-xxxxxxxxxxxx-web</code> é o <b>bia-web</b> (a API) e <code>sg-xxxxxxxxxxxx-dev</code> é o <b>bia-dev</b> (a migrate). Os dois, e mais ninguém.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>bia-web continua com acesso</span></label></li>
+          <li><label><input type="checkbox"><span>bia-dev passou a ter acesso</span></label></li>
+          <li><label><input type="checkbox"><span>Nenhuma regra com origem <code>0.0.0.0/0</code> na porta 5432</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3-3">
+        <div class="step-top"><a class="step-id" href="#passo-3-3">3.3</a><h3>Descobrir o endpoint do banco</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws rds describe-db-instances \
+  --query 'DBInstances[].{Id:DBInstanceIdentifier,Endpoint:Endpoint.Address,Porta:Endpoint.Port,Publico:PubliclyAccessible,Usuario:MasterUsername,Status:DBInstanceStatus}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>-------------------------------------------------------------------------------------------------
+|                                     DescribeDBInstances                                       |
++---------------------------------------------+-----+-------+---------+------------+-----------+
+|                  Endpoint                   | Id  | Porta | Publico |   Status   |  Usuario  |
++---------------------------------------------+-----+-------+---------+------------+-----------+
+| bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com | bia | 5432  |  False  | available  | postgres  |
++---------------------------------------------+-----+-------+---------+------------+-----------+</pre></div>
+        <p>Repare no nome: a <b>instância</b> do RDS chama-se <code>bia</code> — <code>bia-db</code> é o Security Group dela. São coisas diferentes, e confundir os dois faz o <code>psql</code> apontar para lugar nenhum.</p>
+        <p><code>Publico = False</code> é o comportamento correto: é por isso que o WSL não conecta direto no banco e a migrate precisa passar pela bia-dev.</p>
+        <div class="cmd"><span class="cmd-label">Guardar nas variáveis</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>echo 'export RDS_ENDPOINT=bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com' &gt;&gt; ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh
+<span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh &amp;&amp; echo "$RDS_ENDPOINT"</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Status do banco é <code>available</code></span></label></li>
+          <li><label><input type="checkbox"><span>Porta 5432 e <code>PubliclyAccessible = False</code></span></label></li>
+          <li><label><input type="checkbox"><span>Endpoint anotado em <code>RDS_ENDPOINT</code></span></label></li>
+          <li><label><input type="checkbox"><span>Entendi que a instância é <code>bia</code> e o Security Group é <code>bia-db</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3-4">
+        <div class="step-top"><a class="step-id" href="#passo-3-4">3.4</a><h3>Recuperar as credenciais do banco na task definition</h3><span class="where w-wsl">WSL</span></div>
+        <p>A API do Dia 2 já se conecta no banco — então as credenciais estão na definição da tarefa do ECS, em variáveis de ambiente. É de lá que você tira usuário e senha para a migrate, sem precisar lembrar do que digitou no Dia 2.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecs describe-task-definition --task-definition task-def-bia \
+  --query 'taskDefinition.containerDefinitions[0].environment' --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>--------------------------------------------------------------
+|                   DescribeTaskDefinition                   |
++-----------+------------------------------------------------+
+|   name    |                     value                      |
++-----------+------------------------------------------------+
+|  DB_PWD   |  (a senha do banco, em texto puro)             |
+|  DB_HOST  |  bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com   |
+|  DB_PORT  |  5432                                          |
+|  DB_USER  |  postgres                                      |
++-----------+------------------------------------------------+</pre></div>
+        <div class="note n-warn"><b>Senha em texto puro é o ponto fraco desta arquitetura</b><p>Qualquer pessoa com <code>ecs:DescribeTaskDefinition</code> lê a senha do banco. Para o laboratório resolve; o caminho correto é guardar em <b>Secrets Manager</b> e referenciar em <code>secrets</code> na task definition — a BIA já suporta isso pela variável <code>DB_SECRET_NAME</code> (<code>config/database.js</code>). Não publique essa saída em print no repositório.</p></div>
+        <div class="note n-tip"><b>Precisa de outro caminho?</b><p>Se preferir não ler a senha daqui, redefina uma nova em <b>RDS &gt; bia &gt; Modify &gt; New master password</b> — mas lembre de atualizar a task definition depois, ou a API para de conectar.</p></div>
+        <div class="note n-tip"><b>Dá para rodar isto de dentro da bia-dev também</b><p>Na execução real, este mesmo comando respondeu igual quando chamado <b>dentro</b> da <code>bia-dev</code>, já na sessão SSM — o que evita abrir um segundo terminal no meio da Fase 4, se você só se lembrar da senha lá na frente.</p><p>A identidade ali é a da própria máquina: <code>arn:aws:sts::xxxxxxxxxxxx:assumed-role/role-acesso-ssm/i-xxxxxxxxxxxx-dev</code>. Ou seja, a <code>role-acesso-ssm</code> carrega mais do que o <code>AmazonSSMManagedInstanceCore</code> — inclui leitura de ECS. O que ela <b>não</b> tem é S3: por isso os comandos de bucket, do passo 9.2, só funcionam no WSL.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Anotei <code>DB_USER</code> e <code>DB_PWD</code> para usar na Fase 4</span></label></li>
+          <li><label><input type="checkbox"><span><code>DB_HOST</code> da task definition é o mesmo endpoint do passo 3.3</span></label></li>
+          <li><label><input type="checkbox"><span>Não vou publicar a senha em print ou no repositório</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p4" data-title="Criar o banco e migrar">
+      <div class="phase-head">
+        <span class="phase-n">FASE 4</span>
+        <div>
+          <h2>Criar o database e rodar a migrate pela bia-dev</h2>
+          <p>Este é o "X" do diagrama do desafio: o WSL não fala com o RDS. Quem cria a estrutura é a bia-dev, alcançada por SSM — subindo o projeto pelo compose, como na aula, e sem instalar nada na máquina.</p>
+        </div>
+        <span class="phase-count" data-count-for="p4"></span>
+      </div>
+
+      <div class="note n-key">
+        <b>O <code>compose.yml</code> é o caminho — depois de apontá-lo para o RDS</b>
+        <p>Do jeito que vem do repositório, o compose sobe um PostgreSQL <b>local</b>, para desenvolvimento: migrar assim criaria as tabelas no lugar errado. É esse apontamento que o passo 4.4 troca pelo endpoint do RDS, e só então o projeto sobe (4.5) para a migrate sair de dentro dele.</p>
+        <p>O banco local continua subindo junto, e fica sem uso — quem responde passa a ser o RDS. Quem tiver pressa encontra no 4.5 uma alternativa que dispensa o build da imagem.</p>
+      </div>
+
+      <p>A Fase 3 abriu esse caminho — e vale ver o desenho inteiro agora, porque é aqui que ele é usado. O <code>compose.yml</code> do passo 4.4 vai apontar para o endereço certo do RDS; se mesmo assim a conexão não voltar, o problema está na camada de rede, e não no arquivo.</p>
+      <div class="ascii" id="diagrama-rede">
+<pre>
++---------------------------------------------------------------------------+
+|  DIAGRAMA DE REDE -- O PROBLEMA DE SECURITY GROUP                         |
+|  O compose.yml aponta para o RDS certo, mas a conexao e barrada na rede.  |
++---------------------------------------------------------------------------+
+
+   ORIGENS (tentando falar com o banco na porta 5432)
+
+ +--------------------------------+    +--------------------------------+
+ | ORIGEM 1                       |    | ORIGEM 2   (a sua EC2)         |
+ | Nome: bia-web                  |    | Nome: bia-dev                  |
+ | SG:   sg-xxxxxxxxxxxx-web      |    | SG:   sg-xxxxxxxxxxxx-dev      |
+ +--------------------------------+    +--------------------------------+
+                |                                      |
+                v                                      v
+         [ OK ] PERMITIDO                       [ X ] BLOQUEADO
+      (liberado no bia-db)                 (nao liberado no bia-db)
+                |                                      |
+                |                                      +-- a conexao morre
+                |                                          aqui, antes de
+                v                                          chegar ao RDS
+ +-----------------------------------------------------+
+ | DESTINO -- RDS                                      |
+ | Host:            bia.xxxxxxxxxxxx.us-east-1.rds...  |
+ | SG alvo:         bia-db   (sg-xxxxxxxxxxxx-db)      |
+ | Porta de escuta: 5432                               |
+ +-----------------------------------------------------+
+
++---------------------------------------------------------------------------+
+|  A SOLUCAO                                                                |
++---------------------------------------------------------------------------+
+  Problema:  a bia-dev usa o SG bia-dev, que nao esta no inbound do bia-db.
+  Acao:      acrescentar uma regra de entrada no bia-db liberando o bia-dev.
+
+    [ regra a aplicar no sg-xxxxxxxxxxxx-db ]
+      + Porta:      5432
+        Source:     sg-xxxxxxxxxxxx-dev   (o Security Group, nao um IP)
+        Descricao:  "acesso vindo de bia-dev"
+
+  Resultado: a ORIGEM 2 passa a ter o status [ OK ] PERMITIDO.
++---------------------------------------------------------------------------+
+</pre>
+      </div>
+      <p>Quem aplica essa regra é o <b>passo 3.1</b>, e o <b>3.2</b> confirma as duas origens. Com ela no lugar, a ORIGEM 2 fica liberada e a migrate do 4.5 passa direto.</p>
+
+      <div class="step" id="passo-4-1">
+        <div class="step-top"><a class="step-id" href="#passo-4-1">4.1</a><h3>Entrar na máquina e conferir o Docker</h3><span class="where w-ec2">BIA-DEV</span></div>
+        <p>A bia-dev já tem Docker desde o Desafio 2 — a interface <code>172.17.0.1</code> que apareceu no <code>hostname -I</code> é a bridge dele. Nada de <code>dnf install</code>: o que precisamos vem em imagem.</p>
+        <div class="cmd"><span class="cmd-label">No WSL</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ssm start-session --target "$DEV_INSTANCE_ID"</pre></div>
+        <div class="cmd"><span class="cmd-label">Já dentro da bia-dev — troque de usuário</span><button class="copy" type="button">copiar</button><pre><span class="p">sh-5.2$ </span>sudo su - ec2-user</pre></div>
+        <div class="cmd"><span class="cmd-label">Só depois que o prompt virar [ec2-user ~]$</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user ~]$ </span>pwd
+<span class="p">[ec2-user ~]$ </span>docker --version
+<span class="p">[ec2-user ~]$ </span>docker compose version
+<span class="p">[ec2-user ~]$ </span>docker ps</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>/home/ec2-user
+Docker version 25.x.x, build ...
+Docker Compose version v2.x.x
+CONTAINER ID   IMAGE   COMMAND   CREATED   STATUS   PORTS   NAMES</pre></div>
+        <p>O <code>sudo su - ec2-user</code> troca de usuário <b>e</b> já abre na home dele — é o hífen que faz isso, carregando o ambiente de login. Por isso o prompt vira <code>[ec2-user ~]$</code>, com o <code>~</code> de <code>/home/ec2-user</code>.</p>
+        <div class="note n-warn"><b>Deu <code>permission denied</code> no <code>docker ps</code>?</b><p>O usuário não está no grupo do Docker. Resolva com <code>sudo usermod -aG docker ec2-user</code> e reabra a sessão, ou simplesmente prefixe os comandos desta fase com <code>sudo</code>.</p><p>Se a resposta for <code>Cannot connect to the Docker daemon</code>, o serviço está parado: <code>sudo systemctl start docker</code>.</p></div>
+        <details class="fallback">
+          <summary>O <code>docker compose version</code> respondeu <code>'compose' is not a docker command</code>?</summary>
+          <p>A máquina tem o Docker, mas não o plugin do Compose — que é o que os passos 4.4 e 4.5 usam. Instale o plugin no diretório onde o Docker procura seus subcomandos:</p>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user ~]$ </span>sudo mkdir -p /usr/local/lib/docker/cli-plugins
+<span class="p">[ec2-user ~]$ </span>sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+<span class="p">[ec2-user ~]$ </span>sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+<span class="p">[ec2-user ~]$ </span>docker compose version</pre></div>
+          <p>Se preferir não instalar nada, a alternativa em <code>docker run</code> do passo 4.5 faz o mesmo trabalho sem o Compose.</p>
+        </details>
+        <div class="note n-warn"><b>A partir daqui, o <code>variaveis.sh</code> não existe mais</b><p>Você está em <b>outra máquina</b>, como <b>outro usuário</b>. O <code>~/DESAFIOS-FUNDAMENTAIS/variaveis.sh</code> mora no seu WSL, na home do seu usuário de lá — aqui dentro o <code>source</code> dele responde <code>No such file or directory</code>, e isso é esperado. As variáveis desta fase são exportadas à mão no passo 4.3.</p></div>
+        <div class="note n-tip"><b>Por que são dois blocos, e não um</b><p>O <code>sudo su -</code> abre um shell novo. Linhas coladas <b>junto com ele</b> não chegam nesse shell: ficam paradas no buffer de entrada do shell de fora e só são executadas quando você sair dele, lá no passo 4.7 — aparecendo como saída solta, muito tempo depois, sem relação nenhuma com o que você acabou de digitar. Some tudo aqui e ressurge uma hora adiante.</p><p>Por isso o <code>sudo su -</code> vai sozinho: espere o prompt virar <code>[ec2-user ~]$</code> antes de colar o segundo bloco. Vale para qualquer comando que troque de shell — <code>aws ssm start-session</code> inclusive.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Estou como <code>ec2-user</code>, em <code>/home/ec2-user</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>docker --version</code> responde</span></label></li>
+          <li><label><input type="checkbox"><span><code>docker compose version</code> responde (o plugin do Compose está instalado)</span></label></li>
+          <li><label><input type="checkbox"><span><code>docker ps</code> lista (mesmo que vazio), sem erro de permissão</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-4-2">
+        <div class="step-top"><a class="step-id" href="#passo-4-2">4.2</a><h3>Trazer o código da BIA para a máquina</h3><span class="where w-ec2">BIA-DEV</span></div>
+        <p>A migrate lê os arquivos de <code>database/migrations</code>, então o projeto precisa estar <b>aqui dentro</b>. A cópia que você clonou no Windows não serve: ela está do outro lado, e o RDS só aceita conexão vinda desta máquina.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user ~]$ </span>git clone https://github.com/henrylle/bia
+<span class="p">[ec2-user ~]$ </span>cd bia &amp;&amp; ls</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>api  client  compose.yml  config  database  Dockerfile  index.js  package.json  server.js ...</pre></div>
+        <details class="fallback">
+          <summary>A máquina não tem <code>git</code>?</summary>
+          <p>Baixe o código como pacote, sem instalar nada:</p>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user ~]$ </span>curl -L https://github.com/henrylle/bia/archive/refs/heads/main.tar.gz | tar xz
+<span class="p">[ec2-user ~]$ </span>mv bia-main bia &amp;&amp; cd bia</pre></div>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Projeto disponível em <code>/home/ec2-user/bia</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>database/migrations</code> existe</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-4-3">
+        <div class="step-top"><a class="step-id" href="#passo-4-3">4.3</a><h3>Apontar as variáveis do banco</h3><span class="where w-ec2">BIA-DEV</span></div>
+        <p>O <code>config/database.js</code> da BIA lê exatamente estas quatro variáveis e liga o SSL sozinho quando o host não é local. É delas que o passo 4.4 tira o host e a senha para escrever no <code>compose.yml</code> — e são elas, também, que a alternativa em <code>docker run</code> do 4.5 repassa ao contêiner.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>export DB_HOST=bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com
+<span class="p">[ec2-user bia]$ </span>export DB_PORT=5432
+<span class="p">[ec2-user bia]$ </span>export DB_USER=postgres
+<span class="p">[ec2-user bia]$ </span>read -s -p "Senha do RDS (passo 3.4): " DB_PWD; export DB_PWD; echo</pre></div>
+        <p>A última linha pede a senha e a lê sem exibir na tela. Cole a senha do passo 3.4 e dê Enter — não aparece nada, e é assim mesmo.</p>
+        <div class="note n-key"><b>Por que não um <code>export DB_PWD=</code> como os outros três</b><p>Um <code>export</code> com a senha escrita ali seria copiado com um texto de exemplo no lugar dela, e o erro só apareceria dois passos depois, no 4.5, como <code>password authentication failed for user "postgres"</code> — longe da causa. O <code>read -s</code> resolve três coisas de uma vez: não há exemplo para copiar por engano, a senha não fica no histórico do bash, e não passa pela interpretação de <code>$</code>, <code>!</code> e <code>&amp;</code> que aspas duplas fariam.</p><p>Se preferir o <code>export</code> mesmo assim, use <b>aspas simples</b>: <code>export DB_PWD='a-senha-aqui'</code>.</p><p><b>Uma regra que vale sempre:</b> a linha do <code>read -s</code> tem de ser a <b>última</b> do que você colar. Ele lê a próxima linha da entrada — se houver um comando logo abaixo, é esse comando que vira a senha, e o prompt some sem esperar você digitar.</p></div>
+        <div class="cmd"><span class="cmd-label">Conferir sem mostrar a senha</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>echo "$DB_HOST | $DB_USER | ${#DB_PWD} caracteres"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com | postgres | 20 caracteres</pre></div>
+        <p>O <code>${#DB_PWD}</code> conta os caracteres em vez de imprimi-los: prova que a senha entrou inteira, sem revelar qual é. Se vier <code>0 caracteres</code>, o <code>read</code> não recebeu nada — repita a linha.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>As quatro variáveis exportadas dentro da bia-dev</span></label></li>
+          <li><label><input type="checkbox"><span><code>echo "$DB_HOST"</code> mostra o endpoint do RDS</span></label></li>
+          <li><label><input type="checkbox"><span>A contagem de caracteres bate com a senha do passo 3.4</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-4-4">
+        <div class="step-top"><a class="step-id" href="#passo-4-4">4.4</a><h3>Apontar o compose.yml para o RDS</h3><span class="where w-ec2">BIA-DEV</span></div>
+        <p>O <code>compose.yml</code> da BIA nasce apontando para o PostgreSQL <b>local</b>, que ele mesmo sobe. Trocar duas linhas — o host e a senha — faz o mesmo projeto subir falando com o RDS. É de dentro dele que a migrate vai sair.</p>
+        <div class="ascii">
+<pre>
+  antes (o banco local, do proprio compose)   depois (o RDS deste desafio)
+
+    DB_USER: postgres                           DB_USER: postgres
+    DB_PWD: postgres                            DB_PWD: (a senha do passo 3.4)
+    DB_HOST: database                           DB_HOST: bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com
+    DB_PORT: 5432                               DB_PORT: 5432
+</pre>
+        </div>
+        <p>Só <code>DB_PWD</code> e <code>DB_HOST</code> mudam. O comando abaixo faz a troca com as variáveis que você exportou no passo 4.3 — assim a senha não é digitada de novo, e não há texto de exemplo para copiar por engano.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>sed -i "s#DB_PWD: postgres#DB_PWD: $DB_PWD#; s#DB_HOST: database#DB_HOST: $DB_HOST#" compose.yml
+<span class="p">[ec2-user bia]$ </span>grep -nE '^[[:space:]]+DB_' compose.yml</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>11:      DB_USER: postgres
+12:      DB_PWD: (a senha do passo 3.4)
+13:      DB_HOST: bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com
+14:      DB_PORT: 5432</pre></div>
+        <p>O <code>grep</code> filtra só as quatro linhas que valem: as outras <code>DB_</code> do arquivo estão comentadas, e é por isso que o padrão exige espaço antes do nome.</p>
+        <div class="note n-warn"><b>A senha fica em texto puro nesse arquivo</b><p>É o mesmo ponto fraco do passo 3.4, agora em disco. O arquivo é o clone da BIA <b>dentro da bia-dev</b> — não o repositório deste desafio —, então não há o que commitar. Só não publique o <code>cat compose.yml</code> em print.</p></div>
+        <div class="note n-tip"><b>Se a senha tiver <code>&amp;</code>, <code>#</code> ou <code>\</code></b><p>Esses caracteres têm significado para o <code>sed</code> e o valor sai distorcido. Nesse caso edite à mão — <code>vi compose.yml</code>, nas quatro linhas do bloco <code>environment</code> do serviço <code>server</code>. O <code>grep</code> acima é o que confirma o resultado, de um jeito ou de outro.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>DB_HOST</code> agora é o endpoint do RDS, e não <code>database</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>DB_PWD</code> não é mais <code>postgres</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>DB_USER</code> e <code>DB_PORT</code> continuam <code>postgres</code> e <code>5432</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-4-5">
+        <div class="step-top"><a class="step-id" href="#passo-4-5">4.5</a><h3>Subir o projeto e rodar as migrations</h3><span class="where w-ec2">BIA-DEV</span></div>
+        <p>Com o compose apontado para o RDS, subir o projeto é o que dá o contêiner de onde a migrate sai. O serviço <code>server</code> é a API — e é dentro dele que mora o <code>sequelize-cli</code>.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>docker compose up -d
+<span class="p">[ec2-user bia]$ </span>docker compose ps</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>NAME       IMAGE                      STATUS          PORTS
+bia        bia-server                 Up 20 seconds   0.0.0.0:3001-&gt;8080/tcp
+database   postgres:17.1              Up 21 seconds   0.0.0.0:5433-&gt;5432/tcp
+redis      valkey/valkey:8.1-alpine   Up 21 seconds   0.0.0.0:6379-&gt;6379/tcp</pre></div>
+        <div class="note n-tip"><b>A primeira subida demora</b><p>O <code>compose.yml</code> traz <code>build: .</code>, então o <code>up</code> constrói a imagem da BIA — e isso inclui compilar o front com o Vite. Numa <code>t3.micro</code> são vários minutos. Da segunda vez em diante a imagem está em cache e o <code>up</code> é quase instantâneo.</p><p>Os contêineres <code>database</code> e <code>redis</code> sobem junto porque o <code>server</code> declara <code>depends_on</code>. O <code>database</code> fica sem uso — quem responde agora é o RDS —, e isso é esperado.</p></div>
+        <p>Agora a migrate, como na aula. O <code>db:create</code> vem antes porque o database <code>bia</code> ainda não existe no RDS: é exatamente o erro que o passo 1.3 registrou.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>docker compose exec server bash -c 'npx sequelize db:create &amp;&amp; npx sequelize db:migrate'</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Sequelize CLI [Node: 24.18.0, CLI: 6.6.3, ORM: 6.37.7]
+
+Loaded configuration file "config/database.js".
+Database bia created.
+
+Sequelize CLI [Node: 24.18.0, CLI: 6.6.3, ORM: 6.37.7]
+
+Loaded configuration file "config/database.js".
+== 20210924000838-criar-tarefas: migrating =======
+== 20210924000838-criar-tarefas: migrated (0.087s)</pre></div>
+        <p>Não é preciso <code>npm install</code> nenhum aqui: o <code>sequelize-cli</code> é dependência de desenvolvimento, e a limpeza do <code>Dockerfile</code> (<code>npm prune --production</code>) só passa dentro de <code>client/</code>. O <code>node_modules</code> da raiz chega inteiro na imagem, com o CLI dentro — por isso o <code>npx sequelize</code> encontra o comando.</p>
+        <div class="note n-tip"><b>Respostas que não são erro</b><p><code>Database bia already exists</code> quer dizer que o <code>db:create</code> já rodou antes — o <code>db:migrate</code> na sequência continua normalmente. E <code>No migrations were executed, database schema was already up to date</code> significa que as tabelas já estavam lá.</p></div>
+        <div class="note n-warn"><b>Subiu o compose <i>antes</i> de editar o arquivo?</b><p>O contêiner guardou as variáveis antigas e vai tentar falar com o banco local. Recrie o serviço para ele reler o <code>compose.yml</code>: <code>docker compose up -d --force-recreate server</code>.</p></div>
+        <details class="fallback">
+          <summary>A migrate travou até dar timeout</summary>
+          <div class="out bad"><span class="out-label">O que aparece</span><pre>SequelizeConnectionError: connect ETIMEDOUT
+    ... bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432</pre></div>
+          <p>É exatamente o cenário do <a href="#diagrama-rede">diagrama de rede</a> no início desta fase: a ORIGEM 2 ainda está bloqueada, e a conexão morre antes de chegar ao RDS.</p>
+          <p>O apontamento do passo 4.4 está certo; o que falta é a regra do <b>passo 3.1</b>. Refaça-a e rode a migrate de novo — o contêiner nem precisa subir outra vez.</p>
+        </details>
+        <details class="fallback">
+          <summary>Alternativa sem build: um contêiner descartável</summary>
+          <p>O <code>up</code> constrói a imagem inteira só para chegar ao <code>sequelize-cli</code>. Dá para pular o build e fazer o mesmo trabalho com um contêiner que se apaga no fim — útil quando o build na <code>t3.micro</code> está demorando demais ou faltou espaço em disco. Não depende do <code>compose.yml</code> nem do passo 4.4.</p>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>docker run --rm -v "$PWD":/app -w /app \
+  -e DB_HOST="$DB_HOST" -e DB_PORT="$DB_PORT" \
+  -e DB_USER="$DB_USER" -e DB_PWD="$DB_PWD" \
+  public.ecr.aws/docker/library/node:24.18.0-slim \
+  sh -c 'npm install --loglevel=error &amp;&amp; npx sequelize db:create &amp;&amp; npx sequelize db:migrate'</pre></div>
+          <p>O <code>-v "$PWD":/app</code> monta o projeto dentro do contêiner, o <code>-e</code> repassa as variáveis do passo 4.3, e a imagem é a mesma <code>node</code> que o <code>Dockerfile</code> da BIA usa, puxada do registry público da AWS — o que evita o limite de download do Docker Hub. O <code>npm install</code> aqui é só o da raiz, onde mora o <code>sequelize-cli</code>; o React não entra nessa conta.</p>
+          <p>Seguindo por aqui, o passo 4.6 também precisa da versão em <code>docker run</code>, já que não haverá contêiner de pé.</p>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>docker compose ps</code> mostra o <code>bia</code> como <code>Up</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>Database bia created.</code> (ou <code>already exists</code>)</span></label></li>
+          <li><label><input type="checkbox"><span>A migration <code>criar-tarefas</code> aparece como <code>migrated</code></span></label></li>
+          <li><label><input type="checkbox"><span>Nenhum erro de conexão, de SSL ou de autenticação</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-4-6">
+        <div class="step-top"><a class="step-id" href="#passo-4-6">4.6</a><h3>Conferir o estado das migrations</h3><span class="where w-ec2">BIA-DEV</span></div>
+        <p>O próprio CLI diz o que já foi aplicado — não é preciso abrir o banco para isso. O contêiner continua de pé, então a pergunta vai pelo mesmo caminho da migrate.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>docker compose exec server npx sequelize db:migrate:status</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Loaded configuration file "config/database.js".
+up 20210924000838-criar-tarefas.js</pre></div>
+        <p><code>up</code> significa aplicada. Se aparecer <code>down</code>, a migration não rodou — volte ao passo 4.5.</p>
+        <details class="fallback">
+          <summary>Foi pela alternativa do 4.5, sem compose?</summary>
+          <p>Não há contêiner de pé para o <code>exec</code>. A mesma pergunta, no contêiner descartável:</p>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>docker run --rm -v "$PWD":/app -w /app \
+  -e DB_HOST="$DB_HOST" -e DB_PORT="$DB_PORT" \
+  -e DB_USER="$DB_USER" -e DB_PWD="$DB_PWD" \
+  public.ecr.aws/docker/library/node:24.18.0-slim \
+  npx sequelize db:migrate:status</pre></div>
+        </details>
+        <details class="fallback">
+          <summary>Quer ver as tabelas de verdade? (opcional)</summary>
+          <p>Um contêiner com o cliente do PostgreSQL mostra o schema, sem instalar <code>psql</code> na máquina — ele não vem instalado na bia-dev:</p>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>docker run --rm -e PGPASSWORD="$DB_PWD" \
+  public.ecr.aws/docker/library/postgres:17-alpine \
+  psql "host=$DB_HOST port=$DB_PORT user=$DB_USER dbname=bia sslmode=require" -c '\dt'</pre></div>
+          <div class="out good"><span class="out-label">Resposta esperada</span><pre>              List of relations
+ Schema |     Name      | Type  |  Owner
+--------+---------------+-------+----------
+ public | SequelizeMeta | table | postgres
+ public | Tarefas       | table | postgres</pre></div>
+          <p><code>Tarefas</code> é a tabela que o site vai gravar; <code>SequelizeMeta</code> é o controle de quais migrations já rodaram.</p>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A migration aparece como <code>up</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-4-7">
+        <div class="step-top"><a class="step-id" href="#passo-4-7">4.7</a><h3>Derrubar o compose, voltar ao WSL e reverificar a API</h3><span class="where w-wsl">WSL</span></div>
+        <p>Antes de sair, derrube os contêineres. O database e as tabelas ficaram no <b>RDS</b> — nada do que a migrate fez mora aqui, então parar o compose não desfaz nenhum trabalho. O que some é só o PostgreSQL local, que ninguém estava usando.</p>
+        <div class="note n-tip"><b>Foi pela alternativa do 4.5?</b><p>Então não há compose de pé — o contêiner descartável já se apagou sozinho. Pule para o <code>exit</code>.</p></div>
+        <div class="cmd"><span class="cmd-label">Ainda na bia-dev</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>docker compose down</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>[+] Running 4/4
+ Container bia         Removed
+ Container database    Removed
+ Container redis       Removed
+ Network bia_default   Removed</pre></div>
+        <p>Saia da máquina com <code>exit</code>, <b>uma linha de cada vez</b>, esperando o prompt entre elas. Em geral são dois: um sai do <code>ec2-user</code>, o outro encerra a sessão SSM. Podem ser três, se o <code>sudo su - ec2-user</code> do passo 4.1 tiver sido executado quando você já era <code>ec2-user</code> — o que importa não é a contagem, é o prompt voltar a ser o do seu WSL. O 500 da Fase 1 tem que virar 200.</p>
+        <div class="cmd"><span class="cmd-label">Na bia-dev — repita até o prompt virar o do WSL</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user bia]$ </span>exit</pre></div>
+        <div class="note n-warn"><b>Não cole o <code>exit</code> junto com o <code>curl</code></b><p>São <b>máquinas diferentes</b>, e por isso são dois blocos separados aqui. Coladas de uma vez, as linhas depois do <code>exit</code> ficam no buffer de entrada e acabam executadas no shell errado — ou reaparecem mais tarde como saída solta, sem relação aparente com o que você digitou.</p><p>O <code>curl</code> abaixo só funciona no WSL: <code>$API_URL</code> vem do <code>variaveis.sh</code> do passo 0.4 e <b>não existe</b> dentro da bia-dev.</p></div>
+        <div class="note n-tip"><b>Pare quando o prompt virar <code>voce@maquina:~$</code> — o próximo <code>exit</code> fecha a janela</b><p>Chegou no seu WSL, acabou. Um <code>exit</code> a mais encerra o shell de login do Ubuntu e o terminal simplesmente some da tela.</p><p>Se isso acontecer, <b>não recomece o desafio</b>: nada do que você fez estava naquela janela. O database e as migrations ficaram no RDS, a role e a regra de Security Group na AWS, o <code>variaveis.sh</code> no disco, o clone da BIA na bia-dev, e os itens marcados neste guia no seu navegador. Perderam-se só as variáveis daquele terminal.</p></div>
+        <details class="fallback">
+          <summary>O terminal fechou — por onde eu recomeço?</summary>
+          <p>Por aqui mesmo, pelo <code>curl</code> logo abaixo. Abra um terminal novo e devolva a ele só o que se perdeu, que foram as variáveis:</p>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh
+<span class="p">$ </span>aws sts get-caller-identity</pre></div>
+          <p>Respondeu <code>user/usuario-xxxx</code>? A credencial ainda vale — siga para o <code>curl</code>, sem refazer as Fases 2, 3 e 4. Só se vier <code>Your session has expired</code> é que o <code>aws login</code> do passo 0.2 entra antes.</p>
+          <p>O passo 1.1 só é necessário se você tiver <b>parado</b> alguma instância: é ele que pega o IP novo da API. Se nada foi parado, o <code>API_URL</code> do <code>variaveis.sh</code> continua válido. O bloco <i>"Parando no meio e voltando depois"</i>, no passo 0.4, tem o roteiro completo.</p>
+        </details>
+        <div class="cmd"><span class="cmd-label">Já no WSL — confira a variável e teste</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>echo "$API_URL"
+<span class="p">$ </span>curl -s -i "$API_URL/api/tarefas"</pre></div>
+        <div class="note n-tip"><b>O <code>echo</code> veio vazio?</b><p>Ou você ainda está dentro da bia-dev — confira o prompt —, ou este é um terminal WSL novo, que ainda não carregou as variáveis: <code>source ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh</code> (passo 0.4).</p></div>
+        <div class="out good"><span class="out-label">Resposta esperada agora</span><pre>HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+
+{"dbTime":41,"data":[]}</pre></div>
+        <p>Lista vazia é exatamente o esperado: o banco existe, a tabela existe, e ninguém criou tarefa ainda. Quem vai criar a primeira é o site, na Fase 8. A API embrulha o resultado num objeto — o array fica em <code>data</code>, e <code>dbTime</code> é o tempo da consulta em milissegundos, que varia a cada chamada.</p>
+        <p>O que importa aqui é o <b>200</b> no lugar do 500 e o <code>data</code> vazio, sem mensagem de erro.</p>
+        <div class="note n-tip"><b>Continuou 500?</b><p>Confirme que o database foi criado no mesmo servidor que a API usa — o <code>DB_HOST</code> do passo 4.3 tem que ser idêntico ao da task definition (passo 3.4). Em último caso, force um deployment novo do serviço: <code>aws ecs update-service --cluster cluster-bia --service service-bia --force-new-deployment</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A API responde 200 com lista vazia</span></label></li>
+          <li><label><input type="checkbox"><span>Fim do erro <code>database "bia" does not exist</code></span></label></li>
+          <li><label><input type="checkbox"><span>Estou de volta no WSL, com o prompt <code>voce@maquina:~$</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p5" data-title="Os scripts shell">
+      <div class="phase-head">
+        <span class="phase-n">FASE 5</span>
+        <div>
+          <h2>Escrever os scripts que geram e publicam os assets</h2>
+          <p>Três arquivos, na mesma estrutura da aula: <code>react.sh</code> faz o build, <code>s3.sh</code> faz o envio e <code>deploy.sh</code> orquestra os dois recebendo a URL da API por argumento.</p>
+        </div>
+        <span class="phase-count" data-count-for="p5"></span>
+      </div>
+
+      <div class="ascii">
+<pre>
+  cd aqui    3 - Desafio 3/GitHub/          <- vai para o GitHub
+     |
+     +-- guia-desafio-3.html
+     +-- deploy.sh        <-- ./deploy.sh hom http://xx.xx.xx.xx
+     |      |
+     |      +-- . react.sh   -->  build()      npm install + vite build
+     |      +-- . s3.sh      -->  envio_s3()   aws s3 sync
+     |
+     +-- bia/             (clone de referencia, fica no .gitignore)
+
+
+  BIA_DIR    ~/DESAFIOS-FUNDAMENTAIS/bia/    <- disco do Linux, onde o build roda
+     |
+     +-- client/build/    <-- saida do Vite, origem do sync para o S3
+</pre>
+      </div>
+
+      <div class="note n-tip">
+        <b>Por que duas pastas</b>
+        <p>Os scripts são o entregável do desafio, então moram no repositório. O build, não: <code>npm install</code> cria dezenas de milhares de arquivos em <code>node_modules</code>, e deixar isso no disco do Windows significa um build bem mais lento, porque o WSL chega lá por uma camada de tradução — e, se a pasta for sincronizada com algum serviço de nuvem, uma sincronização que não termina mais.</p>
+        <p>Os scripts resolvem isso lendo <code>BIA_DIR</code>: eles ficam versionados de um lado e trabalham do outro.</p>
+      </div>
+
+      <div class="note n-warn">
+        <b>Antes de tudo: entre na pasta do repositório</b>
+        <p>Todos os comandos desta fase — e o do passo 6.1 — são <b>relativos a ela</b>. Não há variável apontando para essa pasta: você entra nela uma vez e trabalha ali dentro.</p>
+      </div>
+      <div class="cmd"><span class="cmd-label">Abertura da fase — ajuste o caminho para o seu</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cd "/caminho/onde/voce/clonou/este/repositorio"
+<span class="p">$ </span>pwd &amp;&amp; ls</pre></div>
+      <div class="out good"><span class="out-label">Resposta esperada</span><pre>/caminho/do/seu/repositorio
+bia  guia-desafio-3.html  imagens</pre></div>
+      <p>O <code>pwd</code> tem de terminar no nome da pasta do repositório, e o <code>ls</code> tem de mostrar o <code>guia-desafio-3.html</code>. Se não mostrar, você está no lugar errado — e os <code>cat &gt;</code> dos próximos passos criariam os scripts onde não devem, <b>sem reclamar</b>.</p>
+      <div class="note n-tip"><b>Terminal novo? Refaça o <code>cd</code></b><p>O diretório atual não sobrevive a fechar o terminal, nem a um <code>cd</code> dado no meio do caminho. Sempre que um comando desta fase reclamar de arquivo inexistente — <code>./deploy.sh: No such file or directory</code> é o caso típico —, confira o <code>pwd</code> antes de qualquer outra coisa.</p></div>
+
+      <div class="step" id="passo-5-1">
+        <div class="step-top"><a class="step-id" href="#passo-5-1">5.1</a><h3>Conferir as duas pastas</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>ls
+<span class="p">$ </span>ls "$BIA_DIR"
+<span class="p">$ </span>grep -n "outDir" "$BIA_DIR/client/vite.config.js"
+<span class="p">$ </span>grep -rn "VITE_API_URL" "$BIA_DIR/client/src/App.jsx"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>bia  guia-desafio-3.html  imagens
+api  client  compose.yml  config  database  Dockerfile  package.json  server.js ...
+    outDir: 'build',
+13:const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";</pre></div>
+        <div class="note n-warn"><b>Esta BIA é Vite, não Create React App</b><p>A aula mostra <code>REACT_APP_API_URL</code> e a pasta <code>build</code> na raiz do client — aquilo valia para a versão antiga. Nesta versão (4.3.0) a variável é <code>VITE_API_URL</code> e a saída é <code>client/build</code>. Se você usar o nome antigo, o build funciona mas o site chama <code>localhost:8080</code> e nada aparece na tela.</p></div>
+        <div class="note n-tip"><b>O <code>bia/</code> dentro do repositório tem <code>.git</code> próprio</b><p>Quando você transformar a pasta <code>GitHub</code> em repositório, o git trataria esse clone como submódulo e não versionaria os arquivos dele. Como o entregável são os seus scripts — e não uma cópia do projeto de terceiros — o caminho limpo é criar um <code>.gitignore</code> com a linha <code>bia/</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Estou na pasta do repositório — o <code>ls</code> mostra o <code>guia-desafio-3.html</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>BIA_DIR</code> aponta para a cópia no disco do Linux</span></label></li>
+          <li><label><input type="checkbox"><span><code>outDir: 'build'</code> confirmado</span></label></li>
+          <li><label><input type="checkbox"><span>A variável lida pelo React é <code>VITE_API_URL</code></span></label></li>
+        </ul></div>
+      </div>
+      <div class="step" id="passo-5-2">
+        <div class="step-top"><a class="step-id" href="#passo-5-2">5.2</a><h3>Criar o react.sh — a função de build</h3><span class="where w-wsl">WSL</span></div>
+        <p>Primeiro arquivo da estrutura da aula. A função recebe a URL da API como <code>$1</code> e a injeta na variável que o Vite lê durante o build — é assim que o endereço entra no bundle.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cat &gt; react.sh &lt;&lt;'FIM'
+#!/usr/bin/env bash
+# Gera os assets estaticos do React da BIA.
+# Uso interno: build &lt;URL_DA_API&gt;
+
+function build() {
+  local API_URL="$1"
+
+  echo "Fazendo build do react..."
+  echo "  projeto: $BIA_DIR"
+  echo "  API que vai para o bundle: $API_URL"
+
+  cd "$BIA_DIR" || return 1
+
+  npm install --loglevel=error
+  npm install --prefix client --legacy-peer-deps --loglevel=error
+
+  echo " Iniciando build..."
+  VITE_API_URL="$API_URL" npm run build --prefix client
+  echo " Build finalizado"
+
+  cd - &gt; /dev/null
+}
+FIM</pre></div>
+        <div class="note n-warn"><b>A linha do build mudou em relação à aula</b><p>A aula copia do <code>Dockerfile</code> a linha <code>NODE_OPTIONS=--openssl-legacy-provider REACT_APP_API_URL=... npm run build --prefix client</code>, que era do Create React App. Nesta versão da BIA o <code>Dockerfile</code> traz <code>VITE_API_URL=... npm run build</code> — o mesmo raciocínio (copiar do Dockerfile a linha que gera os assets), com o comando atual.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>react.sh</code> criado dentro do repositório</span></label></li>
+          <li><label><input type="checkbox"><span>A função recebe a URL como <code>$1</code> e a injeta em <code>VITE_API_URL</code></span></label></li>
+          <li><label><input type="checkbox"><span>O build acontece em <code>$BIA_DIR</code>, no disco do Linux</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-5-3">
+        <div class="step-top"><a class="step-id" href="#passo-5-3">5.3</a><h3>Criar o s3.sh — a função de envio</h3><span class="where w-wsl">WSL</span></div>
+        <p>O <code>sync</code> sincroniza origem e destino — aqui, pasta local e bucket. O <code>--delete</code> apaga do bucket o que não existe mais no build, o que faz dele um espelho e não um acúmulo de arquivos velhos.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cat &gt; s3.sh &lt;&lt;'FIM'
+#!/usr/bin/env bash
+# Envia os assets gerados para o bucket do site.
+# Uso interno: envio_s3 &lt;NOME_DO_BUCKET&gt;
+
+function envio_s3() {
+  local BUCKET="$1"
+
+  echo "Fazendo envio para o s3..."
+  echo " Iniciando envio..."
+
+  aws s3 sync "$BIA_DIR/client/build/" "s3://$BUCKET/" \
+    --delete \
+    --profile formacao_aws
+
+  echo " Envio finalizado"
+}
+FIM</pre></div>
+        <div class="note n-tip"><b>Por que o <code>--profile</code> aparece aqui</b><p>Como a aula mostra, o profile é o ponto de atenção do <code>sync</code>: sem ele, o CLI usa o <code>default</code> — que nesta máquina autentica como outro usuário e devolve <code>Access Denied</code>. Escrever <code>--profile formacao_aws</code> no script deixa o envio independente de você ter exportado <code>AWS_PROFILE</code> naquele terminal.</p><p>Se um dia mudar o nome do profile, é esta linha que muda.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>s3.sh</code> criado dentro do repositório</span></label></li>
+          <li><label><input type="checkbox"><span>A origem do sync é <code>$BIA_DIR/client/build/</code></span></label></li>
+          <li><label><input type="checkbox"><span>O <code>--profile formacao_aws</code> está no comando</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-5-4">
+        <div class="step-top"><a class="step-id" href="#passo-5-4">5.4</a><h3>Criar o deploy.sh — o orquestrador</h3><span class="where w-wsl">WSL</span></div>
+        <p>Ele junta as duas peças com <code>.</code> (o mesmo que <code>source</code>) e recebe dois argumentos: o <b>ambiente</b>, validado pelo operador condicional da aula, e a <b>URL da API</b>, que o enunciado do desafio exige que venha por argumento.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cat &gt; deploy.sh &lt;&lt;'FIM'
+#!/usr/bin/env bash
+# Deploy do front-end da BIA para o S3.
+# Uso: ./deploy.sh &lt;ambiente&gt; &lt;URL_DA_API&gt;
+
+set -e
+
+AMBIENTE="$1"
+API_URL="$2"
+
+BUCKET_NAME="${BUCKET_NAME:-seu-bucket-xxxx}"
+BIA_DIR="${BIA_DIR:-$HOME/DESAFIOS-FUNDAMENTAIS/bia}"
+
+# check if my var AMBIENTE is equals to hom ou prd
+if [ "$AMBIENTE" != "hom" ] &amp;&amp; [ "$AMBIENTE" != "prd" ]; then
+  echo "Ambiente invalido"
+  echo
+  echo "Uso:     ./deploy.sh &lt;ambiente&gt; &lt;URL_DA_API&gt;"
+  echo "Exemplo: ./deploy.sh hom http://xx.xx.xx.xx"
+  exit 1
+fi
+
+if [ -z "$API_URL" ]; then
+  echo "Erro: informe a URL da API."
+  echo "Exemplo: ./deploy.sh $AMBIENTE http://xx.xx.xx.xx"
+  exit 1
+fi
+
+if [ ! -d "$BIA_DIR/client" ]; then
+  echo "Erro: projeto da BIA nao encontrado em $BIA_DIR"
+  echo "Ajuste a variavel BIA_DIR ou clone o projeto:"
+  echo "  git clone https://github.com/henrylle/bia \"$BIA_DIR\""
+  exit 1
+fi
+
+cd "$(dirname "$0")"
+export BIA_DIR
+
+. ./react.sh
+. ./s3.sh
+
+echo "Vou iniciar deploy no ambiente: $AMBIENTE"
+echo "O endereco da API sera: $API_URL"
+echo "Bucket de destino: $BUCKET_NAME"
+echo
+echo "Fazendo deploy..."
+
+build "$API_URL"
+
+envio_s3 "$BUCKET_NAME"
+
+echo
+echo "Finalizado"
+echo "Site: http://$BUCKET_NAME.s3-website-us-east-1.amazonaws.com"
+FIM</pre></div>
+        <div class="cmd"><span class="cmd-label">Marcar como executável</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>chmod +x deploy.sh react.sh s3.sh
+<span class="p">$ </span>ls -l</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>-rwxrwxrwx 1 voce voce   1180 ... deploy.sh
+-rwxrwxrwx 1 voce voce    640 ... react.sh
+-rwxrwxrwx 1 voce voce    380 ... s3.sh
+-rwxrwxrwx 1 voce voce 111343 ... guia-desafio-3.html
+drwxrwxrwx 1 voce voce    512 ... bia</pre></div>
+        <div class="note n-tip"><b>Por que tudo aparece como <code>rwxrwxrwx</code></b><p>O disco do Windows é montado no WSL sem suporte a permissões do Linux, então todo arquivo já nasce executável ali. O <code>chmod</code> não dá erro, apenas não muda nada — e o <code>./deploy.sh</code> funciona de qualquer forma. Num repositório clonado direto no Linux, o <code>chmod +x</code> seria obrigatório.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Os três scripts existem no repositório</span></label></li>
+          <li><label><input type="checkbox"><span><code>deploy.sh</code> carrega os outros dois com <code>.</code> (source)</span></label></li>
+          <li><label><input type="checkbox"><span>O ambiente é validado com <code>if</code>, e a URL da API vem por argumento</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-5-5">
+        <div class="step-top"><a class="step-id" href="#passo-5-5">5.5</a><h3>Testar as validações antes do deploy real</h3><span class="where w-wsl">WSL</span></div>
+        <p>Três tentativas de propósito erradas, para ver o script recusando cada uma. Um script bom falha rápido e explica como se usa — antes de gastar minutos em <code>npm install</code>.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>pwd
+<span class="p">$ </span>./deploy.sh; echo "saida: $?"
+<span class="p">$ </span>./deploy.sh dev http://xx.xx.xx.xx; echo "saida: $?"
+<span class="p">$ </span>./deploy.sh hom; echo "saida: $?"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Ambiente invalido
+
+Uso:     ./deploy.sh &lt;ambiente&gt; &lt;URL_DA_API&gt;
+Exemplo: ./deploy.sh hom http://xx.xx.xx.xx
+saida: 1
+
+Ambiente invalido
+
+Uso:     ./deploy.sh &lt;ambiente&gt; &lt;URL_DA_API&gt;
+Exemplo: ./deploy.sh hom http://xx.xx.xx.xx
+saida: 1
+
+Erro: informe a URL da API.
+Exemplo: ./deploy.sh hom http://xx.xx.xx.xx
+saida: 1</pre></div>
+        <p>Repare que <code>dev</code> é recusado: o <code>if</code> só aceita <code>hom</code> e <code>prd</code>, exatamente como na aula.</p>
+        <div class="note n-warn"><b><code>$'\r': command not found</code>?</b><p>O arquivo foi salvo com quebra de linha do Windows. Converta com <code>sed -i 's/\r$//' *.sh</code>, de dentro da pasta do repositório — e, no VS Code, troque <b>CRLF</b> por <b>LF</b> no canto inferior direito antes de salvar de novo.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Sem argumento nenhum, recusa com <code>Ambiente invalido</code></span></label></li>
+          <li><label><input type="checkbox"><span>Com ambiente inválido (<code>dev</code>), também recusa</span></label></li>
+          <li><label><input type="checkbox"><span>Com ambiente válido e sem URL, cobra a URL</span></label></li>
+          <li><label><input type="checkbox"><span>Código de saída é <code>1</code> nos três casos, e nada foi enviado ao S3</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p6" data-title="Build e sync">
+      <div class="phase-head">
+        <span class="phase-n">FASE 6</span>
+        <div>
+          <h2>Gerar os assets e sincronizar com o bucket</h2>
+          <p>Um comando só, com a URL da API como argumento. É a entrega central do desafio.</p>
+        </div>
+        <span class="phase-count" data-count-for="p6"></span>
+      </div>
+
+      <div class="step" id="passo-6-1">
+        <div class="step-top"><a class="step-id" href="#passo-6-1">6.1</a><h3>Rodar o deploy</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>pwd
+<span class="p">$ </span>./deploy.sh hom "$API_URL"</pre></div>
+        <p>O <code>pwd</code> primeiro porque este comando só existe dentro da pasta do repositório. Se você abriu um terminal novo desde a Fase 5, refaça o <code>cd</code> da abertura daquela fase — e o <code>source</code> do <code>variaveis.sh</code>, senão <code>$API_URL</code> vai vazia.</p>
+        <div class="out good"><span class="out-label">Resposta esperada (resumida)</span><pre>Vou iniciar deploy no ambiente: hom
+O endereco da API sera: http://xx.xx.xx.xx
+Bucket de destino: seu-bucket-xxxx
+
+Fazendo deploy...
+Fazendo build do react...
+  projeto: $HOME/DESAFIOS-FUNDAMENTAIS/bia
+  API que vai para o bundle: http://xx.xx.xx.xx
+ Iniciando build...
+
+&gt; vite build
+vite v5.4.19 building for production...
+transforming...
+rendered 42 modules
+build/index.html                   0.46 kB
+build/assets/index-C1a2B3c4.css   12.80 kB
+build/assets/index-D5e6F7g8.js   242.31 kB
+built in 6.42s
+ Build finalizado
+
+Fazendo envio para o s3...
+ Iniciando envio...
+upload: ../DESAFIOS-FUNDAMENTAIS/bia/client/build/index.html to s3://seu-bucket-xxxx/index.html
+upload: ../DESAFIOS-FUNDAMENTAIS/bia/client/build/assets/index-C1a2B3c4.css to s3://.../assets/index-C1a2B3c4.css
+upload: ../DESAFIOS-FUNDAMENTAIS/bia/client/build/assets/index-D5e6F7g8.js to s3://.../assets/index-D5e6F7g8.js
+ Envio finalizado
+
+Finalizado
+Site: http://seu-bucket-xxxx.s3-website-us-east-1.amazonaws.com</pre></div>
+        <div class="note n-tip"><b>A primeira execução demora</b><p>O <code>npm install</code> do client baixa as dependências do Vite pela primeira vez — de 1 a 3 minutos. Nas próximas vezes é quase instantâneo.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O script imprimiu o ambiente <code>hom</code> e a URL da API</span></label></li>
+          <li><label><input type="checkbox"><span>O <code>vite build</code> terminou sem erro</span></label></li>
+          <li><label><input type="checkbox"><span>Apareceram linhas de <code>upload:</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-6-2">
+        <div class="step-top"><a class="step-id" href="#passo-6-2">6.2</a><h3>Provar que a URL certa foi gravada no bundle</h3><span class="where w-wsl">WSL</span></div>
+        <p>Este é o teste que separa "buildou" de "buildou apontando para o lugar certo".</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>grep -rho "xx.xx.xx.xx" "$BIA_DIR/client/build/assets" | head -1</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>xx.xx.xx.xx</pre></div>
+        <div class="note n-warn"><b>Não achou nada?</b><p>O bundle foi gerado sem a variável. Confira se o <code>react.sh</code> usa <code>VITE_API_URL</code> (e não <code>REACT_APP_API_URL</code>), apague <code>"$BIA_DIR/client/build"</code> e rode o deploy de novo.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O IP da API aparece dentro dos assets gerados</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-6-3">
+        <div class="step-top"><a class="step-id" href="#passo-6-3">6.3</a><h3>Listar o que chegou no bucket</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws s3 ls "s3://$BUCKET_NAME" --recursive --human-readable</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — nomes e tamanhos serão outros</span><pre>2026-08-31 15:02:11    0.4 KiB index.html
+2026-08-31 15:02:11   12.5 KiB assets/index-C1a2B3c4.css
+2026-08-31 15:02:12  236.6 KiB assets/index-D5e6F7g8.js
+2026-08-31 15:02:12    1.2 MiB assets/index-D5e6F7g8.js.map
+2026-08-31 15:02:12    4.2 KiB vite.svg</pre></div>
+        <p>Não tente casar os nomes: o Vite carimba um hash novo no arquivo a cada build, então <code>index-C1a2B3c4.css</code> será outro no seu. Datas e tamanhos também mudam. O que precisa estar lá é a <b>forma</b>: um <code>index.html</code> na raiz e, dentro de <code>assets/</code>, um <code>.js</code> e um <code>.css</code>.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>index.html</code> está no bucket</span></label></li>
+          <li><label><input type="checkbox"><span>Há um <code>.js</code> e um <code>.css</code> em <code>assets/</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p7" data-title="O site no ar">
+      <div class="phase-head">
+        <span class="phase-n">FASE 7</span>
+        <div>
+          <h2>Confirmar o bucket servindo o site</h2>
+          <p>O bucket já foi criado e liberado no Dia 3. Falta uma peça: o documento de erro, que é o que faz as rotas do React funcionarem quando alguém recarrega a página.</p>
+        </div>
+        <span class="phase-count" data-count-for="p7"></span>
+      </div>
+
+      <div class="step" id="passo-7-1">
+        <div class="step-top"><a class="step-id" href="#passo-7-1">7.1</a><h3>Completar o website hosting</h3><span class="where w-wsl">WSL</span></div>
+        <p>Hoje o bucket tem só o <code>index.html</code> como documento de índice. Apontar o erro também para o <code>index.html</code> entrega o app em qualquer caminho, e o React Router resolve a rota no navegador.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws s3 website "s3://$BUCKET_NAME" \
+  --index-document index.html \
+  --error-document index.html
+<span class="p">$ </span>aws s3api get-bucket-website --bucket "$BUCKET_NAME"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>{
+    "IndexDocument": { "Suffix": "index.html" },
+    "ErrorDocument": { "Key": "index.html" }
+}</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Índice e erro apontam para <code>index.html</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-7-2">
+        <div class="step-top"><a class="step-id" href="#passo-7-2">7.2</a><h3>Revisar a liberação de leitura pública</h3><span class="where w-wsl">WSL</span></div>
+        <p>Só conferência — isto já foi feito quando o bucket nasceu. A leitura é pública; a escrita continua exigindo credencial.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws s3api get-public-access-block --bucket "$BUCKET_NAME"
+<span class="p">$ </span>aws s3api get-bucket-policy --bucket "$BUCKET_NAME" --query Policy --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>{
+    "PublicAccessBlockConfiguration": {
+        "BlockPublicAcls": false,
+        "IgnorePublicAcls": false,
+        "BlockPublicPolicy": false,
+        "RestrictPublicBuckets": false
+    }
+}
+{"Version":"2012-10-17","Statement":[{"Sid":"PublicReadGetObject","Effect":"Allow",
+"Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::seu-bucket-xxxx/*"}]}</pre></div>
+        <div class="note n-warn"><b>Por que isso é aceitável aqui</b><p>Bloqueio público desligado é o preço de servir um site direto pelo endpoint do S3, e a policy permite apenas <code>s3:GetObject</code>. Em produção o caminho seria manter tudo bloqueado e publicar por CloudFront com OAC.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Block Public Access desligado</span></label></li>
+          <li><label><input type="checkbox"><span>Policy libera só <code>s3:GetObject</code> em <code>bucket/*</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-7-3">
+        <div class="step-top"><a class="step-id" href="#passo-7-3">7.3</a><h3>Testar o endpoint do site</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>curl -s -I "$WEBSITE_URL"
+<span class="p">$ </span>curl -s "$WEBSITE_URL" | head -8</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>HTTP/1.1 200 OK
+x-amz-id-2: ...
+Content-Type: text/html
+Server: AmazonS3
+
+&lt;!doctype html&gt;
+&lt;html lang="pt-br"&gt;
+  &lt;head&gt;
+    &lt;meta charset="UTF-8" /&gt;
+    &lt;title&gt;BIA&lt;/title&gt;
+    &lt;script type="module" crossorigin src="/assets/index-D5e6F7g8.js"&gt;&lt;/script&gt;</pre></div>
+        <div class="note n-tip"><b>403 em vez de 200?</b><p>Quase sempre é o endereço: o endpoint de <b>website</b> é <code>bucket.s3-website-us-east-1.amazonaws.com</code>. O endpoint de <b>API</b> (<code>bucket.s3.amazonaws.com</code>) não usa o index nem o error document.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>HTTP 200 no endpoint de website</span></label></li>
+          <li><label><input type="checkbox"><span>O HTML devolvido referencia os assets em <code>/assets/</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p8" data-title="O registro no banco">
+      <div class="phase-head">
+        <span class="phase-n">FASE 8</span>
+        <div>
+          <h2>Salvar um registro no banco pelo site</h2>
+          <p>O último item do enunciado, e o único que fecha o circuito inteiro: navegador → S3 → API no ECS → RDS.</p>
+        </div>
+        <span class="phase-count" data-count-for="p8"></span>
+      </div>
+
+      <div class="step" id="passo-8-1">
+        <div class="step-top"><a class="step-id" href="#passo-8-1">8.1</a><h3>Abrir o site e criar uma tarefa</h3><span class="where w-web">NAVEGADOR</span></div>
+        <div class="cmd"><span class="cmd-label">Abrir pelo WSL</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>echo "$WEBSITE_URL"
+<span class="p">$ </span>explorer.exe "$WEBSITE_URL"</pre></div>
+        <div class="out"><span class="out-label">O que fazer na tela</span><pre>1. A pagina da BIA carrega com a lista de tarefas vazia
+2. Preencher o campo de tarefa (ex.: "Desafio 3 - deploy no S3")
+3. Enviar
+4. A tarefa aparece na lista, sem recarregar a pagina</pre></div>
+        <div class="note n-tip"><b>Confirme no DevTools (F12 → Network)</b><p>A requisição precisa sair para <code>http://xx.xx.xx.xx/api/tarefas</code> com método <code>POST</code> e status <code>201</code>. Se aparecer <code>localhost:8080</code>, o bundle foi gerado sem a variável — volte ao passo 6.2.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O React carregou a partir do endpoint do S3</span></label></li>
+          <li><label><input type="checkbox"><span>A chamada saiu para o IP da API, não para localhost</span></label></li>
+          <li><label><input type="checkbox"><span>O POST voltou 201 e a tarefa apareceu na tela</span></label></li>
+          <li><label><input type="checkbox"><span>Nenhum erro de CORS no console</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-8-2">
+        <div class="step-top"><a class="step-id" href="#passo-8-2">8.2</a><h3>Conferir pela API</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>curl -s "$API_URL/api/tarefas"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — os valores serão os seus</span><pre>{"dbTime":43,
+ "data":[{"uuid":"dd2e0980-a612-11f1-94a7-6dd1562461d9",
+   "titulo":"Teste do S3",
+   "dia_atividade":"01/09/2026",
+   "importante":true,
+   "createdAt":"2026-09-01T14:38:57.561Z",
+   "updatedAt":"2026-09-01T14:38:57.561Z"}]}</pre></div>
+        <p>A resposta vem em uma linha só; aqui está quebrada para caber. Repare que a API <b>embrulha</b> a lista: o array fica em <code>data</code>, e <code>dbTime</code> é o tempo da consulta no banco, em milissegundos. O que precisa bater é a estrutura e o título que você criou — <code>uuid</code>, datas e <code>importante</code> são os do seu teste.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A tarefa criada pelo site volta na API</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-8-3">
+        <div class="step-top"><a class="step-id" href="#passo-8-3">8.3</a><h3>Conferir dentro do banco</h3><span class="where w-ec2">BIA-DEV</span></div>
+        <p>A prova definitiva: o dado gravado no PostgreSQL do RDS, lido de dentro da bia-dev.</p>
+        <div class="cmd"><span class="cmd-label">1. No WSL — entrar na máquina</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ssm start-session --target "$DEV_INSTANCE_ID"</pre></div>
+        <div class="cmd"><span class="cmd-label">2. Já na bia-dev — uma linha de cada vez</span><button class="copy" type="button">copiar</button><pre><span class="p">sh-5.2$ </span>sudo su - ec2-user</pre></div>
+        <div class="cmd"><span class="cmd-label">3. A senha — esta linha vai sozinha</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user ~]$ </span>read -s -p "Senha do RDS: " PGPASSWORD; export PGPASSWORD; echo</pre></div>
+        <div class="cmd"><span class="cmd-label">4. A consulta, pelo contêiner</span><button class="copy" type="button">copiar</button><pre><span class="p">[ec2-user ~]$ </span>docker run --rm -e PGPASSWORD="$PGPASSWORD" \
+  public.ecr.aws/docker/library/postgres:17-alpine \
+  psql "host=bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com port=5432 user=postgres dbname=bia sslmode=require" \
+  -c 'SELECT titulo, importante, "createdAt" FROM "Tarefas" ORDER BY "createdAt" DESC LIMIT 5;'</pre></div>
+        <div class="note n-warn"><b>Quatro blocos, e cada um vai sozinho</b><p>O <code>start-session</code> e o <code>sudo su -</code> abrem shells novos: linhas coladas junto com eles ficam no buffer do shell de fora e só rodam quando você sair. É o mesmo cuidado do passo 4.1.</p><p>O bloco 3 tem um motivo a mais para ir sozinho: o <code>read</code> lê a <b>próxima linha</b> da entrada. Colado junto com o bloco 4, quem vira a senha é o comando de baixo — o prompt <code>Senha do RDS:</code> aparece e some sem esperar você digitar, e a consulta falha em seguida.</p></div>
+        <div class="note n-tip"><b>Por que o <code>psql</code> roda em contêiner</b><p>A bia-dev tem Docker desde o Desafio 2, mas <b>não</b> tem o cliente do PostgreSQL instalado: chamar <code>psql</code> direto responde <code>-bash: psql: command not found</code>. O contêiner resolve sem instalar nada na máquina — é o mesmo recurso do bloco opcional do passo 4.6. A imagem vem do registry público da AWS, como as do Node, para não esbarrar no limite de download do Docker Hub.</p></div>
+        <div class="out good"><span class="out-label">Resposta esperada — com o título que <b>você</b> digitou</span><pre>   titulo    | importante |         createdAt
+-------------+------------+----------------------------
+ Teste do S3 | t          | 2026-09-01 14:38:57.561+00
+(1 row)</pre></div>
+        <p>O que precisa bater não são os valores, e sim a <b>forma</b>: uma linha, com o título que você criou no passo 8.1, e <code>(1 row)</code> no fim. O <code>importante</code> vem <code>t</code> se você marcou a tarefa como importante e <code>f</code> se não marcou; a data é a do seu teste. A largura das colunas muda junto com o tamanho do título — o <code>psql</code> dimensiona a tabela pelo conteúdo.</p>
+        <div class="note n-warn"><b>As aspas duplas são obrigatórias</b><p>O Sequelize criou a tabela como <code>"Tarefas"</code> e a coluna como <code>"createdAt"</code>, com maiúsculas. Sem as aspas, o PostgreSQL converte para minúsculo e responde <code>relation "tarefas" does not exist</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O registro existe na tabela <code>Tarefas</code> do RDS</span></label></li>
+          <li><label><input type="checkbox"><span>O caminho foi navegador → S3 → API → RDS, sem WSL no meio</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p9" data-title="Entrega e encerramento">
+      <div class="phase-head">
+        <span class="phase-n">FASE 9</span>
+        <div>
+          <h2>Entrega e encerramento</h2>
+          <p>Os cinco itens do enunciado, cada um ligado à fase que o comprova — e o desligamento para não deixar conta aberta.</p>
+        </div>
+        <span class="phase-count" data-count-for="p9"></span>
+      </div>
+
+      <div class="step" id="passo-9-1">
+        <div class="step-top"><a class="step-id" href="#passo-9-1">9.1</a><h3>Checklist do enunciado</h3></div>
+        <div class="check"><div class="check-label">Os cinco itens do Desafio 3</div><ul>
+          <li><label><input type="checkbox"><span><b>Bucket servindo o site da BIA estaticamente</b> — website hosting e leitura pública conferidos na Fase 7</span></label></li>
+          <li><label><input type="checkbox"><span><b>Script Shell gerando os assets do React</b> — <code>deploy.sh</code>, <code>react.sh</code> e <code>s3.sh</code> na Fase 5</span></label></li>
+          <li><label><input type="checkbox"><span><b>Endereço da API passado por argumento</b> — <code>./deploy.sh hom "$API_URL"</code>, validado nos passos 5.5 e 6.2</span></label></li>
+          <li><label><input type="checkbox"><span><b>Sync do diretório local com o bucket</b> — <code>aws s3 sync "$BIA_DIR/client/build/"</code> na Fase 6</span></label></li>
+          <li><label><input type="checkbox"><span><b>BIA do Dia 2 servindo de API</b> — serviço no ECS respondendo, Fase 1</span></label></li>
+          <li><label><input type="checkbox"><span><b>Registro salvo em banco pelo site</b> — tarefa gravada na tabela <code>Tarefas</code>, Fase 8</span></label></li>
+          <li><label><input type="checkbox"><span><b>Migrate rodada pela bia-dev via SSM</b>, com o RDS nunca exposto publicamente — Fases 2, 3 e 4</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-9-2">
+        <div class="step-top"><a class="step-id" href="#passo-9-2">9.2</a><h3>Evidências para o post e o repositório</h3><span class="where w-wsl">WSL</span></div>
+        <p>Um bloco só que reúne tudo que comprova a entrega. Guarde a saída.</p>
+        <div class="note n-warn"><b>Este bloco roda no WSL, não dentro da bia-dev</b><p>Se você veio do passo 8.3, ainda está na EC2 — o prompt é <code>[ec2-user@ip-172-31-xx-xx ~]$</code>. Dê <code>exit</code> até voltar, porque lá dentro <code>$WEBSITE_URL</code>, <code>$API_URL</code> e <code>$BUCKET_NAME</code> não existem.</p><p>Colado na máquina errada, o resultado é este: <code>curl: option : blank argument where content is expected</code> no primeiro comando, silêncio nos dois seguintes, e <code>AccessDenied ... s3:ListAllMyBuckets</code> no último — porque <code>aws s3 ls "s3://"</code> sem o nome do bucket vira um pedido para listar a conta inteira, que a role da instância não tem.</p></div>
+        <div class="cmd"><span class="cmd-label">Confira primeiro que está no lugar certo</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>echo "$WEBSITE_URL | $API_URL | $BUCKET_NAME"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>http://seu-bucket-xxxx.s3-website-us-east-1.amazonaws.com | http://xx.xx.xx.xx | seu-bucket-xxxx</pre></div>
+        <p>Veio vazio ou com barras soltas? Você está na EC2, ou é um terminal novo sem o <code>source</code> do passo 0.4.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>echo "== Site ==" &amp;&amp; curl -s -o /dev/null -w "%{http_code}\n" "$WEBSITE_URL"
+<span class="p">$ </span>echo "== API ==" &amp;&amp; curl -s "$API_URL/api/versao"
+<span class="p">$ </span>echo "== Tarefas ==" &amp;&amp; curl -s "$API_URL/api/tarefas"
+<span class="p">$ </span>echo "== Bucket ==" &amp;&amp; aws s3 ls "s3://$BUCKET_NAME" --recursive</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Site responde 200</span></label></li>
+          <li><label><input type="checkbox"><span>API responde a versão</span></label></li>
+          <li><label><input type="checkbox"><span>A tarefa criada pelo site aparece no JSON</span></label></li>
+          <li><label><input type="checkbox"><span>Prints ou saídas salvos para o repositório</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-9-3">
+        <div class="step-top"><a class="step-id" href="#passo-9-3">9.3</a><h3>Pausar o laboratório para não ser cobrado</h3><span class="where w-wsl">WSL</span></div>
+        <div class="note n-warn"><b>Só depois de gravar as evidências do passo 9.2</b><p>Parar a EC2 do cluster derruba a API, e o site passa a carregar sem dados. Faça os prints e guarde as saídas antes.</p></div>
+        <p>São três coisas cobrando por hora neste laboratório: a <b>bia-dev</b>, a <b>EC2 do cluster ECS</b> e o <b>RDS</b>. Pausar as três é o suficiente para o gasto por hora parar.</p>
+
+        <div class="cmd"><span class="cmd-label">1. Parar a bia-dev</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 stop-instances --instance-ids "$DEV_INSTANCE_ID" \
+  --query 'StoppingInstances[].{Id:InstanceId,De:PreviousState.Name,Para:CurrentState.Name}' --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>-------------------------------------------------
+|                 StopInstances                 |
++-----------+----------------------+------------+
+|    De     |         Id           |   Para     |
++-----------+----------------------+------------+
+|  running  | i-xxxxxxxxxxxx-dev  | stopping   |
++-----------+----------------------+------------+</pre></div>
+        <p>Essa é segura: a bia-dev é alcançada por SSM, que não depende de IP. Quando você religar, o <code>start-instances</code> devolve a máquina e o agente volta sozinho.</p>
+
+        <div class="cmd"><span class="cmd-label">2. Derrubar a EC2 do cluster (pelo Auto Scaling)</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>ASG=$(aws autoscaling describe-auto-scaling-groups \
+  --query "AutoScalingGroups[?contains(AutoScalingGroupName, 'cluster-bia')].AutoScalingGroupName" \
+  --output text)
+<span class="p">$ </span>echo "$ASG"
+<span class="p">$ </span>aws autoscaling update-auto-scaling-group \
+  --auto-scaling-group-name "$ASG" \
+  --min-size 0 --desired-capacity 0</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Infra-ECS-Cluster-cluster-bia-xxxxxxxx-ECSAutoScalingGroup-xxxxxxxxxxxx</pre></div>
+        <p>O <code>update-auto-scaling-group</code> não imprime nada quando dá certo. Em um ou dois minutos a instância é encerrada.</p>
+        <div class="note n-warn"><b>Não adianta parar essa instância direto</b><p>Ela pertence a um Auto Scaling Group com <code>desired = 1</code>. Se você usar <code>stop-instances</code> ou <code>terminate-instances</code> nela, o ASG entende que faltou capacidade e sobe outra no lugar — e a cobrança continua. Quem manda é a capacidade desejada.</p></div>
+        <div class="note n-tip"><b>Para religar</b><p>O mesmo comando com <code>--min-size 1 --desired-capacity 1</code>. A instância nova sobe, se registra no cluster, e o serviço <code>service-bia</code> recoloca a task — mas com <b>IP público novo</b>. Volte ao passo 1.1 e refaça a Fase 6.</p></div>
+      </div>
+
+      <div class="step" id="passo-9-4">
+        <div class="step-top"><a class="step-id" href="#passo-9-4">9.4</a><h3>Parar o RDS e conferir o que sobrou</h3><span class="where w-web">CONSOLE</span></div>
+        <p>O RDS é a maior parte da conta neste laboratório, e é o único item que o seu usuário não consegue parar pelo terminal: <code>AmazonRDSReadOnlyAccess</code> só lê.</p>
+        <div class="out"><span class="out-label">Caminho no Console</span><pre>RDS  &gt;  Databases  &gt;  bia  &gt;  Actions  &gt;  Stop temporarily</pre></div>
+        <div class="note n-warn"><b>O RDS parado religa sozinho em 7 dias</b><p>É regra da AWS. Se o laboratório for ficar parado mais que isso, o certo é apagar a instância (<b>Actions &gt; Delete</b>) — com snapshot, se quiser poder recriar depois.</p></div>
+        <div class="cmd"><span class="cmd-label">Conferir se sobrou algo ligado</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=instance-state-name,Values=running" \
+  --query 'Reservations[].Instances[].[InstanceId,Tags[?Key==`Name`]|[0].Value]' --output text
+<span class="p">$ </span>aws rds describe-db-instances \
+  --query 'DBInstances[].[DBInstanceIdentifier,DBInstanceStatus]' --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>bia     stopped</pre></div>
+        <p>Nenhuma linha de EC2 e o RDS em <code>stopped</code>: a cobrança por hora acabou.</p>
+        <div class="note n-tip"><b>O que continua custando, mesmo com tudo parado</b><p>Os <b>discos EBS</b> das máquinas (aqui são 4 volumes, 68 GB no total) e o <b>armazenamento do RDS</b> continuam sendo cobrados enquanto existirem — parar uma EC2 não apaga o disco dela. É alguns dólares por mês, não por hora. O bucket S3 com o site é desprezível: alguns MB.</p><p>Se o laboratório acabou de vez, veja o bloco abaixo.</p></div>
+        <details class="fallback">
+          <summary>Encerrar de vez, sem deixar nada cobrando</summary>
+          <p>Ordem importa: apague a stack do cluster antes das instâncias, senão o Auto Scaling recria o que você encerrar.</p>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecs update-service --cluster cluster-bia --service service-bia --desired-count 0
+<span class="p">$ </span>aws ecs delete-service --cluster cluster-bia --service service-bia --force
+<span class="p">$ </span>aws ec2 terminate-instances --instance-ids "$DEV_INSTANCE_ID" i-xxxxxxxxxxxx-01 i-xxxxxxxxxxxx-02
+<span class="p">$ </span>aws s3 rm "s3://$BUCKET_NAME" --recursive</pre></div>
+          <div class="out"><span class="out-label">E no Console, o que o CLI não alcança</span><pre>ECS   &gt;  Clusters  &gt;  cluster-bia  &gt;  Delete cluster
+         (isso apaga a stack do CloudFormation e o Auto Scaling Group)
+RDS   &gt;  Databases  &gt;  bia         &gt;  Actions  &gt;  Delete
+EC2   &gt;  Volumes    &gt;  apagar os que ficarem "available" (orfaos)
+S3    &gt;  o bucket pode ficar: vazio ele nao custa nada</pre></div>
+          <p>Depois de tudo, confira em <b>Billing &gt; Bills</b> no dia seguinte: é a única fonte que diz a verdade sobre o que ainda está gerando custo.</p>
+        </details>
+        <details class="fallback">
+          <summary>Trocar a senha do banco, se ela tiver circulado</summary>
+          <p>A senha do RDS anda em texto puro na task definition, e no passo 4.3 ela passa pelo seu terminal. É fácil ela acabar num print, no <code>~/.bash_history</code>, num log colado numa conversa de suporte ou num repositório. Se isso aconteceu, troque — leva dois minutos.</p>
+          <p>A ordem importa: se você trocar no RDS e parar por aí, a API perde a conexão e o site volta a dar 500.</p>
+          <div class="out"><span class="out-label">1. Nova senha no banco</span><pre>RDS  &gt;  Databases  &gt;  bia  &gt;  Modify  &gt;  New master password
+     &gt;  Continue  &gt;  Apply immediately</pre></div>
+          <div class="out"><span class="out-label">2. Mesma senha na task definition</span><pre>ECS  &gt;  Task definitions  &gt;  task-def-bia  &gt;  Create new revision
+     &gt;  Container  &gt;  Environment variables  &gt;  DB_PWD = (a nova senha)
+     &gt;  Create</pre></div>
+          <div class="cmd"><span class="cmd-label">3. Fazer o serviço pegar a revisão nova</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecs update-service --cluster cluster-bia --service service-bia \
+  --force-new-deployment</pre></div>
+          <p>Confirme com <code>curl -s -i "$API_URL/api/tarefas"</code> depois de um ou dois minutos: tem que continuar 200. O jeito de não precisar disso é o <b>Secrets Manager</b>, citado no passo 3.4.</p>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Evidências guardadas antes de desligar (passo 9.2)</span></label></li>
+          <li><label><input type="checkbox"><span>bia-dev parada</span></label></li>
+          <li><label><input type="checkbox"><span>Auto Scaling do cluster em <code>desired 0</code> — a EC2 do ECS sumiu</span></label></li>
+          <li><label><input type="checkbox"><span>RDS <code>bia</code> em <code>stopped</code> (ou apagado)</span></label></li>
+          <li><label><input type="checkbox"><span>Sei que EBS e storage do RDS continuam custando enquanto existirem</span></label></li>
+          <li><label><input type="checkbox"><span>Sei que, ao religar, o IP muda e a Fase 6 precisa ser refeita</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p-erros" data-title="Quando der errado">
+      <div class="phase-head">
+        <span class="phase-n">ANEXO</span>
+        <div>
+          <h2>Quando der errado</h2>
+          <p>Os erros que aparecem neste ambiente específico, e o que cada um está realmente dizendo.</p>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Mensagem</th><th>O que está acontecendo</th><th>Onde resolver</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Your session has expired</code></td>
+              <td>As credenciais temporárias do <code>aws login</code> venceram</td>
+              <td>Passo 0.2</td>
+            </tr>
+            <tr>
+              <td><code>is not authorized to perform: ec2:DescribeInstances</code></td>
+              <td>O CLI está usando o profile <code>default</code>, que autentica como outro usuário</td>
+              <td>Passo 0.3 — <code>export AWS_PROFILE=formacao_aws</code></td>
+            </tr>
+            <tr>
+              <td><code>is not authorized to perform: rds:DescribeDBInstances</code></td>
+              <td>O usuário não tem policy de RDS</td>
+              <td>Passo 2.2, ou pegue o endpoint no Console</td>
+            </tr>
+            <tr>
+              <td><code>UnauthorizedOperation</code> em <code>ec2:AssociateIamInstanceProfile</code>, <code>StartInstances</code>, <code>StopInstances</code> ou <code>RebootInstances</code></td>
+              <td>O usuário só tem leitura de EC2 — falta a policy que também exige <code>iam:PassRole</code></td>
+              <td>Passo 2.2, ou faça a ação equivalente pelo Console</td>
+            </tr>
+            <tr>
+              <td><code>InstanceInformationList</code> vazia, mesmo com a role <code>associated</code></td>
+              <td>A role foi associada com a máquina já ligada — o agente ainda está com a credencial antiga</td>
+              <td>Passo 2.4 — esperar o agente, ou reiniciar para acelerar</td>
+            </tr>
+            <tr>
+              <td><code>IncorrectState: There is an existing association</code></td>
+              <td>A role já tinha sido associada antes — uma instância aceita um instance profile por vez</td>
+              <td>Não é erro: confirme com a tabela do 2.3 e siga</td>
+            </tr>
+            <tr>
+              <td><code>aws: [ERROR] ... (DryRunOperation) ... would have succeeded</code></td>
+              <td>É a <b>resposta de sucesso</b> do dry-run: você tem a permissão e nada foi executado. O CLI carimba <code>[ERROR]</code> porque a API sempre levanta exceção num dry-run</td>
+              <td>Não é erro: passo 2.2</td>
+            </tr>
+            <tr>
+              <td><code>TargetNotConnected</code> no <code>start-session</code></td>
+              <td>A associação foi feita, mas o agente ainda não recarregou a credencial</td>
+              <td>Esperar, ou <code>reboot-instances</code> (passo 2.4)</td>
+            </tr>
+            <tr>
+              <td><code>password authentication failed for user "postgres"</code></td>
+              <td><code>DB_PWD</code> ficou com um texto de exemplo em vez da senha, ou aspas duplas expandiram um <code>$</code> dela</td>
+              <td>Passo 4.3 — use a linha com <code>read -s</code> e confira a contagem de caracteres</td>
+            </tr>
+            <tr>
+              <td><code>No such file or directory</code> no <code>source ~/DESAFIOS-FUNDAMENTAIS/variaveis.sh</code></td>
+              <td>O arquivo existe só no WSL — você está dentro da bia-dev, como outro usuário</td>
+              <td>Passo 4.3 — exporte as variáveis à mão</td>
+            </tr>
+            <tr>
+              <td>Saída de um comando antigo aparece do nada, depois de um <code>exit</code></td>
+              <td>Linhas coladas junto com <code>sudo su -</code> ou <code>start-session</code> ficaram no buffer do shell de fora e só rodaram quando ele voltou</td>
+              <td>Passos 4.1 e 4.6 — cole uma linha por vez ao trocar de shell</td>
+            </tr>
+            <tr>
+              <td><code>Invalid length for parameter Target, value: 0</code></td>
+              <td><code>$DEV_INSTANCE_ID</code> está vazia: terminal novo sem <code>source variaveis.sh</code>, ou o comando foi colado dentro da EC2</td>
+              <td>Passo 0.4 — ou confira o prompt antes de colar</td>
+            </tr>
+            <tr>
+              <td><code>The security-group ID '' is malformed</code></td>
+              <td>Mesma causa: <code>$SG_DB</code> ou <code>$SG_DEV</code> vazias — o comando foi colado dentro da EC2, ou o terminal é novo</td>
+              <td>Aviso no topo da Fase 3</td>
+            </tr>
+            <tr>
+              <td>O prompt continua <code>sh-5.2$</code> e o <code>git</code>/<code>npm</code> reclama de permissão</td>
+              <td>Você ainda é <code>ssm-user</code> — o <code>sudo su - ec2-user</code> não foi executado</td>
+              <td>Passo 4.1</td>
+            </tr>
+            <tr>
+              <td><code>Ambiente invalido</code></td>
+              <td>O primeiro argumento não é <code>hom</code> nem <code>prd</code> — é a validação do <code>if</code> do <code>deploy.sh</code></td>
+              <td>Chame como <code>./deploy.sh hom &lt;URL_DA_API&gt;</code> (passo 5.5)</td>
+            </tr>
+            <tr>
+              <td><code>$'\r': command not found</code></td>
+              <td>O script foi salvo com quebra de linha do Windows (CRLF)</td>
+              <td>Na pasta do repositório: <code>sed -i 's/\r$//' *.sh</code>, e salve como LF no editor</td>
+            </tr>
+            <tr>
+              <td><code>permission denied ... /var/run/docker.sock</code></td>
+              <td>O <code>ec2-user</code> não está no grupo <code>docker</code></td>
+              <td>Passo 4.1 — use <code>sudo docker</code> ou <code>usermod -aG docker</code></td>
+            </tr>
+            <tr>
+              <td><code>docker: 'compose' is not a docker command</code></td>
+              <td>A bia-dev tem o Docker, mas não o plugin do Compose</td>
+              <td>Bloco de fallback do passo 4.1 — ou siga pela alternativa em <code>docker run</code> do 4.5</td>
+            </tr>
+            <tr>
+              <td>A migrate fica pendurada e termina em <code>ETIMEDOUT</code></td>
+              <td>O <code>compose.yml</code> aponta para o RDS, mas o SG do banco não aceita a origem da bia-dev</td>
+              <td>Passo 3.1 — o diagrama da Fase 3 mostra onde a conexão morre</td>
+            </tr>
+            <tr>
+              <td>A migrate reclama do banco <code>database</code>, e não do RDS</td>
+              <td>O contêiner subiu antes da edição do passo 4.4 e guardou as variáveis antigas</td>
+              <td><code>docker compose up -d --force-recreate server</code> (passo 4.5)</td>
+            </tr>
+            <tr>
+              <td><code>Database bia already exists</code></td>
+              <td>O <code>db:create</code> já tinha rodado</td>
+              <td>Não é erro: o <code>db:migrate</code> na sequência segue normalmente</td>
+            </tr>
+            <tr>
+              <td><code>./deploy.sh: No such file or directory</code>, ou os scripts foram criados em outro lugar</td>
+              <td>Você não está na pasta do repositório — terminal novo, ou um <code>cd</code> dado no meio da fase</td>
+              <td>Refaça o <code>cd</code> de abertura da Fase 5 e confira com <code>pwd</code></td>
+            </tr>
+            <tr>
+              <td><code>projeto da BIA nao encontrado em ...</code></td>
+              <td>O <code>deploy.sh</code> não achou <code>$BIA_DIR/client</code></td>
+              <td>Rode o <code>source</code> do passo 0.4, ou clone a BIA no caminho indicado</td>
+            </tr>
+            <tr>
+              <td><code>psql</code> trava até dar timeout</td>
+              <td>O SG do banco não aceita a origem da bia-dev</td>
+              <td>Fase 3</td>
+            </tr>
+            <tr>
+              <td><code>database "bia" does not exist</code></td>
+              <td>O RDS está acessível, mas ninguém criou o database</td>
+              <td>Passo 4.5</td>
+            </tr>
+            <tr>
+              <td><code>-bash: psql: command not found</code></td>
+              <td>A bia-dev tem Docker, mas não tem o cliente do PostgreSQL instalado</td>
+              <td>Passo 8.3 — rode o <code>psql</code> pelo contêiner</td>
+            </tr>
+            <tr>
+              <td>O prompt <code>Senha do RDS:</code> aparece e some sem esperar você digitar</td>
+              <td>O <code>read -s</code> foi colado junto com o comando de baixo, e leu esse comando como se fosse a senha</td>
+              <td>Passos 4.3 e 8.3 — cole a linha do <code>read</code> sozinha</td>
+            </tr>
+            <tr>
+              <td><code>relation "tarefas" does not exist</code></td>
+              <td>Faltaram as aspas duplas: a tabela chama-se <code>"Tarefas"</code>, com T maiúsculo</td>
+              <td>Passo 8.3</td>
+            </tr>
+            <tr>
+              <td>Site abre, mas a lista fica vazia e o console acusa <code>localhost:8080</code></td>
+              <td>O build saiu sem a variável — o React caiu no valor padrão do código</td>
+              <td>Passos 5.2 e 6.2</td>
+            </tr>
+            <tr>
+              <td><code>403 Forbidden</code> no endereço do site</td>
+              <td>Endereço errado (endpoint de API em vez do de website) ou objeto não sincronizado</td>
+              <td>Passo 7.3</td>
+            </tr>
+            <tr>
+              <td><code>404 Not Found</code> ao recarregar uma rota interna</td>
+              <td>Falta o error document apontando para o <code>index.html</code></td>
+              <td>Passo 7.1</td>
+            </tr>
+            <tr>
+              <td><code>curl: option : blank argument where content is expected</code></td>
+              <td><code>$WEBSITE_URL</code> ou <code>$API_URL</code> vazia — o bloco foi colado dentro da bia-dev, ou o terminal é novo</td>
+              <td>Passo 9.2 — volte ao WSL e confira com o <code>echo</code></td>
+            </tr>
+            <tr>
+              <td><code>AccessDenied ... assumed-role/role-acesso-ssm ... s3:ListAllMyBuckets</code></td>
+              <td><code>$BUCKET_NAME</code> vazia dentro da EC2: <code>aws s3 ls "s3://"</code> vira um pedido para listar a conta toda, e a role da instância não tem S3</td>
+              <td>Passo 9.2 — o bloco de evidências roda no WSL</td>
+            </tr>
+            <tr>
+              <td><code>Access Denied</code> no <code>aws s3 sync</code></td>
+              <td>Usuário sem <code>AmazonS3FullAccess</code>, ou profile errado na sessão</td>
+              <td>Passo 0.3</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <p>Desafio 3 da mentoria <b>Desafios Fundamentais</b> — Formação AWS, por Henrylle Maia. Projeto BIA v4.3.0 (<span class="mono">github.com/henrylle/bia</span>).</p>
+  <p>Roteiro escrito a partir da inspeção de um ambiente real em 31/08/2026, na região <span class="mono">us-east-1</span>, e revisado em 01/09/2026 contra uma execução completa das dez fases: os comandos, as respostas esperadas e a tabela de solução de problemas foram corrigidos com o que o terminal de fato devolveu.</p>
+  <p>Os identificadores estão mascarados como <span class="mono">xxxx</span> — conta, instâncias, security groups, IPs, bucket e endpoint do banco são os do <b>seu</b> ambiente, e entram no passo 0.4. IPs públicos mudam a cada parada e religamento da instância; confira o passo 1.1 antes de reutilizar este guia.</p>
+</footer>
+
+<script>
+(function () {
+  var STORE = "desafio3-guia-v1";
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.phase"));
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORE) || "{}"); }
+    catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
+  }
+
+  var state = load();
+  var boxes = [];
+
+  sections.forEach(function (sec) {
+    var list = Array.prototype.slice.call(sec.querySelectorAll('input[type="checkbox"]'));
+    list.forEach(function (box, i) {
+      box.dataset.k = sec.id + ":" + i;
+      if (state[box.dataset.k]) { box.checked = true; }
+      box.addEventListener("change", function () {
+        state[box.dataset.k] = box.checked;
+        save(state);
+        render();
+      });
+      boxes.push(box);
+    });
+  });
+
+  /* ---- sumario ---- */
+  var toc = document.getElementById("toc");
+  var links = {};
+  sections.forEach(function (sec) {
+    var badge = sec.querySelector(".phase-n");
+    var raw = badge ? badge.textContent.trim() : "";
+    var short = /^FASE/i.test(raw) ? "F" + raw.replace(/\D/g, "") : raw.slice(0, 4);
+    var a = document.createElement("a");
+    a.href = "#" + sec.id;
+    a.innerHTML = "<b>" + short + "</b><span>" + (sec.dataset.title || "") + "</span>";
+    toc.appendChild(a);
+    links[sec.id] = a;
+  });
+
+  /* ---- progresso ---- */
+  var fill = document.getElementById("progFill");
+  var num = document.getElementById("progNum");
+
+  function render() {
+    var done = boxes.filter(function (b) { return b.checked; }).length;
+    var pct = boxes.length ? Math.round((done / boxes.length) * 100) : 0;
+    fill.style.width = pct + "%";
+    num.textContent = done + " / " + boxes.length;
+
+    sections.forEach(function (sec) {
+      var list = Array.prototype.slice.call(sec.querySelectorAll('input[type="checkbox"]'));
+      var ok = list.filter(function (b) { return b.checked; }).length;
+      var counter = sec.querySelector("[data-count-for]");
+      if (counter && list.length) {
+        counter.textContent = ok + "/" + list.length;
+        counter.classList.toggle("full", ok === list.length);
+      }
+      var link = links[sec.id];
+      if (link) { link.classList.toggle("done", list.length > 0 && ok === list.length); }
+    });
+  }
+
+  document.getElementById("reset").addEventListener("click", function () {
+    if (!window.confirm("Desmarcar todos os itens do checklist?")) { return; }
+    state = {};
+    save(state);
+    boxes.forEach(function (b) { b.checked = false; });
+    render();
+  });
+
+  /* ---- copiar comandos ---- */
+  Array.prototype.forEach.call(document.querySelectorAll(".copy"), function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = btn.parentNode.querySelector("pre");
+      if (!pre) { return; }
+      var text = Array.prototype.map.call(pre.childNodes, function (n) {
+        if (n.nodeType === 1 && n.classList.contains("p")) { return ""; }
+        return n.textContent;
+      }).join("");
+
+      var done = function () {
+        btn.textContent = "copiado";
+        btn.classList.add("ok");
+        setTimeout(function () { btn.textContent = "copiar"; btn.classList.remove("ok"); }, 1600);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text, done); });
+      } else {
+        fallback(text, done);
+      }
+    });
+  });
+
+  function fallback(text, done) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  /* ---- secao ativa ---- */
+  if ("IntersectionObserver" in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          Object.keys(links).forEach(function (id) { links[id].classList.remove("on"); });
+          if (links[en.target.id]) { links[en.target.id].classList.add("on"); }
+        }
+      });
+    }, { rootMargin: "-80px 0px -70% 0px" });
+    sections.forEach(function (s) { obs.observe(s); });
+  }
+
+  /* ---- tema: interruptor claro <-> escuro ----
+     Dois estados, e nao tres. Um estado "auto" renderiza igual ao tema que o
+     sistema ja usa, entao um dos cliques do ciclo nao mudaria nada na tela --
+     parece um botao quebrado. Aqui todo clique inverte. O sistema ainda e
+     respeitado: ele decide o estado inicial de quem nunca escolheu. */
+  var TEMA_STORE = "desafio3-guia-tema";   /* chave propria: "Limpar progresso" nao apaga o tema */
+  var btnTema = document.getElementById("tema");
+
+  function sistemaEscuro() {
+    try { return window.matchMedia("(prefers-color-scheme: dark)").matches; }
+    catch (e) { return false; }
+  }
+  function lerTema() {
+    try {
+      var t = localStorage.getItem(TEMA_STORE);
+      if (t === "light" || t === "dark") { return t; }
+    } catch (e) {}
+    return sistemaEscuro() ? "dark" : "light";
+  }
+  function aplicarTema(t, gravar) {
+    document.documentElement.setAttribute("data-theme", t);
+    if (btnTema) {
+      btnTema.textContent = (t === "dark") ? "Tema: escuro" : "Tema: claro";
+      btnTema.setAttribute("aria-label", (t === "dark")
+        ? "Tema escuro. Clique para mudar para o tema claro."
+        : "Tema claro. Clique para mudar para o tema escuro.");
+    }
+    if (gravar) {
+      try { localStorage.setItem(TEMA_STORE, t); } catch (e) {}
+    }
+  }
+  if (btnTema) {
+    aplicarTema(lerTema(), false);
+    btnTema.addEventListener("click", function () {
+      var atual = document.documentElement.getAttribute("data-theme");
+      aplicarTema(atual === "dark" ? "light" : "dark", true);
+    });
+  }
+
+  /* ---- impressao: abre os blocos recolhiveis e devolve o estado depois ---- */
+  var recolhidos = [];
+  window.addEventListener("beforeprint", function () {
+    recolhidos = Array.prototype.filter.call(
+      document.querySelectorAll("details"),
+      function (d) { return !d.open; }
+    );
+    recolhidos.forEach(function (d) { d.open = true; });
+  });
+  window.addEventListener("afterprint", function () {
+    recolhidos.forEach(function (d) { d.open = false; });
+    recolhidos = [];
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

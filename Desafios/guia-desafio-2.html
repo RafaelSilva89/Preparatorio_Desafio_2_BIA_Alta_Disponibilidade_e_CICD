@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Roteiro passo a passo do Desafio 2 da formação AWS: montar a estação WSL 2, autenticar na AWS com credenciais temporárias, lançar a EC2 bia-dev por script, entrar por SSM sem abrir a porta 22 e publicar a imagem Docker no Amazon ECR.">
+<meta name="color-scheme" content="light dark">
+<title>Desafio 2 — WSL 2 conectado à AWS</title>
+<script>
+  /* Aplica o tema salvo antes da primeira pintura: no rodape, quem escolheu
+     escuro veria um lampejo branco a cada carregamento. */
+  (function () {
+    try {
+      var t = localStorage.getItem("desafio2-guia-tema");
+      if (t === "dark" || t === "light") {
+        document.documentElement.setAttribute("data-theme", t);
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+
+<style>
+  :root {
+    --bg:        #E9EDEF;
+    --surface:   #FFFFFF;
+    --surface-2: #F3F6F7;
+    --ink:       #0E1619;
+    --ink-2:     #44555C;
+    --ink-3:     #6F8188;
+    --line:      #D3DBDE;
+    --line-2:    #E4EAEC;
+    --accent:    #0A6A72;
+    --accent-2:  #08535A;
+    --accent-soft:#DBECED;
+    --warn:      #A05712;
+    --warn-soft: #FAEDDC;
+    --ok:        #1E6F45;
+    --ok-soft:   #DEF0E6;
+    --stop:      #A13327;
+    --stop-soft: #FAE3E0;
+    --term-bg:   #0D1619;
+    --term-line: #1E2E34;
+    --term-ink:  #D6E3E7;
+    --term-dim:  #7C949B;
+    --shadow:    0 1px 2px rgba(14,22,25,.05), 0 8px 24px -16px rgba(14,22,25,.28);
+    --radius: 10px;
+    --maxw: 1180px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #0B1214;
+      --surface:   #121B1E;
+      --surface-2: #162126;
+      --ink:       #E7EFF1;
+      --ink-2:     #A8BBC1;
+      --ink-3:     #7C9199;
+      --line:      #24343A;
+      --line-2:    #1C282D;
+      --accent:    #5AC6CE;
+      --accent-2:  #8BDBE1;
+      --accent-soft:#10333A;
+      --warn:      #E2A75E;
+      --warn-soft: #2C2216;
+      --ok:        #6FCB95;
+      --ok-soft:   #13291D;
+      --stop:      #EA8B7D;
+      --stop-soft: #2E1A17;
+      --term-bg:   #08100F;
+      --term-line: #1B2A2F;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg:        #0B1214;
+    --surface:   #121B1E;
+    --surface-2: #162126;
+    --ink:       #E7EFF1;
+    --ink-2:     #A8BBC1;
+    --ink-3:     #7C9199;
+    --line:      #24343A;
+    --line-2:    #1C282D;
+    --accent:    #5AC6CE;
+    --accent-2:  #8BDBE1;
+    --accent-soft:#10333A;
+    --warn:      #E2A75E;
+    --warn-soft: #2C2216;
+    --ok:        #6FCB95;
+    --ok-soft:   #13291D;
+    --stop:      #EA8B7D;
+    --stop-soft: #2E1A17;
+    --term-bg:   #08100F;
+    --term-line: #1B2A2F;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -0.015em;
+  }
+
+  code, kbd, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  }
+
+  /* ---------- barra superior ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-in {
+    max-width: var(--maxw); margin: 0 auto; padding: 10px 24px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  }
+  .topbar-id { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+  .topbar-id strong { font-family: "Archivo", sans-serif; font-size: 15px; font-weight: 700; }
+  .topbar-id span { font-size: 12px; color: var(--ink-3); font-family: "IBM Plex Mono", monospace; }
+
+  .prog { display: flex; align-items: center; gap: 10px; }
+  .prog-track { width: 190px; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .prog-fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .prog-num {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500;
+    color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 78px;
+  }
+  .btn-ghost {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-3); background: none;
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer;
+  }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--ink-3); }
+
+  /* ---------- estrutura ---------- */
+  .shell { max-width: var(--maxw); margin: 0 auto; padding: 0 24px 96px; display: grid; gap: 40px; grid-template-columns: 218px minmax(0,1fr); }
+  @media (max-width: 940px) { .shell { grid-template-columns: 1fr; gap: 0; } }
+
+  nav.toc { position: sticky; top: 72px; align-self: start; padding: 32px 0; max-height: calc(100vh - 90px); overflow-y: auto; }
+  @media (max-width: 940px) { nav.toc { display: none; } }
+  .toc-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+  .toc a {
+    display: flex; gap: 9px; align-items: baseline; padding: 5px 0;
+    color: var(--ink-2); text-decoration: none; font-size: 13.5px; line-height: 1.35;
+    border-left: 2px solid transparent; padding-left: 10px; margin-left: -12px;
+  }
+  .toc a b { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-3); font-weight: 500; }
+  .toc a:hover { color: var(--ink); }
+  .toc a.on { color: var(--accent); border-left-color: var(--accent); font-weight: 500; }
+  .toc a.on b { color: var(--accent); }
+  .toc a.done b::after { content: "✓"; margin-left: 4px; color: var(--ok); }
+
+  main { padding: 32px 0 0; min-width: 0; }
+
+  /* ---------- abertura ---------- */
+  .hero { padding: 26px 0 34px; border-bottom: 1px solid var(--line); margin-bottom: 40px; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+  }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); line-height: 1.08; font-weight: 700; }
+  .lede { font-size: 17px; color: var(--ink-2); max-width: 64ch; margin-top: 16px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .fact {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px;
+  }
+  .fact b { color: var(--ink-3); font-weight: 500; }
+
+  /* ---------- fases ---------- */
+  .phase { margin: 0 0 60px; scroll-margin-top: 76px; }
+  .phase-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
+  .phase-n {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--accent); background: var(--accent-soft); border-radius: 6px;
+    padding: 6px 9px; line-height: 1; margin-top: 5px; white-space: nowrap;
+  }
+  .phase-head h2 { font-size: clamp(21px, 2.6vw, 27px); font-weight: 600; }
+  .phase-head p { margin: 6px 0 0; color: var(--ink-2); font-size: 15px; max-width: 68ch; }
+  .phase-count {
+    margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--ink-3); white-space: nowrap; padding-top: 9px; font-variant-numeric: tabular-nums;
+  }
+  .phase-count.full { color: var(--ok); }
+
+  /* ---------- passo ---------- */
+  .step {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px 22px; margin-bottom: 14px; box-shadow: var(--shadow); scroll-margin-top: 76px;
+  }
+  .step-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .step-id {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--ink-3); font-variant-numeric: tabular-nums;
+    text-decoration: none; transition: color .12s;
+  }
+  a.step-id:hover, a.step-id:focus-visible { color: var(--accent); }
+  .step h3 { font-size: 17px; font-weight: 600; }
+  .where {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .07em;
+    text-transform: uppercase; padding: 3px 7px; border-radius: 4px; margin-left: auto; white-space: nowrap;
+  }
+  .w-wsl { background: var(--accent-soft); color: var(--accent); }
+  .w-ec2 { background: var(--warn-soft); color: var(--warn); }
+  .w-web { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+  .w-win { background: var(--surface-2); color: var(--ink-3); border: 1px dashed var(--line); }
+  .step > p { color: var(--ink-2); font-size: 14.5px; margin: 8px 0 0; max-width: 72ch; }
+
+  /* ---------- comandos ---------- */
+  .cmd { position: relative; margin: 14px 0 0; }
+  .cmd-label, .out-label {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; display: block;
+  }
+  pre {
+    margin: 0; padding: 14px 16px; border-radius: 8px; overflow-x: auto;
+    font-size: 13px; line-height: 1.62; tab-size: 2;
+  }
+  .cmd pre { background: var(--term-bg); color: var(--term-ink); border: 1px solid var(--term-line); }
+  .cmd pre .p { color: #6FCB95; user-select: none; }
+  .cmd pre .c { color: var(--term-dim); }
+  .copy {
+    position: absolute; top: 22px; right: 8px; font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    background: rgba(255,255,255,.07); color: #9FB6BC; border: 1px solid rgba(255,255,255,.13);
+    border-radius: 5px; padding: 4px 8px; cursor: pointer; opacity: 0; transition: opacity .15s;
+  }
+  .cmd:hover .copy, .copy:focus-visible { opacity: 1; }
+  .copy.ok { color: #6FCB95; border-color: #6FCB95; opacity: 1; }
+  .out { margin-top: 14px; }
+  .out pre {
+    background: var(--surface-2); color: var(--ink-2);
+    border: 1px solid var(--line-2); border-left: 3px solid var(--ink-3);
+  }
+  .out.good pre { border-left-color: var(--ok); }
+  .out.bad pre { border-left-color: var(--stop); }
+  p code, li code, td code {
+    background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 4px;
+    padding: 1px 5px; font-size: .875em; color: var(--ink);
+  }
+
+  /* ---------- checklist ---------- */
+  .check { margin: 16px 0 0; padding: 14px 16px; background: var(--surface-2); border-radius: 8px; border: 1px solid var(--line-2); }
+  .check-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+  .check ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  .check li label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  .check input[type=checkbox] {
+    appearance: none; -webkit-appearance: none; flex: 0 0 auto;
+    width: 17px; height: 17px; margin: 3px 0 0; border: 1.5px solid var(--ink-3);
+    border-radius: 4px; background: var(--surface); cursor: pointer; position: relative; transition: .12s;
+  }
+  .check input[type=checkbox]:hover { border-color: var(--accent); }
+  .check input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .check input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5px; top: 1.5px; width: 4px; height: 9px;
+    border: solid var(--surface); border-width: 0 2px 2px 0; transform: rotate(43deg);
+  }
+  .check label span { font-size: 14.5px; color: var(--ink-2); line-height: 1.45; }
+  .check input:checked + span { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line); }
+
+  /* ---------- avisos ---------- */
+  .note { border-radius: 8px; padding: 13px 16px; margin: 14px 0 0; font-size: 14.5px; border: 1px solid; }
+  .note b { display: block; font-family: "Archivo", sans-serif; font-size: 13px; letter-spacing: .01em; margin-bottom: 3px; }
+  .note p { margin: 0; }
+  .note p + p { margin-top: 7px; }
+  .n-warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, transparent); color: var(--ink); }
+  .n-warn b { color: var(--warn); }
+  .n-tip  { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 32%, transparent); color: var(--ink); }
+  .n-tip b { color: var(--accent); }
+  .n-key  { background: var(--stop-soft); border-color: color-mix(in srgb, var(--stop) 32%, transparent); color: var(--ink); }
+  .n-key b { color: var(--stop); }
+
+  details.fallback { margin-top: 14px; border: 1px dashed var(--line); border-radius: 8px; padding: 0 14px; background: var(--surface-2); }
+  details.fallback summary { cursor: pointer; padding: 11px 0; font-size: 14px; font-weight: 500; color: var(--ink-2); }
+  details.fallback[open] summary { border-bottom: 1px solid var(--line-2); margin-bottom: 12px; }
+  details.fallback > *:last-child { margin-bottom: 14px; }
+
+  /* ---------- tabelas ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin-top: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 520px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-3); font-weight: 500; background: var(--surface-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .ascii { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-top: 16px; }
+  .ascii pre { background: none; color: var(--ink-2); font-size: 12px; line-height: 1.5; padding: 20px; }
+
+  footer { max-width: var(--maxw); margin: 0 auto; padding: 28px 24px 60px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+  footer p { margin: 0 0 6px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  @media (max-width: 620px) {
+    .shell, .topbar-in, footer { padding-left: 16px; padding-right: 16px; }
+    .step { padding: 16px; }
+    .where { margin-left: 0; }
+    .prog-track { width: 110px; }
+  }
+  /* ---------- impressao ---------- */
+  @media print {
+    /* Paleta clara forcada: quem le no escuro nao deve imprimir paginas pretas. */
+    :root, :root[data-theme="dark"], :root[data-theme="light"] {
+      --bg: #FFFFFF; --surface: #FFFFFF; --surface-2: #F5F7F8;
+      --ink: #000000; --ink-2: #263338; --ink-3: #55666C;
+      --line: #B9C4C8; --line-2: #DDE4E6;
+      --accent: #0A6A72; --accent-2: #08535A; --accent-soft: #EDF4F5;
+      --warn: #7A430E; --warn-soft: #FBF3E9; --ok: #165634; --ok-soft: #EDF6F1;
+      --stop: #7D2820; --stop-soft: #FBEEEC;
+      --term-bg: #F2F5F6; --term-line: #C8D2D5; --term-ink: #0E1619; --term-dim: #55666C;
+      --shadow: none;
+    }
+    .topbar, nav.toc, .copy, #tema, #reset { display: none !important; }
+    .shell { display: block; max-width: none; padding: 0; }
+    body { background: #fff; }
+    .step, .cmd, .out, .note, .check, .ascii, .tablewrap, details {
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    h2, h3, .step-top, .phase-head { break-after: avoid; page-break-after: avoid; }
+    .phase { margin-bottom: 24px; }
+    .step { box-shadow: none; border-color: #B9C4C8; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="topbar-id">
+      <strong>Desafio 2</strong>
+      <span>WSL 2 &rarr; EC2 &rarr; ECR · us-east-1</span>
+    </div>
+    <div class="prog">
+      <span class="prog-num" id="progNum">0 / 0</span>
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+    <button class="btn-ghost" id="tema" type="button">Tema: claro</button>
+    <button class="btn-ghost" id="reset" type="button">Limpar progresso</button>
+  </div>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc" aria-label="Etapas do desafio">
+    <div class="toc-label">Roteiro</div>
+  </nav>
+
+  <main>
+
+    <header class="hero">
+      <div class="eyebrow">Desafios Fundamentais · Formação AWS · Dia 2</div>
+      <h1>De um Windows sem nada instalado até a imagem publicada no ECR</h1>
+      <p class="lede">
+        Roteiro de execução do Desafio 2 — WSL 2, credenciais temporárias, uma EC2 lançada por script,
+        acesso por Session Manager sem a porta 22 aberta e a imagem Docker no registry privado.
+        Cada passo traz <b>onde executar</b>, o <b>comando</b>, a <b>resposta esperada</b> e um <b>checklist</b>
+        que você marca antes de seguir. O progresso fica salvo neste navegador.
+      </p>
+      <div class="facts">
+        <span class="fact"><b>região</b> us-east-1</span>
+        <span class="fact"><b>profile</b> formacao_aws</span>
+        <span class="fact"><b>conta</b> 111122223333</span>
+        <span class="fact"><b>instância</b> bia-dev</span>
+        <span class="fact"><b>porta</b> 3001</span>
+        <span class="fact"><b>ECR</b> bia</span>
+        <span class="fact"><b>tempo</b> ~1h30</span>
+      </div>
+    </header>
+
+    <section class="phase" id="p-mapa" data-title="O que você vai construir">
+      <div class="phase-head">
+        <span class="phase-n">MAPA</span>
+        <div>
+          <h2>O que você vai construir, e as duas ideias que sustentam tudo</h2>
+          <p>
+            Leia esta seção antes do primeiro comando. Não há nada para executar aqui, mas é ela que explica a
+            fronteira que as treze etapas atravessam — e que dá sentido a <b>todos</b> os erros que podem aparecer
+            no caminho.
+          </p>
+        </div>
+      </div>
+
+      <div class="ascii">
+<pre>
+        LOCAL (sua maquina)                            NUVEM (AWS)
+ +-----------------------------------+        +-----------------------------------+
+ |  Windows 11                       |        |  Conta AWS - regiao us-east-1     |
+ |   +-- WSL 2 · Ubuntu 24.04 LTS    |        |                                   |
+ |        +-- AWS CLI v2             |  auth  |   IAM User + Policies             |
+ |        +-- Session Manager Plugin |=======&gt;|   (credenciais temporarias, 12h)  |
+ |        +-- Node.js                |        |                                   |
+ |        +-- SAM CLI                |  ssm   |   EC2 bia-dev                     |
+ |        +-- Docker (via Desktop)   |=======&gt;|    +-- Docker · BIA (3001:8080)   |
+ |                                   |        |                                   |
+ |        docker build / push        |  ecr   |   Amazon ECR                      |
+ +-----------------------------------+=======&gt;|    +-- repositorio bia            |
+                                              +-----------------------------------+
+</pre>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>#</th><th>Entrega</th><th>Feita na</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td>Estação WSL 2 com AWS CLI v2, SAM, Node.js e Session Manager Plugin</td><td><a href="#p0">Etapas 0 e 1</a></td></tr>
+            <tr><td>2</td><td>Usuário IAM com as policies de SSM, ECR e login local</td><td><a href="#p2">Etapa 2</a></td></tr>
+            <tr><td>3</td><td>Terminal autenticado com <b>credenciais temporárias</b> (<code>aws login</code>)</td><td><a href="#p3">Etapa 3</a></td></tr>
+            <tr><td>4</td><td>Security Group <code>bia-dev</code> liberando a porta 3001</td><td><a href="#p5">Etapa 5</a></td></tr>
+            <tr><td>5</td><td>EC2 <code>bia-dev</code> lançada <b>por script</b>, vestindo a role <code>role-acesso-ssm</code></td><td><a href="#p6">Etapas 6 a 8</a></td></tr>
+            <tr><td>6</td><td>Acesso à EC2 por <b>SSM</b> (zero portas abertas) e por <b>SSH</b></td><td><a href="#p9">Etapa 9</a></td></tr>
+            <tr><td>7</td><td>Aplicação BIA rodando em contêiner (<code>3001:8080</code>)</td><td><a href="#p10">Etapa 10</a></td></tr>
+            <tr><td>8</td><td>Imagem Docker publicada no Amazon ECR a partir do WSL</td><td><a href="#p11">Etapa 11</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note n-tip">
+        <b>Como ler as etiquetas de cada passo</b>
+        <p><b>POWERSHELL</b> = o PowerShell do Windows, como administrador · <b>WSL</b> = o Ubuntu dentro do seu Windows · <b>EC2</b> = a máquina remota, depois do <code>start-session</code> · <b>CONSOLE</b> = o navegador, no Console da AWS.</p>
+        <p>Trocar de máquina no meio do caminho é o erro mais comum de quem segue tutorial de nuvem. O prompt à esquerda do comando é o sinal mais confiável de onde você está:</p>
+      </div>
+      <div class="ascii">
+<pre>
+  PS C:\&gt;                        --&gt;  PowerShell do Windows (so na Etapa 0)
+  dev@wsl:~$                     --&gt;  WSL, a sua maquina
+  sh-5.2$                        --&gt;  dentro da EC2, como ssm-user
+  [ec2-user@ip-172-31-15-143 ~]$ --&gt;  dentro da EC2, como ec2-user
+</pre>
+      </div>
+
+      <div class="note n-key">
+        <b>Todos os identificadores deste guia são fictícios</b>
+        <p>Onde você vir um destes valores, troque pelo <b>seu</b>:</p>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>No guia você vê</th><th>O que é, e de onde vem</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>111122223333</code></td><td>Seu <b>Account ID</b> (12 dígitos), que aparece no <a href="#passo-3-3">passo 3.3</a></td></tr>
+            <tr><td><code>i-0abcd1234efgh5681</code></td><td>O <b>ID da sua instância</b> EC2, capturado no <a href="#passo-8-2">passo 8.2</a></td></tr>
+            <tr><td><code>203.0.113.10</code></td><td>O <b>IP público</b> da sua EC2, capturado no <a href="#passo-8-2">passo 8.2</a> — faixa de documentação, RFC 5737</td></tr>
+            <tr><td><code>formacao_aws</code></td><td>O nome do <b>usuário IAM e do profile</b> — escolha o seu no <a href="#passo-2-1">passo 2.1</a> e mantenha em todos os comandos</td></tr>
+            <tr><td><code>us-east-1</code></td><td>A <b>região</b> usada do começo ao fim</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note n-tip">
+        <b>As duas camadas que todo acesso na AWS atravessa</b>
+        <p>Todo pedido feito à AWS passa por duas camadas <b>independentes e sequenciais</b>. A primeira é uma cancela de rede; a segunda, a conferência de um crachá.</p>
+      </div>
+      <div class="ascii">
+<pre>
+ +--------------------------------------------------------------+
+ |  1. COMUNICACAO                                              |
+ |     Eu consigo chegar ate o servico?                         |
+ |     VPC + Subnet + Rotas + Internet/NAT Gateway + SG         |
+ +----------------------------+---------------------------------+
+                              v
+ +--------------------------------------------------------------+
+ |  2. AUTORIZACAO                                              |
+ |     Agora que cheguei, posso executar essa acao?             |
+ |     IAM User + IAM Role + IAM Policy                         |
+ +----------------------------+---------------------------------+
+                              v
+                     +----------------+
+                     | ACAO EXECUTADA |
+                     +----------------+
+</pre>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Recurso</th><th>Pergunta que responde</th><th>Regra mnemônica</th><th>Onde aparece</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>Security Group</b></td><td>Eu consigo <b>me comunicar</b> com esse recurso?</td><td><i>Quem pode falar com quem?</i></td><td><a href="#p5">Etapa 5</a></td></tr>
+            <tr><td><b>IAM</b></td><td>Eu tenho <b>autorização</b> para executar essa ação?</td><td><i>Quem pode fazer o quê?</i></td><td><a href="#p2">Etapas 2, 3 e 6</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note n-warn">
+        <b>A ordem importa — e é ela que define por onde depurar</b>
+        <p>Se o Security Group do destino não permitir a conexão, a comunicação falha <b>antes</b> de o IAM sequer ser consultado: não adianta ter a permissão certa. E o inverso também vale — chegar até o serviço não significa poder agir sobre ele.</p>
+      </div>
+
+      <div class="note n-tip">
+        <b>Identidade para pessoa &times; identidade para máquina</b>
+        <p>O outro eixo do desafio: <b>usuário para gente, role para máquina</b>.</p>
+      </div>
+      <div class="ascii">
+<pre>
+   SUA MAQUINA (pessoa)                RECURSO NA AWS (maquina)
+
+   WSL / Terminal                      EC2
+        |                               |  nao armazena Access Key
+        v                               v
+   AWS CLI                           IAM ROLE
+        |  usa credenciais              |
+        v                               v
+   IAM USER                          IAM POLICIES
+        |                               +--&gt; permissao para SSM
+        v                               +--&gt; permissao para ECR
+   AWS API                             +--&gt; permissao para outros servicos
+</pre>
+      </div>
+      <div class="note n-tip">
+        <b>Por que isso muda o roteiro</b>
+        <p>Nunca se cria um "usuário com senha" para um servidor — ele veste uma role e recebe credenciais rotacionadas pelo próprio serviço. É por isso que a <a href="#p2">Etapa 2</a> cria um <i>user</i> (para você) e a <a href="#p6">Etapa 6</a> cria uma <i>role</i> (para a EC2).</p>
+      </div>
+
+      <div class="note n-warn">
+        <b>Este laboratório custa dinheiro se você esquecê-lo ligado</b>
+        <p>EC2 e armazenamento de imagens no ECR são cobrados fora do Free Tier. O Session Manager não tem custo adicional.</p>
+        <p><b>Não pule a <a href="#p12">Etapa 12</a>.</b> Ela destrói tudo o que foi criado. Uma EC2 esquecida de pé continua sendo cobrada todo mês.</p>
+      </div>
+    </section>
+
+    <section class="phase" id="p0" data-title="Preparar o Windows">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 0</span>
+        <div>
+          <h2>Preparar o Windows: WSL 2 e Docker Desktop</h2>
+          <p>Todo o resto do desafio acontece dentro de um Linux. O WSL 2 é o que coloca esse Linux dentro do seu Windows, e o Docker Desktop é quem vai construir as imagens. ~20 min, incluindo um reinício.</p>
+        </div>
+        <span class="phase-count" data-count-for="p0"></span>
+      </div>
+
+      <div class="note n-tip"><b>Complemento didático</b><p>Esta etapa não fazia parte do registro original do desafio. Ela foi acrescentada porque, sem ela, quem parte de um Windows limpo não tem onde executar a Etapa 1.</p></div>
+
+      <div class="step" id="passo-0-1">
+        <div class="step-top"><a class="step-id" href="#passo-0-1">0.1</a><h3>Instalar o WSL 2 com Ubuntu</h3><span class="where w-win">POWERSHELL</span></div>
+        <p>Um comando só instala o subsistema, o kernel e a distribuição. Abra o <b>PowerShell como administrador</b> — sem isso a instalação para no meio.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">PS&gt; </span>wsl --install -d Ubuntu-24.04</pre></div>
+        <p>Reinicie o computador quando for pedido. No primeiro boot o Ubuntu pede um nome de usuário e uma senha — <b>esses dados são só do Linux</b>, não têm nenhuma relação com a AWS.</p>
+        <div class="cmd"><span class="cmd-label">Conferir, de volta no PowerShell</span><button class="copy" type="button">copiar</button><pre><span class="p">PS&gt; </span>wsl -l -v</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>  NAME            STATE           VERSION
+* Ubuntu-24.04    Running         2</pre></div>
+        <div class="note n-warn"><b>A coluna <code>VERSION</code> precisa ser 2</b><p>Se vier <code>1</code>, converta com <code>wsl --set-version Ubuntu-24.04 2</code>. A versão 1 não roda o Docker Desktop com a mesma integração.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Ubuntu-24.04 aparece em <code>wsl -l -v</code></span></label></li>
+          <li><label><input type="checkbox"><span>A coluna <code>VERSION</code> é <b>2</b></span></label></li>
+          <li><label><input type="checkbox"><span>Usuário e senha do Linux criados no primeiro boot</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-2">
+        <div class="step-top"><a class="step-id" href="#passo-0-2">0.2</a><h3>Instalar o Docker Desktop e ligar a integração com o WSL</h3><span class="where w-win">WINDOWS</span></div>
+        <p>É este passo que faz o comando <code>docker</code> <b>existir</b> dentro do Ubuntu. Sem ele, a Etapa 11 não consegue construir imagem nenhuma.</p>
+        <p>Baixe o <a href="https://www.docker.com/products/docker-desktop/">Docker Desktop</a> e instale. Depois, dentro do aplicativo:</p>
+        <div class="out"><span class="out-label">Caminho nas configurações</span><pre>Settings -&gt; Resources -&gt; WSL Integration
+  [x] Enable integration with my default WSL distro
+  [x] Ubuntu
+Apply &amp; restart</pre></div>
+        <div class="note n-tip"><b>Uma engine só, e é por isso que o WSL 2 pesa menos</b><p>O Docker Desktop mantém <b>uma única engine</b> compartilhada entre Windows e Linux. Numa VM tradicional você teria dois sistemas operacionais e duas engines disputando a mesma memória.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Docker Desktop instalado e em execução</span></label></li>
+          <li><label><input type="checkbox"><span>A chave do <b>Ubuntu</b> está ligada em <i>WSL Integration</i></span></label></li>
+          <li><label><input type="checkbox"><span><i>Apply &amp; restart</i> concluído</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-3">
+        <div class="step-top"><a class="step-id" href="#passo-0-3">0.3</a><h3>Ter uma conta AWS ativa</h3><span class="where w-web">CONSOLE</span></div>
+        <p>Com acesso ao Console como <b>root ou administrador</b> — é por lá que o usuário IAM vai ser criado na <a href="#p2">Etapa 2</a>. Um usuário comum, sem permissão de IAM, não consegue criar outro usuário.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Consigo entrar no Console da AWS</span></label></li>
+          <li><label><input type="checkbox"><span>O acesso é root ou administrador</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-4">
+        <div class="step-top"><a class="step-id" href="#passo-0-4">0.4</a><h3>Checkpoint: o Docker responde de dentro do Ubuntu</h3><span class="where w-wsl">WSL</span></div>
+        <p>Abra o <b>Ubuntu</b> pelo menu Iniciar. Este é o terminal em que todos os passos marcados <b>WSL</b> daqui para a frente acontecem.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>docker --version</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Docker version 27.x.x, build xxxxxxx</pre></div>
+        <div class="note n-warn"><b><code>docker: command not found</code></b><p>A integração do passo 0.2 não foi ativada, ou o Docker Desktop não está rodando. Volte ao passo 0.2 — o comando <code>docker</code> não existe no Ubuntu até essa chave ser ligada.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>docker --version</code> devolve um número de versão dentro do Ubuntu</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p1" data-title="Instalar a stack no Ubuntu">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 1</span>
+        <div>
+          <h2>Instalar a stack dentro do Ubuntu</h2>
+          <p>O terminal precisa de quatro ferramentas para conversar com a AWS. Sem elas, nenhum comando das etapas seguintes funciona. ~15 min.</p>
+        </div>
+        <span class="phase-count" data-count-for="p1"></span>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Ferramenta</th><th>Para que serve neste desafio</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>AWS CLI v2</b></td><td>Executar qualquer ação na AWS pelo terminal</td></tr>
+            <tr><td><b>Session Manager Plugin</b></td><td><b>Obrigatório</b> para abrir o terminal interativo do SSM (<a href="#p9">Etapa 9</a>)</td></tr>
+            <tr><td><b>Node.js</b></td><td>Requisito de alguns comandos do projeto BIA</td></tr>
+            <tr><td><b>SAM CLI</b></td><td>Base para Lambda, CloudFormation e IaC nas etapas seguintes da formação</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="step" id="passo-1-1">
+        <div class="step-top"><a class="step-id" href="#passo-1-1">1.1</a><h3>AWS CLI v2 — a porta de entrada para tudo</h3><span class="where w-wsl">WSL</span></div>
+        <p>Sem o CLI o terminal não fala com a AWS. Instale a <b>v2</b>: a v1 dos repositórios do Ubuntu não tem os comandos usados aqui.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>sudo apt-get update
+<span class="p">$ </span>sudo apt-get install curl unzip -y
+
+<span class="p">$ </span>curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+<span class="p">$ </span>unzip awscliv2.zip
+<span class="p">$ </span>sudo ./aws/install
+
+<span class="p">$ </span>aws --version</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>aws-cli/2.x.x Python/3.x.x Linux/x86_64</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>aws --version</code> responde e começa com <code>aws-cli/2</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-2">
+        <div class="step-top"><a class="step-id" href="#passo-1-2">1.2</a><h3>Session Manager Plugin — o componente que a maioria esquece</h3><span class="where w-wsl">WSL</span></div>
+        <p>O AWS CLI sozinho <b>não</b> abre a tela interativa do SSM; ele aciona este plugin em segundo plano. É um binário separado, e ninguém avisa que ele falta até a Etapa 9 quebrar.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" \
+  -o "session-manager-plugin.deb"
+<span class="p">$ </span>sudo dpkg -i session-manager-plugin.deb
+
+<span class="p">$ </span>aws ssm --version</pre></div>
+        <div class="note n-warn"><b>Pular este passo custa caro depois</b><p>Sem o plugin, o <code>aws ssm start-session</code> da <a href="#p9">Etapa 9</a> falha com uma mensagem sobre plugin ausente — e o erro não deixa nada óbvio que a causa está aqui atrás.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>dpkg -i</code> terminou sem erro</span></label></li>
+          <li><label><input type="checkbox"><span><code>aws ssm --version</code> responde</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-3">
+        <div class="step-top"><a class="step-id" href="#passo-1-3">1.3</a><h3>Node.js — exigido por alguns comandos do projeto BIA</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cd ~
+<span class="p">$ </span>curl -sL https://deb.nodesource.com/setup_25.x -o nodesource_setup.sh
+<span class="p">$ </span>sudo bash nodesource_setup.sh
+<span class="p">$ </span>sudo apt install nodejs -y
+
+<span class="p">$ </span>node -v</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>v25.x.x</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>node -v</code> responde com uma versão</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-4">
+        <div class="step-top"><a class="step-id" href="#passo-1-4">1.4</a><h3>SAM CLI — aproveitando a integração do WSL com o Windows</h3><span class="where w-wsl">WSL</span></div>
+        <p>O WSL 2 enxerga o disco do Windows nativamente. Baixe o <code>.zip</code> do SAM pelo navegador do Windows e instale de dentro do Linux, <b>sem baixar de novo</b>:</p>
+        <div class="ascii">
+<pre>
+C:\Users\&lt;seu-usuario&gt;\Downloads\aws-sam-cli-linux-x86_64.zip
+                    |  (o mesmo arquivo, visto de dentro do Linux)
+                    v
+/mnt/c/Users/&lt;seu-usuario&gt;/Downloads/aws-sam-cli-linux-x86_64.zip
+</pre>
+        </div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="c"># confirma que o .zip baixado pelo Windows esta visivel no Linux</span>
+<span class="p">$ </span>ls -lh /mnt/c/Users/&lt;seu-usuario&gt;/Downloads/aws-sam-cli-linux-x86_64.zip
+
+<span class="p">$ </span>unzip /mnt/c/Users/&lt;seu-usuario&gt;/Downloads/aws-sam-cli-linux-x86_64.zip -d sam-installation
+<span class="p">$ </span>sudo ./sam-installation/install
+
+<span class="p">$ </span>sam --version</pre></div>
+        <div class="note n-tip"><b>Troque <code>&lt;seu-usuario&gt;</code> pelo seu nome de usuário do Windows</b><p>É o nome da pasta em <code>C:\Users\</code>, não o do Linux. Se o <code>ls</code> não achar o arquivo, confira o caminho no Explorador antes de seguir.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O <code>ls</code> encontrou o <code>.zip</code> em <code>/mnt/c</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>sam --version</code> responde</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-5">
+        <div class="step-top"><a class="step-id" href="#passo-1-5">1.5</a><h3>Checkpoint: as quatro ferramentas de uma vez</h3><span class="where w-wsl">WSL</span></div>
+        <p>Os quatro comandos precisam responder com um número de versão. Se algum falhar, volte ao passo correspondente antes de seguir — a Etapa 3 depende dos quatro.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws --version &amp;&amp; aws ssm --version &amp;&amp; node -v &amp;&amp; sam --version</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>As quatro versões saem na mesma execução, sem erro</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p2" data-title="Criar o usuário IAM">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 2</span>
+        <div>
+          <h2>Criar o usuário IAM no Console</h2>
+          <p>O seu terminal ainda não é ninguém para a AWS. Antes de qualquer comando precisa existir uma identidade — e essa identidade precisa carregar as permissões do que vamos fazer. ~5 min.</p>
+        </div>
+        <span class="phase-count" data-count-for="p2"></span>
+      </div>
+
+      <div class="ascii">
+<pre>
+ 1. QUEM ESTA FAZENDO ESTA REQUISICAO?   --&gt;  Autenticacao (credenciais)
+ 2. ESSA IDENTIDADE TEM PERMISSAO?       --&gt;  Autorizacao (IAM Policy)
+                                         --&gt;  Executar ou negar a acao
+</pre>
+      </div>
+
+      <div class="step" id="passo-2-1">
+        <div class="step-top"><a class="step-id" href="#passo-2-1">2.1</a><h3>Criar o usuário com acesso ao Console</h3><span class="where w-web">CONSOLE</span></div>
+        <p>O acesso ao Console é <b>obrigatório</b> aqui: é ele que permite ao navegador autorizar o <code>aws login</code> da próxima etapa.</p>
+        <div class="out"><span class="out-label">Caminho no Console</span><pre>IAM -&gt; Users -&gt; Create user
+  Nome do usuario: formacao_aws
+  [x] Provide user access to the AWS Management Console
+Next</pre></div>
+        <div class="note n-tip"><b>Anote o nome que você escolher</b><p>Pode ser qualquer um, mas ele reaparece em <b>quase todos</b> os comandos deste guia, sempre depois de <code>--profile</code>. Onde o guia escrever <code>formacao_aws</code>, use o seu.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Usuário criado</span></label></li>
+          <li><label><input type="checkbox"><span>A opção de acesso ao Console foi marcada</span></label></li>
+          <li><label><input type="checkbox"><span>Anotei o nome do usuário</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-2">
+        <div class="step-top"><a class="step-id" href="#passo-2-2">2.2</a><h3>Anexar as três policies</h3><span class="where w-web">CONSOLE</span></div>
+        <p>Em <code>Attach policies directly</code>, selecione as <b>três</b>. Cada uma destrava uma etapa específica adiante:</p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Policy</th><th>Para que serve</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>AmazonSSMFullAccess</code></td><td>Abrir o túnel do Session Manager (<a href="#p9">Etapa 9</a>)</td></tr>
+              <tr><td><code>AmazonEC2ContainerRegistryFullAccess</code></td><td>Falar com o ECR (<a href="#p11">Etapa 11</a>)</td></tr>
+              <tr><td><code>SignInLocalDevelopmentAccess</code></td><td><b>Gerar as credenciais temporárias</b> do <code>aws login</code> (<a href="#p3">Etapa 3</a>)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-tip"><b>A terceira é a que todo mundo esquece</b><p>Sem <code>SignInLocalDevelopmentAccess</code>, o <code>aws login</code> da próxima etapa simplesmente não autoriza a geração do token temporário — e a mensagem de erro não diz qual policy falta.</p></div>
+        <div class="note n-warn"><b>Ainda falta uma permissão — e isso é de propósito</b><p>A permissão de <b>criar</b> roles IAM não entra agora. Ela só vai fazer falta na <a href="#p6">Etapa 6</a>, e é adicionada lá, no momento exato em que o erro aparece. Assim você vê a mensagem real antes de aplicar a correção — que é justamente o item do desafio sobre permissões no usuário.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>As três policies aparecem na aba <code>Permissions</code> do usuário</span></label></li>
+          <li><label><input type="checkbox"><span>O usuário aparece em <code>IAM</code> &rarr; <code>Users</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p3" data-title="Autenticar o terminal">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 3</span>
+        <div>
+          <h2>Autenticar o terminal na AWS</h2>
+          <p>É aqui que a máquina local ganha o crachá para agir em nome do usuário IAM da etapa anterior — com credenciais que expiram em 12 horas, não com uma chave eterna em disco. ~5 min.</p>
+        </div>
+        <span class="phase-count" data-count-for="p3"></span>
+      </div>
+
+      <div class="step" id="passo-3-1">
+        <div class="step-top"><a class="step-id" href="#passo-3-1">3.1</a><h3>Fazer login</h3><span class="where w-wsl">WSL</span></div>
+        <p>O comando abre o navegador (ou imprime a URL para você abrir manualmente) e, depois da escolha da conta, grava o token temporário no profile.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws login --profile formacao_aws</pre></div>
+        <div class="out"><span class="out-label">Ele pergunta a região</span><pre>AWS Region [us-east-1]: us-east-1</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada ao final</span><pre>Updated profile formacao_aws to use arn:aws:iam::111122223333:user/formacao_aws credentials.
+Use "--profile formacao_aws" to use the new credentials.</pre></div>
+        <div class="note n-warn"><b>Apareceu <code>gio: Operation not supported</code>?</b><p>É o WSL não conseguindo abrir o navegador do Windows. <b>Não é fatal</b>: o próprio comando imprime a URL de autorização — copie e cole no navegador do Windows. O fluxo continua e o profile é atualizado ao final.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Login concluído no navegador</span></label></li>
+          <li><label><input type="checkbox"><span>A mensagem final confirma o usuário <code>formacao_aws</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3-2">
+        <div class="step-top"><a class="step-id" href="#passo-3-2">3.2</a><h3>Definir o contexto do shell</h3><span class="where w-wsl">WSL</span></div>
+        <p>Este passo evita o erro mais chato do desafio inteiro. <b>Faça agora, não depois.</b></p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>export AWS_PROFILE=formacao_aws
+<span class="p">$ </span>export AWS_DEFAULT_REGION=us-east-1</pre></div>
+        <div class="note n-key"><b>Por que isso não é opcional</b><p>Os scripts do projeto BIA (Etapas 6, 7 e 8) chamam <code>aws ec2 ...</code> <b>sem</b> a flag <code>--profile</code>. Sem essas duas variáveis exportadas eles caem no profile <i>default</i> — que está vazio — e reportam que a VPC, a subnet e o Security Group <b>"não existem"</b>, mesmo com tudo criado corretamente.</p><p>O AWS CLI não tem "contexto implícito": quando um script não passa <code>--profile</code>, quem define o contexto é a variável de ambiente.</p></div>
+        <div class="note n-tip"><b>Para não repetir a cada terminal novo</b><p>Acrescente as duas linhas ao fim do seu <code>~/.bashrc</code>. Todo shell novo já nasce no contexto certo.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Os dois <code>export</code> foram executados neste terminal</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3-3">
+        <div class="step-top"><a class="step-id" href="#passo-3-3">3.3</a><h3>Confirmar quem você é para a AWS</h3><span class="where w-wsl">WSL</span></div>
+        <p>Este é o teste que fecha a camada de <b>autenticação</b>: se ele responde sem pedir credencial, o crachá está válido.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws sts get-caller-identity --profile formacao_aws</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>{
+    "UserId": "AIDAEXAMPLEUSERID123",
+    "Account": "111122223333",
+    "Arn": "arn:aws:iam::111122223333:user/formacao_aws"
+}</pre></div>
+        <div class="note n-key"><b>Anote o <code>Account</code></b><p>Esses 12 dígitos são o seu <b>Account ID</b>, e você vai precisar deles na <a href="#p11">Etapa 11</a> para montar a URI do ECR: <code>&lt;account-id&gt;.dkr.ecr.us-east-1.amazonaws.com</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O JSON volta sem pedir credenciais</span></label></li>
+          <li><label><input type="checkbox"><span>O <code>Arn</code> termina no nome do usuário que você criou</span></label></li>
+          <li><label><input type="checkbox"><span>Anotei o Account ID de 12 dígitos</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3-4">
+        <div class="step-top"><a class="step-id" href="#passo-3-4">3.4</a><h3>Confirmar que a permissão de ECR está funcionando</h3><span class="where w-wsl">WSL</span></div>
+        <p>O passo anterior provou <b>quem você é</b>; este prova <b>o que você pode fazer</b>. É a camada de autorização, testada de ponta a ponta antes de ela ser realmente necessária, lá na Etapa 11.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecr describe-repositories --region us-east-1</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — lista vazia também é sucesso</span><pre>{
+    "repositories": []
+}</pre></div>
+        <div class="note n-tip"><b>Retorno sem erro é o que importa</b><p>Você ainda não criou nenhum repositório, então a lista vir vazia é o esperado. O que este passo comprova é que houve <b>comunicação e autorização</b> — se a policy da Etapa 2 faltasse, viria <code>AccessDeniedException</code> em vez de uma lista.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O comando responde sem <code>AccessDenied</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="note n-tip">
+        <b>Por que <code>aws login</code> e não <code>aws configure</code></b>
+        <p>Access Keys são credenciais de <b>longa duração</b>: quem as obtém acessa a conta indefinidamente. No fim de 2025 a AWS liberou um mecanismo mais seguro, e foi para ele que este laboratório migrou.</p>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th></th><th>Access Keys (<code>aws configure</code>)</th><th><code>aws login</code></th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>Duração</b></td><td>Indefinida, até serem revogadas</td><td><b>12 horas</b></td></tr>
+            <tr><td><b>Rotação</b></td><td>Manual</td><td><b>Automática, a cada 15 minutos</b></td></tr>
+            <tr><td><b>Armazenamento local</b></td><td>Chave permanente em disco</td><td>Token temporário</td></tr>
+            <tr><td><b>Risco em caso de vazamento</b></td><td>Alto e persistente</td><td>Limitado à janela de validade</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <details class="fallback">
+        <summary>Se a sua conta ainda não tiver o <code>aws login</code> disponível</summary>
+        <p>O caminho antigo continua funcionando. Crie uma Access Key no Console e rode:</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws configure --profile formacao_aws</pre></div>
+        <div class="out"><span class="out-label">O que ele pergunta</span><pre>AWS Access Key ID     [None]: &lt;sua-access-key&gt;
+AWS Secret Access Key [None]: &lt;sua-secret-key&gt;
+Default region name   [None]: us-east-1
+Default output format [None]: table</pre></div>
+        <div class="note n-warn"><b>Chave em disco é dívida de segurança</b><p>Ela não expira sozinha. Se usar este caminho, revogue a Access Key no Console assim que terminar o laboratório.</p></div>
+      </details>
+
+      <div class="note n-tip">
+        <b>Encerrar a sessão a qualquer momento</b>
+        <p><code>aws logout --profile formacao_aws</code> descarta as credenciais temporárias. Ele também é o último comando da <a href="#p12">Etapa 12</a>.</p>
+      </div>
+      <div class="note n-key">
+        <b>Dois problemas diferentes, dois serviços diferentes</b>
+        <p><code>aws login</code> resolve <b>quem eu sou</b> — autentica o seu terminal na conta. O <b>SSM</b> (<a href="#p9">Etapa 9</a>) resolve <b>como eu entro na máquina</b>. Confundir os dois é o que faz muita gente procurar chave SSH onde o problema era credencial de conta.</p>
+      </div>
+    </section>
+
+    <section class="phase" id="p4" data-title="Clonar o projeto BIA">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 4</span>
+        <div>
+          <h2>Clonar o projeto BIA na máquina local</h2>
+          <p>As Etapas 6, 7 e 8 rodam scripts que vivem dentro do repositório do projeto BIA. Sem clonar, não há o que executar. ~2 min.</p>
+        </div>
+        <span class="phase-count" data-count-for="p4"></span>
+      </div>
+
+      <div class="step" id="passo-4-1">
+        <div class="step-top"><a class="step-id" href="#passo-4-1">4.1</a><h3>Clonar e tornar os scripts executáveis</h3><span class="where w-wsl">WSL</span></div>
+        <p>O <code>chmod +x</code> não é detalhe: um script clonado sem bit de execução responde <code>Permission denied</code> na Etapa 6 e parece um problema de IAM que não é.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cd ~
+<span class="p">$ </span>git clone https://github.com/henrylle/bia
+<span class="p">$ </span>cd bia
+
+<span class="c"># garante que os scripts sao executaveis</span>
+<span class="p">$ </span>chmod +x scripts/*.sh</pre></div>
+        <div class="cmd"><span class="cmd-label">Conferir</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>ls scripts/</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>criar_role_ssm.sh   lancar_ec2_zona_a.sh   validar_recursos_zona_a.sh   ...</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Script</th><th>O que ele faz</th><th>Usado na</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>criar_role_ssm.sh</code></td><td>Cria a role <code>role-acesso-ssm</code> e o instance profile que a EC2 vai vestir</td><td><a href="#p6">Etapa 6</a></td></tr>
+              <tr><td><code>validar_recursos_zona_a.sh</code></td><td>Confere VPC, subnet, Security Group e role <b>antes</b> do lançamento</td><td><a href="#p7">Etapa 7</a></td></tr>
+              <tr><td><code>lancar_ec2_zona_a.sh</code></td><td>Lança a instância <code>bia-dev</code> já com o Security Group e a role anexados</td><td><a href="#p8">Etapa 8</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-tip"><b>A partir daqui, todo comando <b>WSL</b> assume que você está dentro de <code>~/bia</code></b><p>Se abrir um terminal novo, refaça o <code>cd ~/bia</code> — e lembre-se dos <code>export</code> do <a href="#passo-3-2">passo 3.2</a>, que também não sobrevivem a um terminal novo.</p></div>
+        <div class="note n-tip"><b>Complemento didático</b><p>A versão anterior do registro deste desafio já usava o prompt <code>dev@wsl:~/bia$</code> sem nunca mostrar de onde vinha essa pasta. É esta etapa.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O clone terminou e estou dentro de <code>~/bia</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>ls scripts/</code> lista os três scripts da tabela</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p5" data-title="Security Group bia-dev">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 5</span>
+        <div>
+          <h2>Criar o Security Group bia-dev</h2>
+          <p>Este é o <b>Gate 1</b> do <a href="#p-mapa">mapa</a> — a camada de comunicação. Sem ele o navegador nunca alcança a aplicação, por mais correta que esteja a permissão IAM. ~3 min.</p>
+        </div>
+        <span class="phase-count" data-count-for="p5"></span>
+      </div>
+
+      <div class="step" id="passo-5-1">
+        <div class="step-top"><a class="step-id" href="#passo-5-1">5.1</a><h3>Criar o Security Group com a regra da porta 3001</h3><span class="where w-web">CONSOLE</span></div>
+        <p>O script da Etapa 8 procura um Security Group com este <b>nome exato</b>. Se o nome divergir, o lançamento da instância falha dizendo que o SG não existe.</p>
+        <div class="out"><span class="out-label">Caminho no Console</span><pre>EC2 -&gt; Security Groups -&gt; Create security group</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Campo</th><th>Valor</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Security group name</td><td><code>bia-dev</code></td></tr>
+              <tr><td>Description</td><td>acesso do bia-dev</td></tr>
+              <tr><td>Inbound — Type</td><td>Custom TCP</td></tr>
+              <tr><td>Inbound — Protocol</td><td>TCP</td></tr>
+              <tr><td>Inbound — Port range</td><td><b>3001</b></td></tr>
+              <tr><td>Inbound — Source</td><td>Anywhere-IPv4</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-tip"><b>A porta 3001 não é arbitrária</b><p>É a porta que o contêiner da BIA publica no host (<a href="#p10">Etapa 10</a>, mapeamento <code>3001:8080</code>). Se você liberar outra, a aplicação sobe normalmente mas não responde, e o navegador fica carregando até dar timeout — o Gate 1 barrando a conexão antes de o IAM sequer ser consultado.</p></div>
+        <div class="note n-warn"><b>Ressalva consciente sobre o <code>Anywhere-IPv4</code></b><p>É aceitável em um laboratório, numa porta de aplicação. Em produção essa origem seria restrita a um Load Balancer ou a uma faixa de IPs conhecida.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O SG <code>bia-dev</code> aparece na lista</span></label></li>
+          <li><label><input type="checkbox"><span>Ele tem uma regra de entrada <code>TCP 3001</code></span></label></li>
+          <li><label><input type="checkbox"><span>O nome está escrito exatamente <code>bia-dev</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p6" data-title="Role role-acesso-ssm">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 6</span>
+        <div>
+          <h2>Criar a role role-acesso-ssm</h2>
+          <p>O Security Group resolveu a <b>comunicação</b>; a role resolve a <b>autorização da instância</b> para conversar com os outros serviços. Sem ela a EC2 não fala com o SSM nem com o ECR — e você não entra na máquina. ~10 min, a maior parte resolvendo um <code>AccessDenied</code>.</p>
+        </div>
+        <span class="phase-count" data-count-for="p6"></span>
+      </div>
+
+      <div class="note n-key"><b>Esta etapa foi desenhada para falhar na primeira execução</b><p>Não é um defeito do roteiro. O passo 6.1 <b>vai</b> dar <code>AccessDenied</code>, e é vendo a mensagem real que fica claro o que o passo 6.2 conserta. Se você já anexou a policy antes, o 6.1 passa direto — siga para o 6.3.</p></div>
+
+      <div class="step" id="passo-6-1">
+        <div class="step-top"><a class="step-id" href="#passo-6-1">6.1</a><h3>Rodar o script e ler o erro</h3><span class="where w-wsl">WSL</span></div>
+        <p>Lembre do <a href="#p-mapa">mapa</a>: usuário para pessoa, role para máquina. A EC2 não guarda Access Key em disco — ela veste esta role.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>./scripts/criar_role_ssm.sh</pre></div>
+        <div class="out bad"><span class="out-label">Resposta esperada agora — o erro é o resultado</span><pre>An error occurred (AccessDenied) when calling the CreateRole operation:
+User: arn:aws:iam::111122223333:user/formacao_aws is not authorized to perform:
+iam:CreateRole on resource: arn:aws:iam::111122223333:role/role-acesso-ssm
+because no identity-based policy allows the iam:CreateRole action</pre></div>
+        <p>Os mesmos erros se repetem para <code>CreateInstanceProfile</code>, <code>AddRoleToInstanceProfile</code> e <code>AttachRolePolicy</code>.</p>
+        <div class="note n-tip"><b>Por que isso acontece</b><p>Na <a href="#p2">Etapa 2</a> o usuário ganhou permissão de <b>usar</b> SSM e ECR, mas nenhuma de <b>criar identidades IAM</b>. Permissão de <i>usar</i> não é o mesmo que permissão de <i>criar</i> — e ter <code>AmazonSSMFullAccess</code> não dá o direito de criar a role que o SSM vai usar.</p><p>Este é exatamente o item do desafio: <i>"configurar permissões IAM para o usuário ao invés da role"</i>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Li a mensagem e identifiquei a ação que falta: <code>iam:CreateRole</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-6-2">
+        <div class="step-top"><a class="step-id" href="#passo-6-2">6.2</a><h3>Anexar a inline policy ao usuário</h3><span class="where w-web">CONSOLE</span></div>
+        <p>As sete ações abaixo são exatamente as que o script precisa: criar a role, criar o instance profile, ligar um ao outro, anexar a policy gerenciada e — o mais esquecido — <code>iam:PassRole</code>, sem o qual a Etapa 8 não consegue entregar a role à instância.</p>
+        <div class="out"><span class="out-label">Caminho no Console</span><pre>IAM -&gt; Users -&gt; seu usuario -&gt; Add permissions
+    -&gt; Create inline policy -&gt; aba JSON</pre></div>
+        <div class="cmd"><span class="cmd-label">Colar no editor JSON</span><button class="copy" type="button">copiar</button><pre>{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateRole",
+                "iam:GetRole",
+                "iam:CreateInstanceProfile",
+                "iam:GetInstanceProfile",
+                "iam:AddRoleToInstanceProfile",
+                "iam:AttachRolePolicy",
+                "iam:PassRole"
+            ],
+            "Resource": "*"
+        }
+    ]
+}</pre></div>
+        <div class="note n-warn"><b>Ressalva consciente sobre o <code>"Resource": "*"</code></b><p>Aceitável em um laboratório descartável, <b>não em produção</b>. O correto seria restringir o <code>Resource</code> aos ARNs específicos da role e do instance profile, e condicionar o <code>iam:PassRole</code> ao serviço <code>ec2.amazonaws.com</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A inline policy aparece anexada ao usuário</span></label></li>
+          <li><label><input type="checkbox"><span>As sete ações estão na policy</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-6-3">
+        <div class="step-top"><a class="step-id" href="#passo-6-3">6.3</a><h3>Rodar o script de novo e conferir a role</h3><span class="where w-wsl">WSL</span></div>
+        <p>Com a policy no lugar, o mesmo script que falhou agora completa. Nada mudou no script — mudou a autorização de quem o executa.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>./scripts/criar_role_ssm.sh</pre></div>
+        <div class="cmd"><span class="cmd-label">Checkpoint</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws iam get-role --role-name role-acesso-ssm --query "Role.Arn" --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>arn:aws:iam::111122223333:role/role-acesso-ssm</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O script rodou sem <code>AccessDenied</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>get-role</code> devolve o ARN da role</span></label></li>
+          <li><label><input type="checkbox"><span>A role aparece em <code>IAM</code> &rarr; <code>Roles</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p7" data-title="Validar os pré-requisitos">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 7</span>
+        <div>
+          <h2>Validar os pré-requisitos</h2>
+          <p>Conferir as quatro peças — VPC, subnet, Security Group e role — <b>antes</b> de lançar a instância. É muito mais barato descobrir um problema agora do que depois de a EC2 subir errada. ~1 min.</p>
+        </div>
+        <span class="phase-count" data-count-for="p7"></span>
+      </div>
+
+      <div class="step" id="passo-7-1">
+        <div class="step-top"><a class="step-id" href="#passo-7-1">7.1</a><h3>Rodar o validador</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>./scripts/validar_recursos_zona_a.sh</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — tudo verde</span><pre>[OK] Tudo certo com a VPC
+[OK] Tudo certo com a Subnet
+[OK] Security Group bia-dev foi criado
+ [OK] Regra de entrada esta ok
+ [OK] Regra de saida esta correta
+[OK] Tudo certo com a role 'role-acesso-ssm'</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Nenhuma linha <code>[ERRO]</code> na saída</span></label></li>
+          <li><label><input type="checkbox"><span>As quatro peças aparecem como <code>[OK]</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-7-2">
+        <div class="step-top"><a class="step-id" href="#passo-7-2">7.2</a><h3>Se tudo aparecer como erro</h3><span class="where w-wsl">WSL</span></div>
+        <p><b>Não entre em pânico e não recrie nada.</b> Os recursos existem — o problema é de contexto, não de infraestrutura.</p>
+        <div class="out bad"><span class="out-label">A saída enganosa</span><pre>[ERRO] Tenho um problema ao retornar a VPC default. Sera se ela existe?
+[ERRO] Tenho um problema ao retornar a subnet da zona a.
+[ERRO] Nao achei o security group bia-dev. Ele foi criado?
+[ERRO] A role 'role-acesso-ssm' nao existe</pre></div>
+        <div class="note n-key"><b>O diagnóstico</b><p>O script chama <code>aws ec2 ...</code> <b>sem</b> <code>--profile</code>, então o CLI usa o profile <i>default</i> — que está vazio e aponta para lugar nenhum. Ele não está mentindo: para aquele profile, esses recursos realmente não existem.</p></div>
+        <div class="cmd"><span class="cmd-label">A correção</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>export AWS_PROFILE=formacao_aws
+<span class="p">$ </span>export AWS_DEFAULT_REGION=us-east-1
+<span class="p">$ </span>./scripts/validar_recursos_zona_a.sh</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Entendi que <code>[ERRO]</code> em <b>todas</b> as linhas costuma ser profile, não recurso faltando</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p8" data-title="Lançar a EC2 por script">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 8</span>
+        <div>
+          <h2>Lançar a EC2 bia-dev via script</h2>
+          <p>O desafio pede a instância criada <b>por script, não pelo console</b>. Esse é o ponto: infraestrutura reproduzível — o mesmo comando gera a mesma máquina, quantas vezes for preciso. ~5 min.</p>
+        </div>
+        <span class="phase-count" data-count-for="p8"></span>
+      </div>
+
+      <div class="step" id="passo-8-1">
+        <div class="step-top"><a class="step-id" href="#passo-8-1">8.1</a><h3>Lançar a instância</h3><span class="where w-wsl">WSL</span></div>
+        <p>O script já anexa o Security Group <code>bia-dev</code> (<a href="#p5">Etapa 5</a>) e a role <code>role-acesso-ssm</code> (<a href="#p6">Etapa 6</a>). É por isso que as duas vinham antes: a instância nasce pronta.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>./scripts/lancar_ec2_zona_a.sh</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O script terminou sem erro</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-8-2">
+        <div class="step-top"><a class="step-id" href="#passo-8-2">8.2</a><h3>Capturar o ID e o IP da instância</h3><span class="where w-wsl">WSL</span></div>
+        <p>São os dois dados que o resto do guia usa: o <b>ID</b> para abrir a sessão SSM na <a href="#p9">Etapa 9</a>, e o <b>IP público</b> para abrir a aplicação no navegador na <a href="#p10">Etapa 10</a>.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=bia-dev" "Name=instance-state-name,Values=running" \
+  --query "Reservations[].Instances[].{ID:InstanceId,IP:PublicIpAddress,Lancamento:LaunchTime}" \
+  --output table \
+  --profile formacao_aws</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>--------------------------------------------------------------------
+|                        DescribeInstances                         |
++----------------------+---------------+---------------------------+
+|          ID          |      IP       |        Lancamento         |
++----------------------+---------------+---------------------------+
+|  i-0abcd1234efgh5681 |  203.0.113.10 | 2026-08-25T15:32:24+00:00 |
++----------------------+---------------+---------------------------+</pre></div>
+        <div class="note n-key"><b>Guarde os dois valores agora</b><p>Onde este guia escrever <code>i-0abcd1234efgh5681</code>, use o <b>seu</b> ID; onde escrever <code>203.0.113.10</code>, use o <b>seu</b> IP.</p></div>
+        <div class="note n-warn"><b>A instância apareceu sem IP público?</b><p>Aguarde alguns segundos e rode o comando de novo — o IP é atribuído durante a inicialização da máquina, não no instante do lançamento.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O comando retorna uma linha com ID e IP</span></label></li>
+          <li><label><input type="checkbox"><span>Anotei o <b>Instance ID</b></span></label></li>
+          <li><label><input type="checkbox"><span>Anotei o <b>IP público</b></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-8-3">
+        <div class="step-top"><a class="step-id" href="#passo-8-3">8.3</a><h3>Ver todas as instâncias em execução na conta</h3><span class="where w-wsl">WSL</span></div>
+        <p>Passo opcional, mas vale conhecer o comando: é ele que a <a href="#p12">Etapa 12</a> usa para não esquecer nenhuma máquina ligada gerando custo.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=instance-state-name,Values=running" \
+  --query "Reservations[*].Instances[*].{ID:InstanceId,Name:Tags[?Key=='Name']|[0].Value,Lancamento:LaunchTime}" \
+  --output table \
+  --profile formacao_aws</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Sei listar tudo o que está ligado na conta</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p9" data-title="Entrar na máquina remota">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 9</span>
+        <div>
+          <h2>Entrar na máquina remota (SSM e SSH)</h2>
+          <p>O desafio pede <b>os dois caminhos</b> — e é fazendo os dois que se entende por que um é melhor. O <b>9A (SSM) é o principal</b>; o 9B existe para comparação. ~10 min.</p>
+        </div>
+        <span class="phase-count" data-count-for="p9"></span>
+      </div>
+
+      <div class="ascii">
+<pre>
+                                   +-------+
+                      +-----------&gt;|  IAM  |  (autenticacao / permissao)
+                      |            +-------+
+                      |
+ +-------------+      |          (OUTBOUND - o agente inicia)
+ | USER (SSM)  |&lt;-----+-----------------------------+
+ +-------------+      |    [ SSM SESSION ]          |
+                      +-----------------------------|
+                                              +-----+-----------+
+                                              | EC2             |
+ +-------------+   (INBOUND - porta 22)       |   AGENT SSM     |
+ | USER (SSH)  |-----------------------------&gt;|                 |
+ |  chave .pem |      [ CONEXAO SSH ]         |                 |
+ +-------------+                              +-----------------+
+</pre>
+      </div>
+
+      <div class="note n-tip">
+        <b>Requisitos do SSM, dos dois lados</b>
+        <p>Se qualquer uma das cinco pontas faltar, o terminal responde com timeout ou com "instância não está online". Todas já foram resolvidas nas etapas anteriores:</p>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Lado</th><th>Requisito</th><th>Resolvido na</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Máquina local</td><td>AWS CLI configurado, com permissão para <code>ssm:StartSession</code></td><td><a href="#p1">Etapas 1 e 2</a></td></tr>
+            <tr><td>Máquina local</td><td><b>Session Manager Plugin</b> instalado</td><td><a href="#passo-1-2">Etapa 1</a></td></tr>
+            <tr><td>EC2</td><td><code>amazon-ssm-agent</code> rodando (já vem ativo no Amazon Linux 2023)</td><td>—</td></tr>
+            <tr><td>EC2</td><td>Role IAM anexada, com <code>AmazonSSMManagedInstanceCore</code></td><td><a href="#p6">Etapas 6 e 8</a></td></tr>
+            <tr><td>EC2</td><td>Saída para a internet (subnet pública / NAT) ou VPC Endpoints</td><td><a href="#p8">Etapa 8</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="step" id="passo-9-1">
+        <div class="step-top"><a class="step-id" href="#passo-9-1">9.1</a><h3>Abrir a sessão por Session Manager</h3><span class="where w-wsl">WSL</span></div>
+        <p>Troque pelo ID da <b>sua</b> instância, capturado no <a href="#passo-8-2">passo 8.2</a>. Repare no que <b>não</b> existe aqui: nenhuma chave, nenhum IP, nenhuma porta.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ssm start-session --target i-0abcd1234efgh5681 --profile formacao_aws</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Starting session with SessionId: formacao_aws-xxxxxxxxxxxxxxxxxxxxxxxxx
+
+sh-5.2$</pre></div>
+        <div class="note n-warn"><b>Erro falando em plugin?</b><p>O Session Manager Plugin do <a href="#passo-1-2">passo 1.2</a> não foi instalado. O CLI sozinho não abre a sessão interativa.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O prompt virou <code>sh-5.2$</code></span></label></li>
+          <li><label><input type="checkbox"><span>Um <code>SessionId</code> foi impresso</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-9-2">
+        <div class="step-top"><a class="step-id" href="#passo-9-2">9.2</a><h3>Trocar para o usuário de trabalho</h3><span class="where w-ec2">EC2</span></div>
+        <p>Você caiu como <code>ssm-user</code>, que é o usuário do agente. Não é onde a aplicação deve morar.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>sudo su - ec2-user</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>[ec2-user@ip-172-31-15-143 ~]$</pre></div>
+        <div class="note n-tip"><b>Por que não trabalhar onde você caiu</b><p><code>/usr/bin</code> é reservado aos executáveis do sistema operacional e ao gerenciador de pacotes: misturar código de aplicação ali gera <b>conflito</b> — uma atualização do SO pode sobrescrever arquivos.</p><p>Escrever nessas pastas exige <b>root</b>, e rodar aplicação como root é uma falha grave de segurança.</p><p><code>ec2-user</code> é o usuário padrão do Amazon Linux. Em <code>/home/ec2-user</code> você tem controle total para clonar repositórios e instalar bibliotecas <b>sem risco de quebrar o servidor</b>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O prompt virou <code>[ec2-user@ip-...]$</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-9-3">
+        <div class="step-top"><a class="step-id" href="#passo-9-3">9.3</a><h3>Provar que a sessão é mesmo SSM</h3><span class="where w-ec2">EC2</span></div>
+        <p>Este passo não conserta nada — ele produz a <b>evidência</b> que o desafio pede. A árvore de processos mostra por onde a conexão entrou.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>ps -ef --forest | grep ssm</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>root        1427       1  /usr/bin/amazon-ssm-agent
+root        1528    1427   \_ /usr/bin/ssm-agent-worker
+root        3792    1528       \_ /usr/bin/ssm-session-worker formacao_aws-xxxxxxxx
+ssm-user    3805    3792           \_ sh</pre></div>
+        <p>A presença de <b><code>/usr/bin/ssm-session-worker</code></b> é a prova categórica: a conexão foi estabelecida pelo Systems Manager, <b>sem a porta 22 aberta para a internet</b>.</p>
+        <div class="ascii">
+<pre>
+amazon-ssm-agent  (PID 1427) - servico base, escuta pedidos de conexao da AWS
+   +-- ssm-agent-worker (PID 1528) - gerencia tarefas e processos da maquina
+        +-- ssm-session-worker (PID 3792) - criado exclusivamente para a SUA sessao
+             +-- sh (PID 3805) - shell inicial, sob o usuario 'ssm-user'
+                  +-- su - ec2-user - ambiente de trabalho seguro
+</pre>
+        </div>
+        <div class="note n-warn"><b>Para sair, um <code>exit</code> não basta</b><p>Há camadas empilhadas: <code>ec2-user</code> &rarr; <code>ssm-user</code> &rarr; terminal local. O primeiro <code>exit</code> devolve ao <code>ssm-user</code> (o prompt vira <code>sh-5.2$</code> e parece que travou); o segundo encerra o túnel e devolve o controle ao WSL.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>ssm-session-worker</code> aparece na árvore</span></label></li>
+          <li><label><input type="checkbox"><span>Guardei este print como evidência da entrega</span></label></li>
+        </ul></div>
+      </div>
+
+      <details class="fallback">
+        <summary>9B — SSH tradicional, o caminho alternativo (opcional, exige uma segunda instância)</summary>
+        <p>Aqui a lógica se inverte: em vez de a máquina chamar a AWS, <b>é você que bate na porta dela</b> — e por isso é preciso abrir uma regra de entrada.</p>
+        <div class="note n-warn"><b>A instância da Etapa 8 não serve para este caminho</b><p>O <code>lancar_ec2_zona_a.sh</code> não anexa key pair nenhum, e uma chave SSH <b>só pode ser associada no momento em que a instância nasce</b> — não dá para acrescentar depois. Então este caminho usa uma <b>segunda instância</b>, criada só para a demonstração (<code>bia-dev-ssh</code>).</p><p>Se o seu objetivo é cumprir o desafio pelo caminho recomendado, pule para a <a href="#p10">Etapa 10</a> — o 9A já entrega o acesso à máquina.</p></div>
+
+        <p><b>1. Criar o par de chaves</b> — antes de lançar a instância, não depois.</p>
+        <div class="cmd"><span class="cmd-label">WSL</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 create-key-pair \
+  --key-name formacao \
+  --query "KeyMaterial" \
+  --output text \
+  --profile formacao_aws &gt; ~/formacao.pem</pre></div>
+
+        <p><b>2. Restringir a permissão da chave.</b> O SSH é rigoroso: se o <code>.pem</code> puder ser lido por qualquer usuário do sistema, a conexão é <b>recusada</b>.</p>
+        <div class="cmd"><span class="cmd-label">WSL</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>chmod 400 ~/formacao.pem
+
+<span class="c"># se voce nao lembra onde salvou a chave:</span>
+<span class="p">$ </span>find / -name "formacao.pem" 2&gt;/dev/null</pre></div>
+        <div class="note n-key"><b>Nunca versione um <code>.pem</code></b><p>O <code>.gitignore</code> deste repositório já bloqueia <code>*.pem</code>, <code>*.ppk</code> e <code>*.csv</code>.</p></div>
+
+        <p><b>3. Security Group dedicado:</b> <code>EC2</code> &rarr; <code>Security Groups</code> &rarr; <code>Create security group</code></p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
+            <tbody>
+              <tr><td>Security group name</td><td><code>bia-dev-ssh</code></td></tr>
+              <tr><td>Description</td><td>acesso por ssh</td></tr>
+              <tr><td>Inbound — Type</td><td>SSH</td></tr>
+              <tr><td>Inbound — Source</td><td><b>My IP</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-tip"><b>Por que <code>My IP</code> e não <code>Anywhere-IPv4</code></b><p>A porta 22 é o alvo mais varrido da internet. Restringir à origem conhecida é o mínimo — e mesmo assim continua sendo uma porta aberta, que é exatamente o que o SSM elimina.</p></div>
+
+        <p><b>4. Lançar a segunda instância</b> pelo Console (<code>EC2</code> &rarr; <code>Launch instance</code>), com <b>quatro</b> requisitos: Amazon Linux 2023, o key pair <code>formacao</code> do passo 1, o Security Group <code>bia-dev-ssh</code> do passo 3 e <b>IPv4 público habilitado</b>. Sem o IP público não há como alcançar a máquina de fora.</p>
+        <div class="cmd"><span class="cmd-label">WSL — capturar o IP dela</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=bia-dev-ssh" "Name=instance-state-name,Values=running" \
+  --query "Reservations[].Instances[].PublicIpAddress" \
+  --output text \
+  --profile formacao_aws</pre></div>
+
+        <p><b>5. Conectar:</b></p>
+        <div class="cmd"><span class="cmd-label">WSL</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>ssh -i ~/formacao.pem ec2-user@203.0.113.10</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>   ,     #_
+   ~\_  ####_        Amazon Linux 2023
+  ~~  \_#####\
+  ~~     \###|
+  ~~       \#/ ___   https://aws.amazon.com/linux/amazon-linux-2023
+   ~~       V~' '-&gt;
+    ~~~         /
+      ~~._.   _/
+         _/ _/
+       _/m/'
+
+[ec2-user@ip-172-31-4-102 ~]$</pre></div>
+
+        <p><b>A prova de que a sessão é SSH:</b></p>
+        <div class="cmd"><span class="cmd-label">EC2</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>echo $SSH_CLIENT</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>203.0.113.45 53650 22        # IP de origem, porta local, porta de destino 22</pre></div>
+        <p>A porta <b>22</b> no <code>$SSH_CLIENT</code> é o carimbo: essa sessão entrou pelo SSH, não pelo SSM.</p>
+        <div class="check"><div class="check-label">Checklist do 9B</div><ul>
+          <li><label><input type="checkbox"><span>Par de chaves criado e com <code>chmod 400</code></span></label></li>
+          <li><label><input type="checkbox"><span>SG <code>bia-dev-ssh</code> com origem <b>My IP</b></span></label></li>
+          <li><label><input type="checkbox"><span>Segunda instância no ar, com IP público</span></label></li>
+          <li><label><input type="checkbox"><span><code>echo $SSH_CLIENT</code> termina em <code>22</code></span></label></li>
+        </ul></div>
+      </details>
+
+      <div class="note n-tip">
+        <b>A inversão que explica os dois caminhos</b>
+        <p>No SSH, <i>eu</i> bato na porta do servidor — por isso preciso abri-la. No SSM, o <b>agente dentro da EC2</b> é quem inicia a comunicação de saída com o serviço da AWS. Não há porta para abrir, e não há porta para atacar.</p>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Característica</th><th>SSH tradicional</th><th>AWS SSM (Session Manager)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Autenticação</td><td>Arquivo de chave <code>.pem</code></td><td><b>AWS IAM</b> (usuários / roles)</td></tr>
+            <tr><td>Portas de entrada</td><td>Requer a <b>porta 22 aberta</b></td><td><b>Zero portas abertas</b></td></tr>
+            <tr><td>Direção do tráfego</td><td><i>Inbound</i> (entra na EC2)</td><td><i>Outbound</i> (a EC2 chama o SSM)</td></tr>
+            <tr><td>Necessidade de IP público</td><td>Sim (ou bastion host / VPN)</td><td>Não — pode ser 100% privada</td></tr>
+            <tr><td>Gestão de chaves</td><td>Manual, com compartilhamento de arquivo</td><td>Centralizada pelo IAM</td></tr>
+            <tr><td>Auditoria e logs</td><td>Logs locais no Linux</td><td><b>CloudTrail, S3 e CloudWatch</b></td></tr>
+            <tr><td>Superfície de ataque</td><td>Alta (porta exposta na internet)</td><td><b>Mínima</b></td></tr>
+            <tr><td>Suporte a MFA / SSO</td><td>Não nativo</td><td>Nativo, via IAM</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="phase" id="p10" data-title="Rodar a aplicação na EC2">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 10</span>
+        <div>
+          <h2>Rodar a aplicação BIA na EC2</h2>
+          <p>É a carga de trabalho — o que justifica toda a infraestrutura montada até aqui. ~5 min, dentro da sessão aberta na Etapa 9.</p>
+        </div>
+        <span class="phase-count" data-count-for="p10"></span>
+      </div>
+
+      <div class="step" id="passo-10-1">
+        <div class="step-top"><a class="step-id" href="#passo-10-1">10.1</a><h3>Clonar o projeto e subir os contêineres</h3><span class="where w-ec2">EC2</span></div>
+        <p>Este <code>git clone</code> é <b>dentro da EC2</b>, e é diferente do da <a href="#p4">Etapa 4</a>, que foi na sua máquina. São duas cópias do mesmo projeto em lugares diferentes: a local serve para rodar os scripts e fazer o build; a remota serve para rodar a aplicação.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>git clone https://github.com/henrylle/bia
+<span class="p">$ </span>cd bia
+<span class="p">$ </span>docker compose up -d
+<span class="p">$ </span>docker compose ps</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — três contêineres no ar</span><pre>NAME       IMAGE                       STATUS   PORTS
+bia        bia-server                  Up       0.0.0.0:3001-&gt;8080/tcp
+database   postgres:17.1               Up       0.0.0.0:5433-&gt;5432/tcp
+redis      valkey/valkey:8.1-alpine    Up       0.0.0.0:6379-&gt;6379/tcp</pre></div>
+        <div class="note n-tip"><b>Onde as duas etapas se encontram</b><p>A porta <b>3001</b> liberada no Security Group da <a href="#p5">Etapa 5</a> é exatamente a que o contêiner <code>bia</code> publica no host. O tráfego que chega em 3001 é redirecionado para a 8080 de dentro do contêiner.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Os três contêineres aparecem como <code>Up</code></span></label></li>
+          <li><label><input type="checkbox"><span>O contêiner <code>bia</code> mostra <code>0.0.0.0:3001-&gt;8080/tcp</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-10-2">
+        <div class="step-top"><a class="step-id" href="#passo-10-2">10.2</a><h3>Abrir a aplicação no navegador</h3><span class="where w-web">NAVEGADOR</span></div>
+        <p>No navegador do Windows, usando o <b>IP público</b> capturado no <a href="#passo-8-2">passo 8.2</a>:</p>
+        <div class="cmd"><span class="cmd-label">Endereço</span><button class="copy" type="button">copiar</button><pre>http://203.0.113.10:3001</pre></div>
+        <div class="note n-warn">
+          <b>A página não abre? Cheque nesta ordem</b>
+          <p>1. O contêiner <code>bia</code> está <code>Up</code> com <code>0.0.0.0:3001-&gt;8080/tcp</code> no <code>docker compose ps</code>.</p>
+          <p>2. O Security Group <code>bia-dev</code> da <a href="#p5">Etapa 5</a> libera TCP 3001.</p>
+          <p>3. O IP usado é o <b>público</b>, e não o <code>172.31.x.x</code> que aparece no prompt da EC2.</p>
+          <p>Se for o item 2, o navegador fica carregando até dar timeout — é o Gate 1 barrando a conexão antes de o IAM sequer ser consultado.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A interface da BIA carrega na porta 3001</span></label></li>
+          <li><label><input type="checkbox"><span>Guardei o print da aplicação no ar</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p11" data-title="Build e push para o ECR">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 11</span>
+        <div>
+          <h2>Build e push da imagem para o ECR</h2>
+          <p>Esta é a entrega do Dia 2: construir a imagem <b>na sua máquina local</b> e publicá-la no registry privado da AWS. ~10 min.</p>
+        </div>
+        <span class="phase-count" data-count-for="p11"></span>
+      </div>
+
+      <div class="note n-warn"><b>Aqui você sai da EC2 e volta para o WSL</b><p>Se ainda estiver dentro da máquina remota, digite <code>exit</code> até voltar ao prompt <code>dev@wsl:~$</code> — lembrando que, pelo SSM, é <a href="#passo-9-3">mais de um <code>exit</code></a>.</p></div>
+
+      <div class="step" id="passo-11-1">
+        <div class="step-top"><a class="step-id" href="#passo-11-1">11.1</a><h3>Criar o repositório no ECR</h3><span class="where w-wsl">WSL</span></div>
+        <p>O ECR é um registry <b>privado</b>: a imagem não fica pública como no Docker Hub, e o acesso é controlado pelo IAM — a mesma policy da <a href="#passo-2-2">Etapa 2</a>.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecr create-repository --repository-name bia --region us-east-1 --profile formacao_aws</pre></div>
+        <div class="note n-tip"><b>Pelo Console dá no mesmo</b><p><code>ECR</code> &rarr; <code>Create repository</code> &rarr; nome <code>bia</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O repositório <code>bia</code> foi criado</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-11-2">
+        <div class="step-top"><a class="step-id" href="#passo-11-2">11.2</a><h3>Autenticar o Docker local no ECR</h3><span class="where w-wsl">WSL</span></div>
+        <p>O Docker não entende IAM. Este comando pede um token à AWS e o entrega ao <code>docker login</code> — é a ponte entre as duas autenticações. Troque <code>111122223333</code> pelo seu Account ID, o mesmo do <a href="#passo-3-3">passo 3.3</a>.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecr get-login-password --region us-east-1 --profile formacao_aws \
+  | docker login --username AWS --password-stdin 111122223333.dkr.ecr.us-east-1.amazonaws.com</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Login Succeeded</pre></div>
+        <div class="note n-warn"><b><code>docker: command not found</code> ou erro de daemon?</b><p>A integração do Docker Desktop com o WSL não está ligada. Volte ao <a href="#passo-0-2">passo 0.2</a>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Apareceu <code>Login Succeeded</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-11-3">
+        <div class="step-top"><a class="step-id" href="#passo-11-3">11.3</a><h3>Build, tag e push</h3><span class="where w-wsl">WSL</span></div>
+        <p>A <code>tag</code> não é cosmética: é ela que diz ao Docker <b>para onde</b> o <code>push</code> deve ir. Uma imagem sem a URI do registry na tag é enviada para o Docker Hub, não para o seu ECR.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cd ~/bia
+<span class="p">$ </span>docker build -t bia .
+<span class="p">$ </span>docker tag bia:latest 111122223333.dkr.ecr.us-east-1.amazonaws.com/bia:latest
+<span class="p">$ </span>docker push 111122223333.dkr.ecr.us-east-1.amazonaws.com/bia:latest</pre></div>
+        <details class="fallback">
+          <summary>Alternativa: o script de build que já vem no projeto</summary>
+          <p>O projeto BIA traz um script pronto para isso — basta copiá-lo e apontar para o seu registry:</p>
+          <div class="cmd"><span class="cmd-label">WSL</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cp scripts/ecs/unix/build.sh .
+<span class="p">$ </span>nano build.sh    <span class="c"># trocar ECR_REGISTRY="SEU_REGISTRY" pela URI do seu ECR</span>
+<span class="p">$ </span>chmod +x build.sh
+<span class="p">$ </span>./build.sh</pre></div>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O <code>docker build</code> terminou sem erro</span></label></li>
+          <li><label><input type="checkbox"><span>O <code>push</code> terminou e mostrou o digest da imagem</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-11-4">
+        <div class="step-top"><a class="step-id" href="#passo-11-4">11.4</a><h3>Conferir o resultado</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecr describe-repositories --region us-east-1</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>{
+    "repositories": [
+        {
+            "repositoryArn": "arn:aws:ecr:us-east-1:111122223333:repository/bia",
+            "registryId": "111122223333",
+            "repositoryName": "bia",
+            "repositoryUri": "111122223333.dkr.ecr.us-east-1.amazonaws.com/bia",
+            "imageTagMutability": "MUTABLE",
+            "imageScanningConfiguration": { "scanOnPush": false },
+            "encryptionConfiguration": { "encryptionType": "AES256" }
+        }
+    ]
+}</pre></div>
+        <div class="cmd"><span class="cmd-label">Checkpoint — a imagem está lá dentro</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecr list-images --repository-name bia --region us-east-1 --profile formacao_aws</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O repositório aparece com a <code>repositoryUri</code> da sua conta</span></label></li>
+          <li><label><input type="checkbox"><span><code>list-images</code> lista a imagem <code>latest</code></span></label></li>
+          <li><label><input type="checkbox"><span>Guardei o print do repositório no Console</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p12" data-title="Limpar tudo">
+      <div class="phase-head">
+        <span class="phase-n">ETAPA 12</span>
+        <div>
+          <h2>Limpar tudo para não gerar custo</h2>
+          <p>Uma EC2 esquecida ligada continua sendo cobrada. Esta é a etapa que quase nenhum tutorial documenta e que todo mundo deveria executar. ~5 min.</p>
+        </div>
+        <span class="phase-count" data-count-for="p12"></span>
+      </div>
+
+      <div class="note n-key"><b>Execute isto só depois de tirar os prints</b><p>Valide antes as entregas da seção <a href="#p-entrega">Entrega</a>. Depois daqui não há mais o que fotografar.</p></div>
+      <div class="note n-tip"><b>A ordem importa</b><p>Recursos em uso não podem ser apagados: a instância segura o Security Group, e a role segura o instance profile. Siga os passos na sequência.</p></div>
+
+      <div class="step" id="passo-12-1">
+        <div class="step-top"><a class="step-id" href="#passo-12-1">12.1</a><h3>Listar tudo o que ainda está de pé</h3><span class="where w-wsl">WSL</span></div>
+        <p>Inclusive a segunda instância, se você tiver feito o 9B. É fácil esquecer justamente aquela que foi criada "só para testar".</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=instance-state-name,Values=running" \
+  --query "Reservations[].Instances[].{ID:InstanceId,Name:Tags[?Key=='Name']|[0].Value}" \
+  --output table \
+  --profile formacao_aws</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Anotei o ID de <b>todas</b> as instâncias listadas</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-12-2">
+        <div class="step-top"><a class="step-id" href="#passo-12-2">12.2</a><h3>Terminar as instâncias</h3><span class="where w-wsl">WSL</span></div>
+        <p>O <code>wait</code> não é enfeite: sem ele o passo seguinte falha, porque o Security Group ainda está preso a uma instância que não terminou de morrer.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="c"># use os SEUS IDs; separe por espaco se houver mais de uma</span>
+<span class="p">$ </span>INSTANCE_IDS="i-0abcd1234efgh5681 i-0abcd1234efgh5679"
+
+<span class="p">$ </span>aws ec2 terminate-instances --instance-ids $INSTANCE_IDS --profile formacao_aws
+
+<span class="c"># aguarda ate estarem de fato terminadas (pode levar cerca de 1 minuto)</span>
+<span class="p">$ </span>aws ec2 wait instance-terminated --instance-ids $INSTANCE_IDS --profile formacao_aws</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O <code>wait</code> retornou (o prompt voltou)</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-12-3">
+        <div class="step-top"><a class="step-id" href="#passo-12-3">12.3</a><h3>Apagar os Security Groups</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 delete-security-group --group-name bia-dev --profile formacao_aws
+
+<span class="c"># so se voce tiver feito a Etapa 9B</span>
+<span class="p">$ </span>aws ec2 delete-security-group --group-name bia-dev-ssh --profile formacao_aws</pre></div>
+        <div class="note n-warn"><b>Erro de dependência?</b><p>Alguma instância ainda usa o SG. Volte ao passo 12.2 e confirme que o <code>wait</code> terminou.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>bia-dev</code> apagado</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-12-4">
+        <div class="step-top"><a class="step-id" href="#passo-12-4">12.4</a><h3>Apagar o repositório do ECR</h3><span class="where w-wsl">WSL</span></div>
+        <p>O <code>--force</code> remove também as imagens que estão dentro dele — sem ele, o comando recusa apagar um repositório não vazio.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecr delete-repository --repository-name bia --force --region us-east-1 --profile formacao_aws</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O repositório <code>bia</code> não existe mais</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-12-5">
+        <div class="step-top"><a class="step-id" href="#passo-12-5">12.5</a><h3>Desfazer a role e o instance profile</h3><span class="where w-wsl">WSL</span></div>
+        <p>São quatro comandos porque a role foi montada em camadas: tirar a role do instance profile, apagar o profile, destacar a policy gerenciada e só então apagar a role.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws iam remove-role-from-instance-profile \
+  --instance-profile-name role-acesso-ssm \
+  --role-name role-acesso-ssm \
+  --profile formacao_aws
+
+<span class="p">$ </span>aws iam delete-instance-profile --instance-profile-name role-acesso-ssm --profile formacao_aws
+
+<span class="p">$ </span>aws iam detach-role-policy \
+  --role-name role-acesso-ssm \
+  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore \
+  --profile formacao_aws
+
+<span class="p">$ </span>aws iam delete-role --role-name role-acesso-ssm --profile formacao_aws</pre></div>
+        <div class="note n-tip"><b>O <code>delete-role</code> reclamou de policies ainda anexadas?</b><p>Liste as que sobraram e destaque uma a uma antes de repetir:</p></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws iam list-attached-role-policies --role-name role-acesso-ssm --profile formacao_aws</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A role <code>role-acesso-ssm</code> não aparece mais em <code>IAM</code> &rarr; <code>Roles</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-12-6">
+        <div class="step-top"><a class="step-id" href="#passo-12-6">12.6</a><h3>Apagar o par de chaves</h3><span class="where w-wsl">WSL</span></div>
+        <p>Só se você tiver feito a Etapa 9B. Apague nos dois lugares: na AWS e no disco.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 delete-key-pair --key-name formacao --profile formacao_aws
+<span class="p">$ </span>rm -f ~/formacao.pem</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Chave apagada na AWS e no disco (ou 9B não foi feito)</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-12-7">
+        <div class="step-top"><a class="step-id" href="#passo-12-7">12.7</a><h3>Encerrar a sessão e confirmar que não sobrou nada</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws logout --profile formacao_aws</pre></div>
+        <div class="cmd"><span class="cmd-label">Checkpoint</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=bia-dev" "Name=instance-state-name,Values=running" \
+  --query "Reservations[].Instances[].InstanceId" \
+  --output text \
+  --profile formacao_aws</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — vazia</span><pre>(nenhuma linha — nada mais esta de pe)</pre></div>
+        <div class="note n-tip"><b>Confira o custo nos dias seguintes</b><p><code>Billing</code> &rarr; <code>Cost Explorer</code> no Console, para confirmar que nada ficou rodando.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O comando não retorna nenhuma instância</span></label></li>
+          <li><label><input type="checkbox"><span>Sessão encerrada com <code>aws logout</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p-entrega" data-title="Checklist de entrega">
+      <div class="phase-head">
+        <span class="phase-n">ENTREGA</span>
+        <div>
+          <h2>Checklist de entrega</h2>
+          <p>Os itens que o desafio pede, cada um ligado à etapa que o produz. Marque aqui antes de rodar a <a href="#p12">Etapa 12</a> — depois da limpeza não há mais como comprovar.</p>
+        </div>
+        <span class="phase-count" data-count-for="p-entrega"></span>
+      </div>
+
+      <div class="step" id="entrega-1">
+        <div class="step-top"><a class="step-id" href="#entrega-1">1</a><h3>Fundação</h3></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>AWS CLI v2 instalado e funcional no WSL — <a href="#passo-1-1">Etapa 1</a></span></label></li>
+          <li><label><input type="checkbox"><span>SAM CLI instalado — <a href="#passo-1-4">Etapa 1</a></span></label></li>
+          <li><label><input type="checkbox"><span>Node.js instalado — <a href="#passo-1-3">Etapa 1</a></span></label></li>
+          <li><label><input type="checkbox"><span>Session Manager Plugin instalado (<code>aws ssm --version</code>) — <a href="#passo-1-2">Etapa 1</a></span></label></li>
+          <li><label><input type="checkbox"><span>Usuário IAM criado com policies de SSM e ECR — <a href="#p2">Etapa 2</a></span></label></li>
+          <li><label><input type="checkbox"><span>Credenciais configuradas no terminal — <a href="#p3">Etapa 3</a></span></label></li>
+          <li><label><input type="checkbox"><span>Migração para credenciais temporárias (<code>aws login</code> + <code>SignInLocalDevelopmentAccess</code>) — <a href="#passo-3-1">Etapa 3</a></span></label></li>
+          <li><label><input type="checkbox"><span>Máquina de trabalho <code>bia-dev</code> lançada — <a href="#p8">Etapa 8</a></span></label></li>
+          <li><label><input type="checkbox"><span>Conexão do WSL para a <code>bia-dev</code> <b>por SSM</b>, comprovada via <code>ssm-session-worker</code> — <a href="#passo-9-3">Etapa 9A</a></span></label></li>
+          <li><label><input type="checkbox"><span>Conexão do WSL para a EC2 <b>por SSH</b>, comprovada via <code>$SSH_CLIENT</code> na porta 22 — <a href="#p9">Etapa 9B</a></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="entrega-2">
+        <div class="step-top"><a class="step-id" href="#entrega-2">2</a><h3>Dia 1 — infraestrutura e permissões</h3></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Security Group <code>bia-dev</code> criado (TCP 3001) — <a href="#p5">Etapa 5</a></span></label></li>
+          <li><label><input type="checkbox"><span>Role <code>role-acesso-ssm</code> criada por script — <a href="#p6">Etapa 6</a></span></label></li>
+          <li><label><input type="checkbox"><span>EC2 <code>bia-dev</code> lançada <b>via script</b> (<code>lancar_ec2_zona_a.sh</code>) — <a href="#p8">Etapa 8</a></span></label></li>
+          <li><label><input type="checkbox"><span>Permissões IAM configuradas <b>no usuário</b>, e não apenas na role — <a href="#passo-6-2">Etapa 6</a></span></label></li>
+          <li><label><input type="checkbox"><span>Comunicação com o ECR testada (<code>aws ecr describe-repositories</code>) — <a href="#passo-3-4">Etapa 3</a></span></label></li>
+          <li><label><input type="checkbox"><span>Aplicação BIA rodando em contêiner na porta 3001 — <a href="#p10">Etapa 10</a></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="entrega-3">
+        <div class="step-top"><a class="step-id" href="#entrega-3">3</a><h3>Dia 2 — Docker e ECR</h3></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Docker habilitado no WSL via <i>WSL Integration</i> — <a href="#passo-0-2">Etapa 0</a></span></label></li>
+          <li><label><input type="checkbox"><span>Docker autenticado no ECR (<code>Login Succeeded</code>) — <a href="#passo-11-2">Etapa 11</a></span></label></li>
+          <li><label><input type="checkbox"><span>Repositório <code>bia</code> criado no ECR — <a href="#passo-11-1">Etapa 11</a></span></label></li>
+          <li><label><input type="checkbox"><span><code>docker build</code> executado a partir do WSL — <a href="#passo-11-3">Etapa 11</a></span></label></li>
+          <li><label><input type="checkbox"><span><code>docker push</code> da imagem para o ECR concluído — <a href="#passo-11-3">Etapa 11</a></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="entrega-4">
+        <div class="step-top"><a class="step-id" href="#entrega-4">4</a><h3>Encerramento</h3></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Prints e evidências guardados antes da limpeza</span></label></li>
+          <li><label><input type="checkbox"><span>Todos os recursos destruídos — <a href="#p12">Etapa 12</a></span></label></li>
+          <li><label><input type="checkbox"><span>Nenhuma instância aparece no checkpoint final</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p-erros" data-title="Quando der errado">
+      <div class="phase-head">
+        <span class="phase-n">ANEXO</span>
+        <div>
+          <h2>Quando der errado</h2>
+          <p>Os erros que aparecem neste laboratório, e o que cada um está realmente dizendo. Nenhum deles é sinal de que você fez algo irreparável.</p>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Mensagem</th><th>O que está acontecendo</th><th>Onde resolver</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>[ERRO] Tenho um problema ao retornar a VPC default</code> — e todas as outras linhas como erro</td>
+              <td>Os recursos existem. O script chama <code>aws ec2 ...</code> sem <code>--profile</code>, então o CLI usa o profile <i>default</i>, que está vazio</td>
+              <td><a href="#passo-7-2">Passo 7.2</a> — <code>export AWS_PROFILE=formacao_aws</code></td>
+            </tr>
+            <tr>
+              <td><code>AccessDenied ... is not authorized to perform: iam:CreateRole</code></td>
+              <td>O usuário tem permissão de <b>usar</b> SSM e ECR, mas nenhuma de <b>criar</b> identidades IAM. É o erro esperado na primeira execução</td>
+              <td><a href="#passo-6-2">Passo 6.2</a> — inline policy com as sete ações</td>
+            </tr>
+            <tr>
+              <td>O mesmo <code>AccessDenied</code> em <code>CreateInstanceProfile</code>, <code>AddRoleToInstanceProfile</code> ou <code>AttachRolePolicy</code></td>
+              <td>Mesma causa: a inline policy ainda não foi anexada, ou foi anexada sem alguma das ações</td>
+              <td><a href="#passo-6-2">Passo 6.2</a></td>
+            </tr>
+            <tr>
+              <td><code>docker: command not found</code> dentro do Ubuntu</td>
+              <td>O Docker Desktop não está exposto para a distro Linux — a <i>WSL Integration</i> não foi ativada</td>
+              <td><a href="#passo-0-2">Passo 0.2</a></td>
+            </tr>
+            <tr>
+              <td><code>gio: ... : Operation not supported</code> no <code>aws login</code></td>
+              <td>O WSL não conseguiu abrir o navegador do Windows. <b>Não é fatal</b>: o comando imprime a URL de autorização</td>
+              <td><a href="#passo-3-1">Passo 3.1</a> — copie a URL e abra no navegador</td>
+            </tr>
+            <tr>
+              <td>Mensagem sobre <b>plugin ausente</b> no <code>aws ssm start-session</code></td>
+              <td>O Session Manager Plugin não está instalado. O CLI sozinho não abre a sessão interativa</td>
+              <td><a href="#passo-1-2">Passo 1.2</a></td>
+            </tr>
+            <tr>
+              <td>O <code>exit</code> não volta para o WSL — o prompt vira <code>sh-5.2$</code></td>
+              <td>Não é erro: há camadas empilhadas. O primeiro <code>exit</code> encerra o <code>ec2-user</code> e devolve ao <code>ssm-user</code>; o segundo encerra o túnel</td>
+              <td><a href="#passo-9-3">Passo 9.3</a> — digite <code>exit</code> de novo</td>
+            </tr>
+            <tr>
+              <td>A instância aparece <b>sem IP público</b> no <code>describe-instances</code></td>
+              <td>O IP é atribuído durante a inicialização, não no instante do lançamento</td>
+              <td><a href="#passo-8-2">Passo 8.2</a> — aguarde e repita o comando</td>
+            </tr>
+            <tr>
+              <td>A página na porta 3001 fica carregando até dar <b>timeout</b></td>
+              <td>O Gate 1 está barrando: o Security Group não libera TCP 3001, ou libera outra porta</td>
+              <td><a href="#p5">Etapa 5</a></td>
+            </tr>
+            <tr>
+              <td>A página na porta 3001 recusa a conexão na hora</td>
+              <td>O contêiner não está de pé, ou o IP usado é o privado <code>172.31.x.x</code> do prompt da EC2 em vez do público</td>
+              <td><a href="#passo-10-2">Passo 10.2</a> — os três checks, na ordem</td>
+            </tr>
+            <tr>
+              <td><code>Permission denied</code> ao rodar <code>./scripts/...</code></td>
+              <td>Os scripts vieram sem bit de execução</td>
+              <td><a href="#passo-4-1">Passo 4.1</a> — <code>chmod +x scripts/*.sh</code></td>
+            </tr>
+            <tr>
+              <td><code>AccessDeniedException</code> no <code>aws ecr describe-repositories</code></td>
+              <td>Falta a policy <code>AmazonEC2ContainerRegistryFullAccess</code>, ou a sessão está no profile errado</td>
+              <td><a href="#passo-2-2">Passo 2.2</a> e <a href="#passo-3-2">passo 3.2</a></td>
+            </tr>
+            <tr>
+              <td>O <code>docker push</code> vai para o Docker Hub em vez do ECR</td>
+              <td>A imagem foi marcada sem a URI do registry na tag</td>
+              <td><a href="#passo-11-3">Passo 11.3</a> — a tag precisa começar com <code>&lt;account-id&gt;.dkr.ecr...</code></td>
+            </tr>
+            <tr>
+              <td><code>DependencyViolation</code> no <code>delete-security-group</code></td>
+              <td>Alguma instância ainda usa o Security Group</td>
+              <td><a href="#passo-12-2">Passo 12.2</a> — espere o <code>wait instance-terminated</code> terminar</td>
+            </tr>
+            <tr>
+              <td><code>DeleteConflict</code> no <code>delete-role</code>, falando em policies anexadas</td>
+              <td>Sobrou alguma policy presa à role</td>
+              <td><a href="#passo-12-5">Passo 12.5</a> — <code>list-attached-role-policies</code> e destaque uma a uma</td>
+            </tr>
+            <tr>
+              <td>O repositório do ECR se recusa a ser apagado</td>
+              <td>Ele ainda tem imagens dentro</td>
+              <td><a href="#passo-12-4">Passo 12.4</a> — use <code>--force</code></td>
+            </tr>
+            <tr>
+              <td>O SSH recusa a conexão citando permissões do arquivo de chave</td>
+              <td>O <code>.pem</code> pode ser lido por outros usuários do sistema</td>
+              <td>Etapa 9B — <code>chmod 400 ~/formacao.pem</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note n-tip">
+        <b>Quer o registro completo, com diagnóstico e aprendizado de cada um?</b>
+        <p>A seção <i>Problemas encontrados e como resolvi</i> do <code>README.md</code> conta a história de cada erro — e a seção <i>Decisões técnicas</i> explica por que WSL 2 em vez de VirtualBox, e por que SSM em vez de SSH.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <p>Desafio 2 da mentoria <b>Desafios Fundamentais</b> — Formação AWS, por Henrylle Maia. Projeto BIA (<span class="mono">github.com/henrylle/bia</span>).</p>
+  <p>Roteiro extraído do <span class="mono">README.md</span> deste repositório, que continua sendo a fonte autoritativa dos comandos e o lugar das decisões técnicas, dos problemas encontrados e do que foi aprendido.</p>
+  <p>Os identificadores são <b>fictícios</b>: <span class="mono">111122223333</span> como Account ID, <span class="mono">203.0.113.10</span> na faixa de documentação da RFC 5737 e <span class="mono">i-0abcd1234efgh5681</span> como instância. Conta, IPs, IDs de recurso e nome de profile são os do <b>seu</b> ambiente.</p>
+  <p>Progresso e tema ficam salvos apenas neste navegador. <b>Não pule a Etapa 12</b> — uma EC2 esquecida ligada continua sendo cobrada.</p>
+</footer>
+<script>
+(function () {
+  var STORE = "desafio2-guia-v1";
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.phase"));
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORE) || "{}"); }
+    catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
+  }
+
+  var state = load();
+  var boxes = [];
+
+  sections.forEach(function (sec) {
+    var list = Array.prototype.slice.call(sec.querySelectorAll('input[type="checkbox"]'));
+    list.forEach(function (box, i) {
+      box.dataset.k = sec.id + ":" + i;
+      if (state[box.dataset.k]) { box.checked = true; }
+      box.addEventListener("change", function () {
+        state[box.dataset.k] = box.checked;
+        save(state);
+        render();
+      });
+      boxes.push(box);
+    });
+  });
+
+  /* ---- sumario ---- */
+  var toc = document.getElementById("toc");
+  var links = {};
+  sections.forEach(function (sec) {
+    var badge = sec.querySelector(".phase-n");
+    var raw = badge ? badge.textContent.trim() : "";
+    var short = /^(FASE|ETAPA)/i.test(raw) ? raw.charAt(0) + raw.replace(/\D/g, "") : raw.slice(0, 4);
+    var a = document.createElement("a");
+    a.href = "#" + sec.id;
+    a.innerHTML = "<b>" + short + "</b><span>" + (sec.dataset.title || "") + "</span>";
+    toc.appendChild(a);
+    links[sec.id] = a;
+  });
+
+  /* ---- progresso ---- */
+  var fill = document.getElementById("progFill");
+  var num = document.getElementById("progNum");
+
+  function render() {
+    var done = boxes.filter(function (b) { return b.checked; }).length;
+    var pct = boxes.length ? Math.round((done / boxes.length) * 100) : 0;
+    fill.style.width = pct + "%";
+    num.textContent = done + " / " + boxes.length;
+
+    sections.forEach(function (sec) {
+      var list = Array.prototype.slice.call(sec.querySelectorAll('input[type="checkbox"]'));
+      var ok = list.filter(function (b) { return b.checked; }).length;
+      var counter = sec.querySelector("[data-count-for]");
+      if (counter && list.length) {
+        counter.textContent = ok + "/" + list.length;
+        counter.classList.toggle("full", ok === list.length);
+      }
+      var link = links[sec.id];
+      if (link) { link.classList.toggle("done", list.length > 0 && ok === list.length); }
+    });
+  }
+
+  document.getElementById("reset").addEventListener("click", function () {
+    if (!window.confirm("Desmarcar todos os itens do checklist?")) { return; }
+    state = {};
+    save(state);
+    boxes.forEach(function (b) { b.checked = false; });
+    render();
+  });
+
+  /* ---- copiar comandos ---- */
+  Array.prototype.forEach.call(document.querySelectorAll(".copy"), function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = btn.parentNode.querySelector("pre");
+      if (!pre) { return; }
+      var text = Array.prototype.map.call(pre.childNodes, function (n) {
+        if (n.nodeType === 1 && n.classList.contains("p")) { return ""; }
+        return n.textContent;
+      }).join("");
+
+      var done = function () {
+        btn.textContent = "copiado";
+        btn.classList.add("ok");
+        setTimeout(function () { btn.textContent = "copiar"; btn.classList.remove("ok"); }, 1600);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text, done); });
+      } else {
+        fallback(text, done);
+      }
+    });
+  });
+
+  function fallback(text, done) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  /* ---- secao ativa ---- */
+  if ("IntersectionObserver" in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          Object.keys(links).forEach(function (id) { links[id].classList.remove("on"); });
+          if (links[en.target.id]) { links[en.target.id].classList.add("on"); }
+        }
+      });
+    }, { rootMargin: "-80px 0px -70% 0px" });
+    sections.forEach(function (s) { obs.observe(s); });
+  }
+
+  /* ---- tema: interruptor claro <-> escuro ----
+     Dois estados, e nao tres. Um estado "auto" renderiza igual ao tema que o
+     sistema ja usa, entao um dos cliques do ciclo nao mudaria nada na tela --
+     parece um botao quebrado. Aqui todo clique inverte. O sistema ainda e
+     respeitado: ele decide o estado inicial de quem nunca escolheu. */
+  var TEMA_STORE = "desafio2-guia-tema";   /* chave propria: "Limpar progresso" nao apaga o tema */
+  var btnTema = document.getElementById("tema");
+
+  function sistemaEscuro() {
+    try { return window.matchMedia("(prefers-color-scheme: dark)").matches; }
+    catch (e) { return false; }
+  }
+  function lerTema() {
+    try {
+      var t = localStorage.getItem(TEMA_STORE);
+      if (t === "light" || t === "dark") { return t; }
+    } catch (e) {}
+    return sistemaEscuro() ? "dark" : "light";
+  }
+  function aplicarTema(t, gravar) {
+    document.documentElement.setAttribute("data-theme", t);
+    if (btnTema) {
+      btnTema.textContent = (t === "dark") ? "Tema: escuro" : "Tema: claro";
+      btnTema.setAttribute("aria-label", (t === "dark")
+        ? "Tema escuro. Clique para mudar para o tema claro."
+        : "Tema claro. Clique para mudar para o tema escuro.");
+    }
+    if (gravar) {
+      try { localStorage.setItem(TEMA_STORE, t); } catch (e) {}
+    }
+  }
+  if (btnTema) {
+    aplicarTema(lerTema(), false);
+    btnTema.addEventListener("click", function () {
+      var atual = document.documentElement.getAttribute("data-theme");
+      aplicarTema(atual === "dark" ? "light" : "dark", true);
+    });
+  }
+
+  /* ---- impressao: abre os blocos recolhiveis e devolve o estado depois ---- */
+  var recolhidos = [];
+  window.addEventListener("beforeprint", function () {
+    recolhidos = Array.prototype.filter.call(
+      document.querySelectorAll("details"),
+      function (d) { return !d.open; }
+    );
+    recolhidos.forEach(function (d) { d.open = true; });
+  });
+  window.addEventListener("afterprint", function () {
+    recolhidos.forEach(function (d) { d.open = false; });
+    recolhidos = [];
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

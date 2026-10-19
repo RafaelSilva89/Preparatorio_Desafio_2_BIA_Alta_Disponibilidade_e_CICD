@@ -1,0 +1,48 @@
+{
+  "name": "bia",
+  "version": "4.3.0",
+  "description": "### Período do evento: 19/09 a 20/09/2026 (Online e ao vivo das 9h30 às 17h30)",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest tests/unit",
+    "start": "node server",
+    "start_db": "node config/database.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henrylle/bia.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/henrylle/bia/issues"
+  },
+  "homepage": "https://github.com/henrylle/bia#readme",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.583.0",
+    "@aws-sdk/client-sts": "^3.583.0",
+    "@aws-sdk/credential-providers": "^3.583.0",
+    "config": "^4.1.1",
+    "cors": "^2.8.5",
+    "ejs": "^3.1.6",
+    "express": "^4.17.1",
+    "ioredis": "^5.4.1",
+    "express-session": "^1.17.2",
+    "hbs": "^4.1.2",
+    "json-server": "^0.17.4",
+    "method-override": "^3.0.0",
+    "morgan": "^1.10.0",
+    "pg": "^8.7.1",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.6.5"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "devDependencies": {
+    "jest": "^27.5.1",
+    "sequelize-cli": "^6.2.0"
+  }
+}

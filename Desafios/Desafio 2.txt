@@ -1,0 +1,1263 @@
+Mais um desafio concluído na Mentoria Desafios Fundamentais da Formação AWS, conduzida pelo Henrylle Maia!
+
+Ambiente Linux sobre WSL 2 + Ubuntu 24.04 LTS, dimensionado para um notebook de 8 GB de RAM
+
+Por que WSL 2 e não uma VM tradicional
+A instrução original do curso sugere montar uma VM para o treinamento. Com 8 GB de RAM e um i3 de 2 núcleos, subir um sistema operacional completo no VirtualBox significaria manter dois SOs disputando a mesma memória:
+
+VirtualBox                          WSL 2
+Windows                             Windows
+  └── VM Ubuntu (SO completo)         └── Ubuntu (kernel compartilhado)
+        └── Docker Engine                   └── Docker CLI
+                                                  └── Docker Desktop (engine único)
+
+Desafio 1 (Parte 1)
+
+• Finalizar preparação da sua máquina de trabalho com o que foi passado hoje
+• Conectar sua VM à sua conta na AWS (usuário IAM)
+• Lançar máquina de trabalho bia-dev
+• Fazer conexão da sua VM para bia-dev tanto por ssh quanto por ssm
+
+Desafio 1 (Parte 2)
+
+• Fazer os desafios do dia 1 e 2 da bia da sua VM
+	- DIA 1
+		- Lançar máquina bia-dev (Rodar a BIA na sua VM mas eu estou usando WSL, lançar o EC2 via script)
+		- Configurar permissões IAM para o usuário ao invés da role
+		- Testar comunicação com o ECR
+	- DIA 2
+		- Fazer build da sua VM
+		- Fazer push para o ECR da sua VM
+
+
+================================================================================
+
+Desafio 1 (Parte 1)
+
+• Finalizar preparação da sua máquina de trabalho com o que foi passado hoje
+• Conectar sua VM à sua conta na AWS (usuário IAM)
+• Lançar máquina de trabalho bia-dev
+• Fazer conexão da sua VM para bia-dev tanto por ssh quanto por ssm
+
+
+Finalizar preparação da sua máquina de trabalho com o que foi passado hoje
+
+Instalar AWS CLI:
+	- instalar no Ubuntu
+	- Comando: aws --version
+ 	- Comando: curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+			unzip awscliv2.zip
+			sudo ./aws/install
+	- Comando (se não ter instalado): sudo apt-qet install curl -y
+	- Comando (se não ter instalado): sudo apt-get install unzip -y
+
+Instalar SAM:
+Usamos se a gente for trabalhar com Lambda, criar templates com CloudFormation, fazer aprovisionar a nossa infraestrutura que a gente construiu ali com o SAM como código, colocar em pipeline.
+	- Comando: Baixe o arquivo AWS SAM CLI .zip para um diretório de sua escolha.
+	- Comando: Como você está usando WSL, o Windows fica acessível dentro do Linux pelo caminho /mnt/c/.
+		Seu arquivo:
+			C:\Users\Rafael\Downloads\aws-sam-cli-linux-x86_64.zip
+		no WSL corresponde a:
+			/mnt/c/Users/Rafael/Downloads/aws-sam-cli-linux-x86_64.zip
+		1. Primeiro, confirme que o arquivo existe
+			No WSL:
+				ls -lh /mnt/c/Users/Rafael/Downloads/aws-sam-cli-linux-x86_64.zip
+				Se aparecer o arquivo, está tudo certo.
+		2. Extraia o SAM CLI
+			Você pode executar diretamente:
+				unzip /mnt/c/Users/Rafael/Downloads/aws-sam-cli-linux-x86_64.zip -d sam-installation
+			Isso vai criar:
+				/home/rafael/sam-installation/
+		3. Confira o resultado
+			ls -lh sam-installation
+
+Instalar o Node:
+Tem projetos da Bia que a gente vai precisar rodar alguns comandos com o Node.
+	- Comando: cd ~
+	- Comando: curl -sL https://deb.nodesource.com/setup_25.x -o nodesource_setup.sh
+	- Comando: sudo bash nodesource_setup.sh
+	- Comando: sudo apt install nodejs
+	- Comando: node -v
+
+Instalar Session Manager Plugin do SSM
+Eu falei para vocês sobre a comunicação de Inbound e Outbound usando o SSM não precisa liberar a regra de entrada, porque a intenção é fazer tudo na máquina e não no console da AWS.
+	- Comando: curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o "session-manager-plugin.deb"
+	- Comando: sudo dpkg -i session-manager-plugin.deb
+	- Comando: aws ssm --version
+		Ele está apto a fazer comunicação agora também pelo SSM
+
+================================================================================
+
+Conectar sua VM à sua conta na AWS (usuário IAM)
+
+Existem dois recursos básicos que precisa ter o conhecimento:
+
+1. Security Group para comunicação
+2. IAM para autorização
+
+Você pode explicar esse conceito como uma sequência de duas camadas fundamentais: Comunicação e Autorização.
+
+A ideia principal é:
+
+Primeiro, eu preciso conseguir chegar ao serviço. Depois, preciso ter permissão para executar uma ação nele.
+
+1. Security Group: permite a comunicação
+
+O primeiro requisito é a conectividade de rede.
+
+Imagine que eu tenho uma aplicação rodando em uma instância EC2 e essa aplicação precisa acessar outro recurso da AWS, como um banco de dados RDS.
+
+Antes de pensar em permissões, precisamos responder:
+
+A minha aplicação consegue se comunicar com esse recurso pela rede?
+
+É nesse ponto que entram elementos como:
+
+- VPC
+- Subnet
+- Rotas
+- Internet Gateway ou NAT Gateway, quando necessário
+- Security Groups
+
+O Security Group funciona como uma camada de controle de tráfego.
+
+Ele define, por exemplo:
+
+- quem pode chegar até o recurso
+- por qual protocolo
+- em qual porta
+- de onde vem a comunicação
+
+Exemplo
+
++------------------+                 +------------------+
+|                  |                 |                  |
+|       EC2        |  ---- 3306 ---> |       RDS        |
+|   Aplicação      |                 |    MySQL         |
+|                  |                 |                  |
++------------------+                 +------------------+
+        │              			          │
+        │               		          │
+        └───── Security Group ───────┘
+              Permite comunicação?
+
+Se o Security Group do RDS não permitir conexões da EC2 na porta 3306, a aplicação nem consegue estabelecer a conexão com o banco.
+
+Nesse caso, não adianta a aplicação ter usuário, senha ou permissões no banco.
+
+A comunicação falha antes.
+
+
+2. IAM: permite a autorização
+
+Agora vamos imaginar que a comunicação de rede está funcionando.
+
+A aplicação consegue chegar até o serviço.
+
+Porém, surge uma nova pergunta:
+
+Mesmo conseguindo chegar até o serviço, eu tenho autorização para executar a ação que quero?
+
+É nesse momento que entra o IAM — Identity and Access Management.
+
+O IAM controla quem pode fazer o quê em qual recurso.
+
+Por exemplo:
+
+Identidade:
+EC2 / Usuário / Role
+        │
+        ▼
++-------------------------+
+|           IAM           |
+|                         |
+| Pode acessar o S3?      |
+| Pode listar arquivos?   |
+| Pode criar arquivos?    |
+| Pode deletar arquivos?  |
++-------------------------+
+        │
+        ▼
+     Permitido?
+
+Uma policy poderia determinar:
+
+EC2
+ │
+ │ Quero executar:
+ │ s3:GetObject
+ ▼
++--------------------+
+|       IAM Role     |
+|                    |
+| s3:GetObject  ✓    |
+| s3:DeleteObject ✗  |
++--------------------+
+
+Nesse caso, a aplicação consegue acessar um arquivo no S3, mas não consegue deletá-lo.
+
+A diferença entre os dois
+
+Podemos resumir assim:
+
+| Recurso            | Pergunta que responde                             |
+| ------------------ | ------------------------------------------------- |
+| **Security Group** | Eu consigo **me comunicar** com esse recurso?     |
+| **IAM**            | Eu tenho **autorização** para executar essa ação? |
+
+Ou, de uma forma ainda mais simples:
+
+┌───────────────────────────────────────────────┐
+│                     1. COMUNICAÇÃO                              │
+│                                                                 │
+│  "Eu consigo chegar até o serviço?"                             │
+│                                                                 │
+│  VPC + Subnet + Rotas + Security Group                          │
+└──────────────────────┬────────────────────────┘
+                                │
+                                ▼
+┌───────────────────────────────────────────────┐
+│                     2. AUTORIZAÇÃO                              │
+│                                                                 │
+│  "Agora que cheguei, tenho permissão para fazer essa ação?"     │
+│                                                                 │
+│  IAM User + IAM Role + IAM Policy                               │
+└──────────────────────┬────────────────────────┘
+                                │
+                                ▼
+                      ┌─────────────┐
+                      │ AÇÃO EXECUTADA   │
+                      └─────────────┘
+
+Exemplo muito comum: EC2 acessando S3
+
+Aqui é importante entender que comunicação e autorização são coisas diferentes.
+
++----------------+
+|      EC2       |
+|                |
+| Aplicação      |
++-------+--------+
+        │
+        │ 1. Consegue chegar ao S3?
+        ▼
++----------------+
+| Comunicação    |
+| de Rede        |
+|                |
+| SG / Rotas /   |
+| NAT / Endpoint |
++-------+--------+
+        │
+        │ Comunicação estabelecida
+        ▼
++----------------+
+|      IAM       |
+|                |
+| Pode executar: |
+| s3:GetObject?  |
++-------+--------+
+        │
+        │ SIM
+        ▼
++----------------+
+|       S3       |
+|                |
+| Arquivo        |
++----------------+
+
+
+Permissões IAM (Autorização)
+
+• Para que serve
+• Usuário vs Role
+• Criando nosso primeiro usuário
+• Configurando Credenciais
+• Concedendo nossa primeira permissão
+
+A diferença principal é o que cada recurso controla:
+
+• Security Group → controla a comunicação de rede
+• IAM → controla permissões e acesso aos recursos da AWS
+• Ele controla o tráfego de entrada (Inbound) e saída (Outbound).
+
+Você pode dizer:
+
+"Quero permitir que a Internet acesse minha EC2 pela porta 80."
+
+Isso é Security Group.
+
+Uma forma simples de memorizar:
+
+• Security Group = "Quem pode falar com quem?"
+• IAM = "Quem pode fazer o quê?"
+• IAM (Identity and Access Management) controla identidades e permissões dentro da AWS.
+
+Por exemplo:
+
+"O usuário Rafael pode acessar o S3, mas não pode excluir uma EC2."
+
+Isso é IAM.
+
+A diferença na prática
+Imagine que você tem uma EC2 rodando uma aplicação:
+
+                         AWS
+                     	 │
+             ┌────────┴─────────┐
+             │                         │
+       SECURITY GROUP                  IAM
+             │                         │
+             ▼                         ▼
+      Comunicação de rede           Permissões
+             │                         │
+             ▼                         ▼
+     "Pode acessar a EC2?"      "Pode fazer o quê?"
+             │                         │
+             ▼                         ▼
+        Porta 80/443            S3, EC2, RDS...
+
+
+Conectando nossa máquina WSL à conta AWS:
+
+Para que possamos executar comandos da AWS a partir da nossa máquina virtual WSL, precisamos configurar uma forma de autenticação com a nossa conta AWS.
+
+Por exemplo, imagine que estamos no terminal do WSL e queremos executar:
+
+aws ec2 describe-instances
+
+Quando executamos esse comando, o AWS CLI precisa responder a duas perguntas:
+
+1. QUEM ESTÁ FAZENDO ESTA REQUISIÇÃO?
+              │
+              ▼
+       Autenticação
+              │
+              ▼
+2. ESSA IDENTIDADE TEM PERMISSÃO?
+              │
+              ▼
+       Autorização IAM
+              │
+              ▼
+      Executar ou negar a ação
+
+Para isso, precisamos configurar credenciais da AWS no ambiente onde estamos executando o AWS CLI.
+
+Uma forma tradicional de fazer isso é utilizando credenciais de um IAM User, composto por:
+
+Access Key ID
+Secret Access Key
+
+O fluxo pode ser representado assim:
+
++---------------------------+
+|        WSL / Terminal     |
+|                           |
+| aws ec2 describe-instances|
++-------------+-------------+
+              │
+              │ Requisição para AWS
+              │
+              ▼
++---------------------------+
+|        AWS CLI            |
+|                           |
+| Usa as credenciais:       |
+| - Access Key ID           |
+| - Secret Access Key       |
++-------------+-------------+
+              │
+              │ "Quem está fazendo
+              │  essa requisição?"
+              ▼
++---------------------------+
+|     AWS Authentication    |
++-------------+-------------+
+              │
+              ▼
++---------------------------+
+|            IAM            |
+|                           |
+| "Essa identidade pode     |
+| executar ec2:Describe...? |
++-------------+-------------+
+              │
+          ┌──┴───┐
+          │        │
+         SIM      NÃO
+          │        │
+          ▼        ▼
+      Executa   AccessDenied
+      ação
+
+====================================================================================================
+                                    ARQUITETURA DA APLICAÇÃO
+====================================================================================================
+
+                                                                                           +---------+
+                                                                                   O ──► | TERMINAL |
+                                                                                  /|\      +---------+
+                                                                                  / \       │		│
+                                                                           USER IAM KEYS    │ 		│
++--------------------------------------------------------------------------------------+    │	    │
+| AWS                                +---------+                 +-----+        |  │  │  	│ 		│
+|                                    | CONSOLE |                 | ECS |        |  │  │    │ 		│
+|                                    +---------+                 +-----+        |  │  │		│  		│
+|  +--------------------------------------▲-------------------------▲-------------+  │		│  		│
+|  | VPC                                  │                         │     		   │  │		│		│
+|  |                                      │                       ( X )        	   │  │		│  		│
+|  |     +--------------------------------│-------------------------│---------+	   │  │		│ 		│
+|  |     | SUBNET                         └──────────────────┘  		   |   │  │		│ 		│
+|  |     |                                                                     |   │  │		│ 		│
+|  |     |   +--------------------------------------------------+              |   │  │		│ 		│
+|  |     |   | BIA-DEV (EC2)                                    ├──────────┴──┴─┴───┘       │         							 │
+IPV4 ──X───► |  Porta: 3001                           		├──────────┴──┴──┴────────┴────────────────►+-----+     │
+PÚBLICO  |   |      │                                  			├──────────┴──┴──┴─────────────────────────┐ | SSM |◄──┤
+|  |     |   |      ▼                                   	|              |   │  │   				   │ +-----+	 │
+|  |     |   |  +---------------------+         +-------+ 	|              |   │  │                        	           ▼ +-----+ 	 │
+|  |     |   |  | CONTAINER           |     +─► |  SG  | 	    |              |   │  │                                   └►| ECR |◄──┘
+|  |     |   |  |                     |     |   | (Sec. |       |              |   │  │                                      +-----+
+|  |     |   |  | [3001:8080]         |     |   | Group)|       |              |   │  │                                      +-----+
+|  |     |   |  |                     |     |   +-------+       |              |   │  │                                      | S3  |
+|  |     |   |  | +-----------------+ |     |                   |              |   │  │                                      +-----+
+|  |     |   |  | |    AGENTE IA    | |     |                   |              |   │  │                                      +-----+
+|  |     |   |  | +-----------------+ |     |                   |              |   │  │                                      | EB  |
+|  |     |   |  +---------------------+     |                   |              |   │  │                                      +-----+
+|  |     |   +-------------│----------------+-------------------+  			   |   │  │
+|  |     +-----------------│--------------------------------------------------+	   │  │
+|  |                       │													   │  │
+|  +-----------------------│-------------------------------------------------------+  │
++--------------------------│----------------------------------------------------------+
+                           ▼                                                          │
+                        +------+                    			               │
+                        | ROLE |  						       │
+                        +------+                                               	       │
+                           │               +------------------------------+   	       │
+                           └────────►  | POLICY:                      | ◄───────┘
+                                           | SSMFullAccess, ECRFullAccess |
+                                           +------------------------------+
+
+
+====================================================================================================
+                                      LEGENDA DOS COMPONENTES
+====================================================================================================
+
+--- ACESSO E GERENCIAMENTO ---
+TERMINAL / USER IAM KEYS : Computador local do desenvolvedor ou pipeline automatizado acessando a AWS via linha de comando com chaves de acesso.
+AWS CONSOLE              : Interface web da AWS para gerenciamento visual da infraestrutura.
+
+--- REDE E SEGURANÇA ---
+VPC (Virtual Private Cloud): Rede virtual isolada na AWS que protege todos os recursos da aplicação.
+SUBNET                     : Sub-rede dentro da VPC onde o servidor EC2 está alocado.
+IPV4 PÚBLICO               : Representa a tentativa de acesso via internet. A marca "X" indica bloqueio ou controle rigoroso (fechado para o mundo).
+SG (Security Group)        : O firewall virtual exclusivo do servidor EC2. Ele define quais portas podem receber tráfego (ex: libera apenas a porta 3001).
+
+--- COMPUTAÇÃO E APLICAÇÃO ---
+BIA-DEV (EC2)            : Máquina virtual (servidor) de desenvolvimento (BIA-DEV) rodando na AWS.
+Porta 3001               : Porta exposta no EC2 para receber as requisições direcionadas à aplicação.
+CONTAINER [3001:8080]    : Contêiner Docker rodando no EC2. O tráfego que chega na porta 3001 do EC2 é redirecionado para a porta 8080 dentro do contêiner.
+AGENTE IA                : O código/aplicação real (Inteligência Artificial) executando isolado dentro do contêiner.
+
+--- PERMISSÕES (IAM) ---
+ROLE                     : Identidade (perfil de acesso) assumida pelo EC2. Permite que o servidor acesse outros serviços da AWS sem precisar de senhas fixas no código.
+POLICY                   : Conjunto de regras de permissão anexadas à Role:
+  - SSMFullAccess        : Permite acesso remoto seguro ao EC2 via AWS Systems Manager.
+  - ECRFullAccess        : Permite que o EC2 faça o download (pull) das imagens Docker do repositório.
+
+--- SERVIÇOS AWS COMPLEMENTARES ---
+SSM (Systems Manager)    : Serviço que permite acessar o terminal do EC2 de forma segura pelo painel da AWS, dispensando o uso de SSH (porta 22).
+ECR (Elastic Cont. Reg.) : Repositório privado de imagens Docker. É de onde o EC2 baixa a imagem do "Agente IA" para rodar o contêiner.
+ECS, S3, EB              : Outros serviços da AWS (Elastic Container Service, Simple Storage Service, Elastic Beanstalk) disponíveis no ambiente/ecossistema.
+
+
+
+O ponto principal representado pelo diagrama
+
+1. NOSSA MÁQUINA
+
+WSL / Terminal
+      │
+      ▼
+AWS CLI
+      │
+      │ Usa credenciais
+      ▼
+IAM USER
+      │
+      ▼
+AWS API
+      │
+      └──► Executa ações permitidas pelas Policies
+
+
+2. RECURSO DENTRO DA AWS
+
+EC2
+ │
+ │ Não precisa armazenar Access Key e Secret Key
+ │
+ ▼
+IAM ROLE
+ │
+ ▼
+IAM POLICIES
+ │
+ ├──► Permissão para SSM
+ │
+ ├──► Permissão para ECR
+ │
+ └──► Permissão para outros serviços AWS
+
+
+Comando: IAM > para criar o usuário e conceder as permissões
+	IAM users > Create user > User name (exemplo: fundamentos) > Next > Selecionar: Attach policies directly > Selecionar:
+		- AmazonSSMFullAccess
+		- AmazonEC2ContainerRegistryFullAccess
+	> Next > Create user
+	Criando o usuário vamos fazer: Depois clicar na IAM que foi criado, exemplo: "fundamentos" > Security credentials > Create access key > Other > Next > Fornecer um nome para identificar onde você está usando a access key, exemplo: vm-linux-formacao > Creat access key > vai fornecer dois acessos para colocar no termial:
+		- Access key
+		- Secret access key
+	> No console da AWS clica em Done.
+
+Acessar o terminal para configurar ao acesso
+Comando: aws configure
+	- quando colocamos "aws configure" estaremos trabalhando com "default profile"
+	- caso queira definir um profile use: aws configure --profile fundamento
+Comando: aws configure
+	AWS Access Key ID [None]: Access key
+	AWS Secret Access Key [None]: Secret access key
+	Default region name [None]: us-east-l
+	Default output format [None]: table (para ver o resultado depois do comando)
+
+Usuário criado, mas sem acesso ao console, com login e senha, porque não foi habilitado, mas foi habilitei o acesso por credenciais, e no meu terminal, isso já está configurado.
+
+
+Colar a imagem: Criacao_IAM_fundamentos_aws
+
+Foi concedido permissão para o usuário para trabalhar com ECR e SSM, vamos testar com ECR no terminal: aws ecr describe-repositories
+	- No terminal retornou resultado, porque foi criando um repositório: Amazon ECR > Private registry > Repositories
+	- Então a conta já está conectado no terminal
+
+Vamos fazer um teste conectar via SSM da máquina local usando o terminal para conectar em um EC2 via terminal:
+
+Primeiro: Pegar o ID da instancia "i-093af6c222a5c4126"
+Segundo: No terminal colocar aws ssm start-session --target i-093df6c772a5c4169
+Esta linha confirma que a sessão SSM foi estabelecida: Starting session with SessionId: fundamentos-er43r4ejg3svj3zu2e4q5b9de4
+E agora você está dentro da sua instância EC2: sh-5.2$
+O fluxo agora está assim:
+
+Seu computador
+    │
+    │ aws ssm start-session
+    ▼
+AWS Systems Manager
+    │
+    │ Session Manager
+    ▼
+EC2 bia-dev
+    │
+    ▼
+Amazon Linux 2023
+    │
+    ▼
+sh-5.2$
+
+Próximo comando: descobrir qual usuário você está usando: whoami
+Opção mais limpa (mostra apenas o número do IP): hostname -I
+	- o comando hostname -I não procura especificamente pelo "IP da EC2" ou pelo "IP do Docker". A função dele é simplesmente listar todos os endereços IP de todas as interfaces de rede ativas no sistema operacional.
+
+================================================================================
+
+Lançar máquina de trabalho bia-dev
+
+Por que evitar o /usr e /usr/bin?
+Pastas de Sistema: O diretório /usr/bin é reservado para os executáveis básicos do sistema operacional e para os programas oficiais instalados pelo gerenciador de pacotes da AWS.
+
+Risco de Conflitos: Colocar o código da sua aplicação ali mistura os seus arquivos com os do sistema. Se o sistema operacional atualizar, seus arquivos podem ser sobrescritos ou causar erros.
+
+Segurança: Para escrever e rodar coisas nessas pastas do sistema, você frequentemente precisará de privilégios de root (administrador máximo), e rodar aplicações como root é uma falha grave de segurança.
+
+
+Por que o ec2-user é a escolha certa?
+Usuário Padrão: O ec2-user é o usuário oficial e padrão criado pela AWS para o Amazon Linux.
+
+Ambiente Isolado: Ao rodar sudo su - ec2-user, você vai automaticamente para a pasta /home/ec2-user. É o seu "espaço de trabalho" seguro dentro da EC2.
+
+Permissões Corretas: Dentro do /home/ec2-user, você tem controle total para criar pastas, baixar repositórios do Git e instalar bibliotecas sem correr o risco de quebrar o servidor.
+
+Para acessar ec2-user:
+	- sudo su - ec2-user
+
+Subir o projeto BIA
+	- git clone https://github.com/henrylle/bia
+	- cd bia
+	- docker compose up -d
+	- docker compose os
+
+NAME       IMAGE                      COMMAND                  SERVICE    CREATED         STATUS         PORTS
+bia        bia-server                 "docker-entrypoint.s…"   server     5 minutes ago   Up 5 minutes   0.0.0.0:3001->8080/tcp, :::3001->8080/tcp
+database   postgres:17.1              "docker-entrypoint.s…"   database   5 minutes ago   Up 5 minutes   0.0.0.0:5433->5432/tcp, :::5433->5432/tcp
+redis      valkey/valkey:8.1-alpine   "docker-entrypoint.s…"   redis      5 minutes ago   Up 5 minutes   0.0.0.0:6379->6379/tcp, :::6379->6379/tcp
+
+Inserir a imagem: Lancar_maquina_de_trabalho_bia-dev
+
+================================================================================
+
+Fazer conexão da sua VM para bia-dev tanto por ssh quanto por ssm
+
+
+Aqui estão os requisitos exatos para configurar essa conexão via SSM:
+
+
+1. Na sua Máquina Local (Seu Computador)
+Para o seu terminal conseguir iniciar a comunicação e abrir o túnel interativo, você precisa de dois componentes instalados:
+
+AWS CLI (Command Line Interface): Precisa estar instalado e configurado (usando o comando aws configure). Você deve fornecer credenciais (Access Key e Secret Key) de um usuário IAM que tenha permissão para executar a ação ssm:StartSession.
+
+Session Manager Plugin: Este é o grande "segredo"! O AWS CLI sozinho não consegue abrir a tela interativa do terminal. Você precisa baixar e instalar esse plugin oficial da AWS no seu sistema operacional. Quando você roda o comando, o AWS CLI aciona esse plugin em segundo plano.
+
+2. Na AWS (Sua Instância EC2)
+A máquina que vai receber a conexão também precisa estar pronta. Felizmente, grande parte disso já vem pré-configurada em sistemas modernos:
+
+Agent do SSM Instalado: O software amazon-ssm-agent deve estar rodando na máquina. Como você escolheu o Amazon Linux 2023, ele já vem instalado e ativo por padrão.
+
+Permissão IAM (Role): A sua EC2 precisa de autorização para conversar com o serviço Systems Manager. É necessário anexar uma Função IAM à instância (geralmente contendo a política AmazonSSMManagedInstanceCore). Inclusive, no print que você mandou lá no início, dá para ver exatamente isso: a sua EC2 possui a role role-acesso-ssm anexada!
+
+Acesso à Rede: A instância precisa conseguir alcançar os servidores da AWS. Isso significa que ela deve ter saída para a internet (via Sub-rede Pública ou NAT Gateway) ou usar VPC Endpoints (se for um ambiente privado restrito).
+
+Se alguma dessas 5 pontas estiver faltando, o terminal simplesmente exibe um erro de timeout ou diz que a instância não está online.
+
+Essas configurações foram realizadas na etapa:
+• Finalizar preparação da sua máquina de trabalho com o que foi passado hoje
+• Conectar sua VM à sua conta na AWS (usuário IAM)
+
+Para que a conexão via SSM funcione perfeitamente, precisamos de um agente e de autorizações muito bem definidas no IAM da AWS. Essa comunicação depende de dois grandes blocos de permissões: a autorização da máquina e a sua autorização.
+
+O Agente: Existe um programa chamado SSM Agent que fica instalado dentro da nossa instância EC2. Ele é o responsável por manter a comunicação da máquina com o serviço central do AWS Systems Manager.
+
+A Autorização da Máquina (Role): A nossa EC2 precisa de permissão para conversar com a AWS. Nós nunca criamos um "usuário" com senha para uma máquina. Em vez disso, nós criamos uma Role (Função IAM) e a "vestimos" na EC2.
+
+As Permissões (Policies): As autorizações dentro da AWS acontecem através de Policies (Políticas). Cada policy concede um poder específico. Para a EC2 usar o SSM, nós associamos à Role dela a policy chamada AmazonSSMManagedInstanceCore. (Outros exemplos de policies usadas na AWS são: AmazonEC2ContainerRegistryPowerUser, AmazonRDSFullAccess, etc.)
+
+Para ter certeza de que a sua sessão atual no terminal foi iniciada pelo AWS Systems Manager (SSM):
+
+ps -ef --forest | grep ssm
+
+[ec2-user@ip-172-31-8-82 bia]$ ps -ef --forest | grep ssm
+root        1427       1  0 13:54 ?        00:00:00 /usr/bin/amazon-ssm-agent
+root        1528    1427  0 13:54 ?        00:00:03  \_ /usr/bin/ssm-agent-worker
+root        3792    1528  0 15:02 ?        00:00:04      \_ /usr/bin/ssm-session-worker fundamentos-7ux6f57craeyohehp89bq5ltn4
+ssm-user    3805    3792  0 15:02 pts/0    00:00:00          \_ sh
+ec2-user    6462    3998  0 15:59 pts/0    00:00:00                          \_ grep --color=auto ssm
+
+
++------------------------------------------------------------------------------+
+| 1. SERVIÇO BASE DA AWS (Rodando ininterruptamente como 'root')               |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| [PID: 1427] /usr/bin/amazon-ssm-agent                                        |
+| O agente principal do SSM que escuta os pedidos de conexão da AWS.           |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| [PID: 1528] /usr/bin/ssm-agent-worker                                        |
+| Processo que gerencia ativamente os processos e tarefas da máquina.          |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| 2. A SUA CONEXÃO SSM (A sua porta de entrada segura)                         |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| [PID: 3792] /usr/bin/ssm-session-worker                                      |
+| Processo pai criado exclusivamente para a sua sessão atual.                  |
+| (ID: fundamentos-7ux6f57craeyohehp89bq5ltn4)                                 |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| 3. O SEU AMBIENTE DE TERMINAL (Interação do Usuário)                         |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| [PID: 3805] sh                                                               |
+| Terminal padrão inicial, rodando sob o usuário padrão 'ssm-user'.            |
++------------------------------------------------------------------------------+
+                                      │
+                                      │ (Você executa: su - ec2-user)
+                                      ▼
++------------------------------------------------------------------------------+
+| [PID: 6462] grep --color=auto ssm                                            |
+| Comando final executado, agora rodando sob a identidade do 'ec2-user'.       |
++------------------------------------------------------------------------------+
+
+Este diagrama mapeia exatamente a hierarquia (processos pai e filho) que você descobriu rodando o comando ps -ef --forest | grep ssm.
+
+Isso confirma 100% que o seu fluxo via SSM está funcionando perfeitamente, sem precisar abrir a porta 22 (SSH) para a internet.
+A expressão categórica e definitiva (a "prova real") de que a sua conexão atual é gerenciada pelo SSM é a presença desta linha exata na árvore de processos:
+
+/usr/bin/ssm-session-worker
+
+Resumindo: Bateu o olho no ps e viu o ssm-session-worker gerando a sua linha de comando? Essa é a sua prova categórica!
+
+Para desconectar da instância e encerrar a sua sessão do SSM pelo terminal, basta usar o comando padrão de saída do Linux: exit
+Um detalhe importante para o seu cenário:
+Como você elevou seus privilégios usando o comando su - ec2-user anteriormente, você precisará executar o comando exit duas vezes:
+	- O primeiro exit encerrará a sessão do ec2-user e te devolverá para o usuário original da conexão (ssm-user).
+	- O segundo exit encerrará o processo do AWS Systems Manager de vez, fechando o túnel e devolvendo o controle para o terminal do seu próprio computador local.
+
+
+Fazendo conexão por ssh
+
+Quero fazer comunicação por SSH, então vamos configurar por SSH, o SSH convencional, que a galera utiliza PM e tudo mais.
+
+Primeiro: Criar um Segurity Group (todo recurso precisa de uma security group)
+	Acessar: EC2 > Security Groups > Create security group
+			Security group name: bia-dev-ssh
+			Description: acesso por ssh
+		
+		Clica: Add rule
+			Type: SSH
+			Source: My IP
+
+		Clica: Create security group
+
+
+Depois da criação vamos lançar uma instancia:
+	
+	EC2 > Instances > Launch an instance
+
+* Detalhe importante: verificar se essa instância vai nascer com IPv4 público, precisa do IPv4 público para poder me comunicar com ela.
+
+Depois conectar:
+	EC2 > Instances > copiar o número da instancia: i-065ea93a9fc6f6b0b > Connect to instance (escolher: In SSH client) > seguir as instruções da página:
+		How to connect
+			1. Open an SSH client
+			2. Locate or download your private key file
+			3. Ensure your key is not publicly viewable
+				chmod 400 "formacao.pem"
+			4. Connect to your instance using its Public DNS
+				ssh -i "formacao.pem" ec2-user@ec2-3-218-150-29.compute-1.amazonaws.com
+
+* Detalhe o arquivo com "pem", deve está na estrutura do projeto.
+* O protocolo SSH é muito rigoroso com segurança. Se o seu arquivo .pem puder ser lido por qualquer pessoa no seu computador, a conexão será negada. No seu terminal local, navegue até a pasta onde a chave está salva e restrinja as permissões: chmod 400 sua-chave.pem
+
+
+Passo a Passo: Conexão SSH via Terminal
+
++------------------------------------------------------------------------------+
+| PASSO 1: LOCALIZAR O ARQUIVO DA CHAVE (.PEM) NO SISTEMA                      |
++------------------------------------------------------------------------------+
+| Objetivo: Encontrar o caminho absoluto onde a chave foi salva no computador. |
+|                                                                              |
+| Comando Executado:                                                           |
+| find / -name "formacao.pem" 2>/dev/null                                      |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| PASSO 2: APLICAR PERMISSÕES DE SEGURANÇA NA CHAVE                            |
++------------------------------------------------------------------------------+
+| Objetivo: Restringir a leitura do arquivo apenas para o seu usuário. Sem     |
+| isso, o protocolo SSH recusa a conexão por motivos de segurança.             |
+|                                                                              |
+| Comando Executado:                                                           |
+| chmod 400 /home/rafael/laboratorios-aws/formacaoaws/bia/formacao.pem         |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| PASSO 3: ESTABELECER A CONEXÃO SSH COM A INSTÂNCIA EC2                       |
++------------------------------------------------------------------------------+
+| Objetivo: Iniciar a sessão apontando o caminho completo do arquivo, o        |
+| usuário padrão do sistema (ec2-user) e o IP público da máquina.              |
+|                                                                              |
+| Comando Executado:                                                           |
+| ssh -i "/home/rafael/laboratorios-aws/formacaoaws/bia/formacao.pem" \        |
+| ec2-user@ec2-3-218-150-29.compute-1.amazonaws.com                            |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| SUCESSO: ACESSO AO TERMINAL DA AWS ESTABELECIDO!                             |
++------------------------------------------------------------------------------+
+
+rafael@Silva:~$ ssh -i "/home/rafael/laboratorios-aws/formacaoaws/bia/formacao.pem" ec2-user@ec2-3-218-150-29.compute-1.amazonaws.com
+   ,     #_
+   ~\_  ####_        Amazon Linux 2023
+  ~~  \_#####\
+  ~~     \###|
+  ~~       \#/ ___   https://aws.amazon.com/linux/amazon-linux-2023
+   ~~       V~' '->
+    ~~~         /
+      ~~._.   _/
+         _/ _/
+       _/m/'
+Last login: Wed Aug 19 19:31:12 2026 from 187.38.162.100
+[ec2-user@ip-172-31-4-102 ~]$ pwd
+/home/ec2-user
+
+
+Para ter certeza de que a sua sessão atual no terminal foi iniciada pelo SSH:
+
++------------------------------------------------------------------------------+
+| PASSO 1: VERIFICAR A VARIÁVEL DE AMBIENTE DO CLIENTE SSH                     |
++------------------------------------------------------------------------------+
+| Objetivo: Confirmar seu IP de origem e se a porta de destino usada foi a 22. |
+| Se retornar valores (ex: 187.38.162.100 53650 22), você está via SSH.        |
+|                                                                              |
+| Comando Executado:                                                           |
+| echo $SSH_CLIENT                                                             |
++------------------------------------------------------------------------------+
+                                      │    A porta 22 é padrão do SSH
+                                      ▼
++------------------------------------------------------------------------------+
+| PASSO 2: VALIDAR A ORIGEM DA SUA SESSÃO DE USUÁRIO                           |
++------------------------------------------------------------------------------+
+| Objetivo: Exibir a sua identidade atual e confirmar o IP público do seu      |
+| computador local carimbado no final da linha, indicando acesso direto.       |
+|                                                                              |
+| Comando Executado:                                                           |
+| who am i                                                                     |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| PASSO 3: VERIFICAR AS INTERFACES DE REDE E IPs INTERNOS                      |
++------------------------------------------------------------------------------+
+| Objetivo: Listar o IP privado da EC2. A ausência de um segundo IP neste      |
+| passo confirmou que não há uma interface do Docker rodando nesta máquina.    |
+|                                                                              |
+| Comando Executado:                                                           |
+| hostname -I                                                                  |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| PASSO 4: CONFIRMAR O USUÁRIO ATUAL                                           |
++------------------------------------------------------------------------------+
+| Objetivo: Garantir de forma simples e direta quem é o usuário que está       |
+| executando as ações no sistema no exato momento.                             |
+|                                                                              |
+| Comando Executado:                                                           |
+| whoami                                                                       |
++------------------------------------------------------------------------------+
+                                      │
+                                      ▼
++------------------------------------------------------------------------------+
+| SUCESSO: DIAGNÓSTICO DE AMBIENTE E CONEXÃO SSH CONCLUÍDOS!                   |
++------------------------------------------------------------------------------+
+
+
+================================================================================
+                    COMPARAÇÃO DE ACESSO: SSM vs SSH NA EC2
+================================================================================
+
+                                    +-------+
+                       +----------->|  IAM  | (Autenticação / Permissão)
+                       |            +-------+
+                       |
++-------------+        |          (OUTBOUND / Resposta)
+| USER (SSM)  | ◄────┼──────────────────────+
++------+------+        |  [ SSM SESSION ]             |
+       |               |                              |
+       +---------------+                              |
+                                                      |
+                                             +--------+--------+
+                                             | EC2             |
+                                             |                 |
++-------------+       (INBOUND / Porta 22)   |   AGENT SSM     |
+| USER (SSH)  |────────────────────► |                 |
+|  (Chave     |       [ CONEXÃO SSH ]        |                 |
+|   .PEM)     |                              |                 |
++------+------+                              |                 |
+       |                                     |                 |
+       +---------------- (Chave .PEM) ────►|                 |
+                                             +-----------------+
+
+================================================================================
+
+
+1. Como Funciona o Acesso via SSH (Tradicional)
+Autenticação por Par de Chaves: 
+	- O usuário precisa possuir localmente o arquivo de chave privada (.pem) correspondente à chave pública instalada na EC2 (authorized_keys).
+	- O usuário precisa ter uma chave SSH e precisa liberar uma regra de entrada para se conectar no servidor
+
+2. Como Funciona o Acesso via SSM (Systems Manager)
+Autenticação via IAM: 
+	- O usuário não usa chaves .pem. O acesso é validado pelas políticas do AWS IAM (com suporte a MFA, SSO e Session Policies).
+	- No SSM o mecanismos de comunicação é outro, ao invés de liberar regras de entrada no servidor, não precisamos liberar nada, porque a comunicação com o SSM acontece de forma inversa. Na AWS existe um Agente SSM e ele, a partir do start do usuário ele abre a comunicação com o usuário, mas isso é um serviço da AWS, para esse agente iniciar, ele precisa de autorização e no script tem essa autorização, para abrir um canal de comunicação e se conectar com a instância.
+
++-----------------------+-----------------------------+-----------------------------+
+| CARACTERÍSTICA        | ACESSO SSH TRADICIONAL      | ACESSO AWS SSM (SESSION M.) |
++-----------------------+-----------------------------+-----------------------------+
+| Autenticação          | Arquivo de Chave (.PEM)     | AWS IAM (Usuários/Roles)    |
++-----------------------+-----------------------------+-----------------------------+
+| Portas de Entrada     | Requer Porta 22 Aberta      | Zero Portas Abertas (0)     |
++-----------------------+-----------------------------+-----------------------------+
+| Direção do Tráfego    | Inbound (Entrada na EC2)    | Outbound (EC2 -> AWS SSM)   |
++-----------------------+-----------------------------+-----------------------------+
+| Necessidade IP Púb.   | Sim (ou Bastion Host / VPN) | Não (pode ser 100% privada) |
++-----------------------+-----------------------------+-----------------------------+
+| Gestão de Chaves      | Manual / Compartilhamento   | Centralizada pelo IAM       |
++-----------------------+-----------------------------+-----------------------------+
+| Auditoria e Logs      | Logs locais no Linux        | CloudTrail, S3 e CloudWatch |
++-----------------------+-----------------------------+-----------------------------+
+| Superfície de Ataque  | Alta (Porta exposta na net) | Mínima (Sem portas abertas) |
++-----------------------+-----------------------------+-----------------------------+
+
+Fazendo conexão por aws login
+
+Só que no final de 2025, a AWS liberou um mecanismo mais seguro para a gente realizar esse trabalho, que é utilizando a AWS Login.
+Na aula anterior foi criado o usuário e configuramos apenas acesso com Security Credentials. Nós não vamos mais trabalhar dessa forma,trabalhando com Security Credentials. A gente vai trabalhar com credenciais temporárias, aquelas Security Credentials são credenciais de longa duração. Obviamente, se alguém pega essas credenciais, elas podem acessar a sua conta. Com credenciais de curta duração, isso não acontece, são credenciais que vão expirar em 12 horas e elas são rotacionadas automaticamente nessa janela de 12 horas a cada 15 minutos, ou seja, um meio simples e muito mais seguro.
+
+Mas existe um pré-requisitos, precisamos conseguir acessar a nossa conta pelo console.
+
+Comando: IAM > para criar o usuário e conceder as permissões
+	IAM users > Create user > User name (exemplo: formacao_aws) > clicar na opção:
+		- Provide user access to the AWS Management Console - optional
+	Next > Selecionar: Attach policies directly > Selecionar:
+		- AmazonSSMFullAccess
+		- AmazonEC2ContainerRegistryFullAccess
+		- SignlnLocalDevelopmentAccess
+			- essa Polici que vai autorizar o meu terminal a conseguir gerar essas credenciais temporárias, tem que marcar essa opção.
+	> Next > Create user > vai mostrar essas informações:
+		Console sign-in URL
+			https://<ACCOUNT_ID>.signin.aws.amazon.com/console
+		User name
+			formacao_aws
+		Console password
+			***************
+	> Clicar par baixar: "Download .csv file"
+	> Nova janela anônima > colar : Console sign-in URL > nos campos vamos colocar essas informações:
+		IAM username: User name
+		Password: Console password
+		Depois só clicar em: Sign in
+
+Agora o próximo passo é no terminal para configurar as suas credenciais para uso temporário.
+
+Explicação AWS LOGIN
+- Credenciais de curta duração
+- Renova automaticamente em 15 min
+- Validade de 12h
+- Após 12h, novo aws login
+- Policy necessária:
+	- SignlnLocalDevelopmentAccess
+
+Agora vamos fazer a configuração do AWS Client.
+
+Primeiro acessar o terminal:
+
+	Comando: aws login --profile formacao_aws
+		AWS Region [us-east-1]: us-east-1
+		vai devolver uma URL e ao clicar vai abrir um navegador e mostrar as suas contas: escolha aquela conta que tem as permissões já específicas, não usa a root não.
+	Comando para deslogar: aws logout --profile formacao_aws
+
+1. aws login (A sua Identidade / O Crachá)
+O aws login resolve o problema de Autenticação. Ele serve para provar para a AWS quem você é e liberar o seu terminal (WSL) para executar comandos na sua conta.
+
+O que ele substitui: Substitui as antigas "Access Keys" e "Secret Keys" (Security Credentials) que ficavam salvas no seu computador para sempre e eram um risco de segurança.
+
+Como funciona: Como você mesmo explicou perfeitamente, ele gera credenciais temporárias (duram 12h, rotacionam a cada 15 min). É como se você fosse na recepção do prédio e pegasse um crachá de visitante que só vale por aquele dia.
+
+Resumo: Ele não conecta na máquina virtual (EC2). Ele apenas diz: "AWS, meu terminal WSL agora tem permissão temporária para agir em nome do usuário formacao_aws".
+
+2. SSM - Systems Manager (A Porta de Entrada / O Túnel)
+O SSM resolve o problema de Conexão com a Máquina. Ele é o serviço da AWS que permite que você abra um terminal dentro da sua instância EC2.
+
+O que ele substitui: Substitui o famoso SSH, onde você precisava de um arquivo de chave .pem e precisava deixar a porta 22 da máquina aberta para a internet (o que é menos seguro).
+
+Como funciona: Ele cria um túnel seguro diretamente pela rede interna da AWS usando o seu CLI. É como se fosse a chave que abre especificamente a porta da sala (sua máquina EC2) dentro do prédio.
+
+Resumo: É o comando que de fato vai fazer a sua tela preta do WSL virar a tela preta da máquina bia-dev.
+
+================================================================================
+
+Desafio 1 (Parte 2)
+
+• Fazer os desafios do dia 1 e 2 da bia da sua VM
+	- DIA 1
+		- Lançar máquina bia-dev (Rodar a BIA na sua VM mas eu estou usando WSL, lançar o EC2 via script)
+		- Configurar permissões IAM para o usuário ao invés da role (preparação para aws login)
+		- Testar comunicação com o ECR
+	- DIA 2
+		- Fazer build da sua VM (WSL)
+		- Fazer push para o ECR da sua VM
+
+Primeiro:
+Configurar as permissões IAM para o usuário ao invés da role (preparação para aws login)
+
+Colar a imagem: Primeiro_aws_login
+
+Segundo:
+Lançar máquina bia-dev (Rodar a BIA na sua VM mas eu estou usando WSL, lançar o EC2 via script)
+
+- Conectar no usuário com aws login:
+
+Para conectar na sua máquina de forma 100% segura, o fluxo é exatamente este:
+
+Passo 1: Pegar o crachá temporário (Você já fez isso!)
+	aws login --profile formacao_aws
+	- confirmando a conta: aws sts get-caller-identity --profile formacao_aws
+{
+    "UserId": "AIDAW3MFUVNTXJEQNJN5E",
+    "Account": "<ACCOUNT_ID>",
+    "Arn": "arn:aws:iam::<ACCOUNT_ID>:user/fundamentos_aws"
+
+Observação: essa credencial rotaciona a automaticamente a cada 15 minutos, depois de 12 horas ela expira.
+
+O aws login garante que seu terminal está seguro com chaves temporárias, e o SSM garante que a conexão com a sua máquina não precisa de portas abertas na internet.
+
+Terminal:
+
+rafael@Silva:~$ aws login --profile formacao_aws
+Attempting to open your default browser. If the browser does not open, open the following URL.
+If you are unable to open the URL on this device, run this command again with the '--remote' option.
+
+https://us-east-1.signin.aws.amazon.com/v1/authorize?response_type=code&client_id=arn%3Aaws%3Asignin%3A%3A%3Adevtools%2Fsame-device&state=f40101bf-7053-4ad3-90b1-24de19011ee0&code_challenge_method=SHA-256&scope=openid&redirect_uri=http%3A%2F%2F127.0.0.1%3A42949%2Foauth%2Fcallback&code_challenge=ZRv67thXdSZPloPHJjpxq7nKCDu1otgra1zdVZ7GXsw
+
+gio: https://us-east-1.signin.aws.amazon.com/v1/authorize?response_type=code&client_id=arn%3Aaws%3Asignin%3A%3A%3Adevtools%2Fsame-device&state=f40101bf-7053-4ad3-90b1-24de19011ee0&code_challenge_method=SHA-256&scope=openid&redirect_uri=http%3A%2F%2F127.0.0.1%3A42949%2Foauth%2Fcallback&code_challenge=ZRv67thXdSZPloPHJjpxq7nKCDu1otgra1zdVZ7GXsw: Operation not supported
+
+Updated profile formacao_aws to use arn:aws:iam::<ACCOUNT_ID>:user/fundamentos_aws credentials.
+Use "--profile formacao_aws" to use the new credentials, such as "aws sts get-caller-identity --profile formacao_aws"
+rafael@Silva:~$ aws sts get-caller-identity --profile formacao_aws
+{
+    "UserId": "AIDAW3MFUVNTXJEQNJN5E",
+    "Account": "<ACCOUNT_ID>",
+    "Arn": "arn:aws:iam::<ACCOUNT_ID>:user/fundamentos_aws"
+}
+
+
+- clonar o repositório:
+	rafael@Silva:~$ git clone https://github.com/henrylle/bia
+	rafael@Silva:~$ cd bia
+	rafael@Silva:~/bia$ code .
+
+- Vamos criar um Security group:
+	- Security group é usado para liberar a máquina (BIA-DEV) para está acessível na porta 3001 (são as regras de entrada), além dessas regras precisa associar uma autorização (role-acesso-ssm), onde vamos dizer o objetivo dessa role, no nosso caso é da autorização para a minha instância consiga se comunicar com outros serviços da AWS, para isso preciso associar uma role e nessa role vamos colocar as poles que são as autorizações que ela vai ter, sem isso ela não consegue conectar com os serviços da AWS.
+	- Comando no console: EC2 > Security Groups > Create security group 
+		Security group name: bia-dev
+		Description: acesso do bia-dev
+		Inbound rules
+			- Type: Custom TCP
+			- Protocol: TCP
+			- Port range: 3001
+			- Source: Anywhere-lPv4
+			- Description - optional: liberado geral
+		> clica no botão: Create security group
+
+Colar a imagem: Criacao_Security_Groups_bia-dev
+
+Criado o Security group podemos agora Lançar máquina bia-dev:
+
+rafael@Silva:~/bia$ ./scripts/validar_recursos_zona_a.sh
+[ERRO] Tenho um problema ao retornar a VPC default. Será se ela existe?
+[ERRO] Tenho um problema ao retornar a subnet da zona a. Será se existe uma subnet na zona A?
+[ERRO] Não achei o security group bia-dev. Ele foi criado?
+[ERRO] A role 'role-acesso-ssm' não existe
+
+1. O Script não sabe qual "Profile" usar
+O erro do script ./scripts/validar_recursos_zona_a.sh dizendo que não achou a VPC, a subnet e o Security Group acontece porque o script não está usando o seu profile formacao_aws. Os comandos dentro do script provavelmente rodam apenas aws ec2... sem especificar o profile, então ele tenta buscar na conta padrão (que pode estar vazia ou desconectada).
+
+Para resolver isso, você precisa avisar ao seu terminal Linux (WSL) que, por padrão, ele deve usar o profile que você autenticou.
+
+No seu terminal, rode os seguintes comandos antes de executar os scripts:
+	- export AWS_PROFILE=formacao_aws
+	- export AWS_DEFAULT_REGION=us-east-1
+
+No terminal:
+
+rafael@Silva:~/bia$ ./scripts/validar_recursos_zona_a.sh
+[OK] Tudo certo com a VPC
+[OK] Tudo certo com a Subnet
+[OK] Security Group bia-dev foi criado
+ [OK] Regra de entrada está ok
+ [OK] Regra de saída está correta
+>[ERRO] A role 'role-acesso-ssm' não existe
+rafael@Silva:~/bia$ ./scripts/criar_role_ssm.sh
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the CreateRole operation: User: arn:aws:iam::<ACCOUNT_ID>:user/fundamentos_aws is not authorized to perform: iam:CreateRole on resource: arn:aws:iam::<ACCOUNT_ID>:role/role-acesso-ssm because no identity-based policy allows the iam:CreateRole action
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the CreateInstanceProfile operation: User: arn:aws:iam::<ACCOUNT_ID>:user/fundamentos_aws is not authorized to perform: iam:CreateInstanceProfile on resource: arn:aws:iam::<ACCOUNT_ID>:instance-profile/role-acesso-ssm because no identity-based policy allows the iam:CreateInstanceProfile action
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the AddRoleToInstanceProfile operation: User: arn:aws:iam::<ACCOUNT_ID>:user/fundamentos_aws is not authorized to perform: iam:AddRoleToInstanceProfile on resource: instance profile role-acesso-ssm because no identity-based policy allows the iam:AddRoleToInstanceProfile action
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the AttachRolePolicy operation: User: arn:aws:iam::<ACCOUNT_ID>:user/fundamentos_aws is not authorized to perform: iam:AttachRolePolicy on resource: role role-acesso-ssm because no identity-based policy allows the iam:AttachRolePolicy action
+
+Como resolver e fazer o seu script funcionar:
+Você precisará acessar o Console da AWS com o usuário Root (ou o usuário Administrador que você usou para criar a conta fundamentos_aws).
+
+Acesse o painel do IAM > Users (Usuários) > clique no seu usuário fundamentos_aws.
+
+Na aba Permissions, clique no botão Add permissions e depois em Create inline policy (Criar política em linha).
+
+Selecione a aba JSON (no canto superior direito).
+
+Apague o conteúdo e cole este JSON abaixo. Ele libera exatamente os comandos que o seu script precisa rodar, além do PassRole para a máquina:
+
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateRole",
+                "iam:GetRole",
+                "iam:CreateInstanceProfile",
+                "iam:GetInstanceProfile",
+                "iam:AddRoleToInstanceProfile",
+                "iam:AttachRolePolicy",
+                "iam:PassRole"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+
+Clique em Next, dê um nome para a política (por exemplo: PermissaoScriptsIAM) e clique em Create policy.
+Assim que você salvar essa política lá no Console, volte para o seu terminal WSL e execute o script novamente. Agora ele vai funcionar perfeitamente e criar a role sem erros:
+
+rafael@Silva:~/bia$ ./scripts/criar_role_ssm.sh
+A IAM role role-acesso-ssm já existe.
+rafael@Silva:~/bia$ ./scripts/validar_recursos_zona_a.sh
+[OK] Tudo certo com a VPC
+[OK] Tudo certo com a Subnet
+[OK] Security Group bia-dev foi criado
+ [OK] Regra de entrada está ok
+ [OK] Regra de saída está correta
+[OK] Tudo certo com a role 'role-acesso-ssm'
+
+Lançar a máquina bia-dev
+Com a validação 100% ok, basta rodar o script que vai efetivamente criar a sua máquina EC2 na AWS:
+./scripts/lancar_ec2_zona_a.sh
+
+Atenção: Assim que o script terminar, ele provavelmente vai imprimir na tela o ID da Instância (começa com i- seguido de várias letras e números, ex: i-093df6c772a5c4169). Copie esse ID, pois você vai precisar dele no próximo passo.
+
+Passo 2: Conectar na máquina (SSM)
+Usar a permissão que está no crachá para abrir a porta da máquina usando o SSM:
+
+- Descobrir o ID da sua máquina:
+	aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].{ID:InstanceId,Name:Tags[?Key=='Name']|[0].Value,Lancamento:LaunchTime}" --output table --profile formacao_aws
+
+rafael@Silva:~/bia$ aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].{ID:InstanceId,Name:Tags[?Key=='Name']|[0].Value,Lancamento:LaunchTime}" --output table --profile formacao_aws
+---------------------------------------------------------------------
+|                         DescribeInstances                         |
++----------------------+-----------------------------+--------------+
+|          ID          |         Lancamento          |    Name      |
++----------------------+-----------------------------+--------------+
+|  i-093df6c772a5c4169 |  2026-08-24T13:53:56+00:00  |  bia-dev-vm  |
+|  i-065ea93a9fc6f6b0b |  2026-08-24T17:19:58+00:00  |  bia-dev-ssh |
+|  i-09ccd80c869613f04 |  2026-08-25T14:29:13+00:00  |  bia-dev     |
+|  i-03a06143638074c85 |  2026-08-25T15:32:24+00:00  |  bia-dev     |
++----------------------+-----------------------------+--------------+
+
+- Conecte na máquina:
+	aws ssm start-session --target i-03a06143638074c85 --profile formacao_aws
+	sudo su - ec2-user
+
+rafael@Silva:~/bia$ aws ssm start-session --target i-03a06143638074c85 --profile formacao_aws
+
+Starting session with SessionId: fundamentos_aws-svzab9nbgloah8j6iyisugnvuq
+
+sh-5.2$ sudo su - ec2-user
+[ec2-user@ip-172-31-15-143 ~]$
+
+
+Terceiro
+Testar comunicação com o ECR
+
+• Imagem da BIA local
+• Uso do ECR
+• Subindo nossa imagem para a AWS
+
+	ECR > Create
+		colocar o nome> bia 
+		depois clicar: Create
+	copiar URL
+	voltar para o terminal do EC2 do projeto bia
+		comando: cp scripts/ecs/unix/build.sh .
+		comando: nano build.sh
+		agora vamos editar:
+			antes: ECR REGISTRY= "SEU_REGISTRY"
+			depois: ECR REGISTRY= "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com"
+
+	Agora eu posso dar permissão de execução para esse arquivo e chamar build.sh:
+		comando: chmod +x build.sh (permissão de execução para esse arquivo)
+		comando: ./build.sh (aqui ele vai fazer o primeiro build e subir a nossa Imagem para o ECR.
+
+Por fim é só verificar o tamanho da imagem:
+	Amazon ECR > Private registry > Repositories > bia
+
+	Comando para teste: aws ecr describe-repositories --region us-east-1
+
+[ec2-user@ip-172-31-15-143 ~]$ aws ecr describe-repositories --region us-east-1
+{
+    "repositories": [
+        {
+            "repositoryArn": "arn:aws:ecr:us-east-1:<ACCOUNT_ID>:repository/bia",
+            "registryId": "<ACCOUNT_ID>",
+            "repositoryName": "bia",
+            "repositoryUri": "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bia",
+            "createdAt": "2026-08-21T02:33:45.114000+00:00",
+            "imageTagMutability": "MUTABLE",
+            "imageScanningConfiguration": {
+                "scanOnPush": false
+            },
+            "encryptionConfiguration": {
+                "encryptionType": "AES256"
+            }
+        }
+    ]
+}
+
+
+Quarto:
+Fazer build da sua VM (WSL)
+
+Saia da máquina AWS para voltar ao seu WSL:
+Digite exit e dê Enter. Depois digite exit novamente. (O terminal voltará a mostrar rafael@Silva:~/bia$).
+
+[ec2-user@ip-172-31-15-143 ~]$ exit
+logout
+sh-5.2$ pwd
+/usr/bin
+
+Você está no caminho certo! Esse sh-5.2$ significa que você saiu do ec2-user e agora está no usuário do próprio agente de conexão (o SSM).
+Para voltar definitivamente para o seu WSL, basta digitar exit mais uma vez e dar Enter.
+
+rafael@Silva:~/bia$
+
+Agora que você está de volta ao seu WSL, vamos preparar a sua imagem Docker e enviá-la para a AWS
+
+Quinto
+Fazer push para o ECR da sua VM (WSL)
+
+1. Autenticar o seu Docker local (WSL) com a AWS:
+
+Como ativar o Docker no WSL
+1. Abra o aplicativo Docker Desktop no seu Windows.
+2. Clique no ícone de Engrenagem (Settings) no canto superior direito.
+3. No menu lateral esquerdo, clique em Resources (Recursos) e depois em WSL Integration.
+4. Certifique-se de que a opção "Enable integration with my default WSL distro" está marcada.
+5. Logo abaixo, você verá uma lista com o nome do seu Linux (provavelmente Ubuntu). Ative a chavinha ao lado dele.
+6. Clique no botão Apply & restart (Aplicar e reiniciar) no canto inferior direito.
+
+No terminal: rafael@Silva:~/bia$ aws ecr get-login-password --region us-east-1 --profile formacao_aws | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+Login Succeeded
+
+Assim que aparecer a mensagem Login Succeeded, você pode continuar com a sequência dos desafios do Dia 2:
+
+Criar o repositório: aws ecr create-repository --repository-name bia --region us-east-1 --profile formacao_aws
+Fazer o build: docker build -t bia .
+Taguear a imagem: docker tag bia:latest [<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bia:latest](https://<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bia:latest)
+Fazer o push: docker push [<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bia:latest](https://<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bia:latest)
+
+
+Colar a imagem: Criacao_repositorio_ECR

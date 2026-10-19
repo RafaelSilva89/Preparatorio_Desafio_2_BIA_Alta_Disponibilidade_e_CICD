@@ -1,0 +1,921 @@
+Aulas de apoio
+
+
+===============================================================================================
+
+Aula 01: Apresentação do Novo Módulo
+
+Born, pessoal, com esse módulo, eu tenho como objetivo cobrir os principais modelos de conectividade e todo o processo de segurança envolvido nessas operações para nos conectarmos ao nosso EC2, ao nosso banco ou algum outro serviço que envolva algum redirecionamento de porta na nuvem.
+
+O meu grande objetivo é passar por todas essas etapas, começando pela forma mais simples, que é quando você lança um EC2, lança um RDS e se conecta diretamente nele. Sabemos já que essa não é a forma mais segura, é a forma mais simples e, provavelmente, é como muitos começam, se conectando diretamente no seu recurso.
+
+===============================================================================================
+
+Aula 02: Acessando recursos de forma pública
+
+Vamos ver um modelo de conectividade público, onde vamos mostrar como se conectar a um S2 Linux de forma pública, como se conectar a um S2 Windows de forma pública e como se conectar a um RDS de forma pública.
+
+Seguindo para a prática:
+
++------------------------------------------------------------------------------+
+|                                  VPC AWS                                     |
+|                                                                              |
+|          	+-----------------------+        +--------------------------+  |
+|          	|         Subnet A      |        |         Subnet B         |  |
+|          	|                       |        |                          |  |
+|          	|      +------------+   |        |                          |  |
+|          	|      | EC2 Linux  |   |        |                          |  |
+|   +----+ 	|      +------------+   |        |                          |  |
+|   |    |      |                       |        |                          |  |
+|◄─┤ IG ├┬───►                    	|        |                          |  |
+|   |    | │	|      +------------+	|        |                          |  |
+|   +----+ │	|      | EC2 Windows|	|        |                          |  |
+|          │	|      +------------+	|        |                          |  |
+|          │	|                    	|        |                          |  |
+|          │	|      +------------+ 	|        |                          |  |
+|          │	|      |  DB (RDS)  | 	|        |                          |  |
+|          │	|      +------------+	|        |                          |  |
+|          │    +-----------------------+ 		 |                          |  |
+|          │                             		 |                          |  |
+|          └──────────────────────────►              				|  |
+|                                                +--------------------------+  |
++------------------------------------------------------------------------------+
+
+📋 Legenda dos Elementos:
+VPC AWS: O limite externo englobando todos os recursos.
+
+IG (Internet Gateway): O ponto de conexão na borda, com saída para a internet (◄─) e rota para as redes internas (►).
+
+Subnet A: Contém as instâncias EC2 Linux (EL), EC2 Windows (EW) e o Banco de Dados RDS (DB).
+
+Subnet B: Subnet adicional provisionada dentro da VPC (atualmente vazia no desenho, conforme o rascunho em vídeo).
+
+Fluxos: As setas representam a rota do tráfego da internet (IG) sendo direcionado para ambas as sub-redes.
+
+Daí, vamos fazer o processo de conexão com eles.
+Duas Subnets públicas e, a partir daí, vamos conseguir fazer todo o nosso processo.
+
+Verificar: United States (N. Virginia) v
+
+Acessando o console da AWS:
+
+Criando uma VPC:
+	- Create VPC:
+		VPC settings:
+			- VPC and more
+			- Auto-generate: formacao-conectividade-publica
+			- IPv4 CIDR block: 172.33.0.0/16
+			- Number of Availability Zones (AZs): 2
+			- Number of public subnets: 2
+			- Number of private subnets: 0
+			- NAT gateways ($) - updated: None
+			- VPC endpoints: None
+			- Clicar em: Create VPC
+
+Criado a minha VPC, quais recursos eu preciso para me conectar?
+
+	- Eu preciso dos meus security groups para que eu possa me conectar ao meu banco, para que eu possa me conectar à minha EC2 com Linux e à minha EC2 com Windows, então vamos criar três security groups.
+
+Criando security groups:
+	- VPC > Security Groups > Create security group
+		- Security group name: conectividade-publica-windows
+		- Description: sg para conectividade publica no Windows
+		- VPC: formacao-conectividade-publica-vpc
+		- Inbound rules:
+			- Type: RDP
+			- Source: My IP
+			- Description: IP Rafael
+		- Clicar em: Create security group
+
+		- Security group name: conectividade-publica-linux
+		- Description: sg para conectividade para shh
+		- VPC: formacao-conectividade-publica-vpc
+		- Inbound rules:
+			- Type: SHH
+			- Source: My IP
+			- Description: IP Rafael
+		- Clicar em: Create security group
+
+		- Security group name: conectividade-publica-pqsql
+		- Description: conectividade do rds pqsql
+		- VPC: formacao-conectividade-publica-vpc
+		- Inbound rules:
+			- Type: PostgreSQL
+			- Source: My IP
+			- Description: IP Rafael
+		- Clicar em: Create security group
+
+
+Estou com os meus três Security Groups criados, agora eu vou precisar criar os meus recursos.
+
+Criando o banco de dados:
+	- Aurora and RDS > Databases > Create database (escolha: Full configuration) > PostgreSQL
+	- Choose a database creation method: Selecionar > Full configuration
+	- Templates: Selecioanar > Free tier
+	- Availability and durability: Selecionar > Single-AZ DB instance deployment (1 instance)
+	- Settings:
+		- Engine version: PostgreSQL 18.3-R2
+		- DB instance identifier: conectividade-pgsql
+		- Credentials Settings: Selecionar > Self managed
+		- Selecionar: Auto generate password
+	- Instance configuration:
+		- Instance type: db.t3.micro
+	- Storage:
+		- Allocated storage: 20
+		- Additional storage configuration > desmarcar: Enable storage autoscaling
+	- Connectivity:
+		- Virtual private cloud (VPC): formacao-conectividade-publica-vpc (vpc-0258d6f8af1 aed078)
+		- Existing VPC security groups: Selecionar o security group: conectividade-publica-pqsql
+		- Availability Zone: us-east-1a
+		- Additional configuration
+			- Selecionar: Public access: Publicly accessible
+	- Monitoring:
+		- Collect detailed database and per-query metrics: Desmarcar
+	- Additional configuration:
+		- Backup: Desmarcar
+	- Clicar em: Create database
+
+Importante guardar a senha: txNPNwirQ7J664L
+Detalhe na camada free, não mostra o custo.
+Próximo passo é criar a instancia EC2
+
+Criando a instancia:
+	- EC2 > Instances > Launch an instance:
+	
+	- Name and tags:
+		- Name: conectividade-publica-ec2-windows
+	- Application and OS Images (Amazon Machine Image):
+		- Quick Start: Windows
+	- Instance type:
+		- Instance type: t3.micro
+	- Key pair (login)
+		- Create new key pair
+			- Key pair name: bia-conectividade-windows
+			- Key pair type: RSA
+			- Private key file format: Selecionar > .pem (For use with OpenSSH)
+			- Clicar em: Create key pair (ele vai criar um arquivo)
+		- Key pair name - required: bia-conectividade-windows
+	- Network settings
+		- Clica em: Edit
+		- VPC - required: vpc-0258d6f8af1aed078 (formacao-conectividade-publica-vpc)
+		- Subnet: formacao-conectividade-publica-subnet-public1-us-east-1a
+		- Firewall (security groups): Select existing security group
+		- Common security groups: conectividade-publica-windows
+	- Clicar em: Launch instance
+
+	- Name and tags:
+		- Name: conectividade-publica-ec2-linux
+	- Application and OS Images (Amazon Machine Image):
+		- Quick Start: Amazon Linux
+	- Instance type:
+		- Instance type: t3.micro
+	- Key pair (login)
+		- Create new key pair
+			- Key pair name: bia-conectividade-Linux
+			- Key pair type: RSA
+			- Private key file format: Selecionar > .pem (For use with OpenSSH)
+			- Clicar em: Create key pair (ele vai criar um arquivo)
+		- Key pair name - required: bia-conectividade-linux
+	- Network settings
+		- Clica em: Edit
+		- VPC - required: vpc-0258d6f8af1aed078 (formacao-conectividade-publica-vpc)
+		- Subnet: formacao-conectividade-publica-subnet-public2-us-east-1b
+		- Firewall (security groups): Select existing security group
+		- Common security groups: conectividade-publica-linux
+	- Clicar em: Launch instance
+
+
+Detalhe: As instancias estão sem IP Público, porque eu deixei essa opção desabilitada: 
+	Auto-assign public IP: Enable
+
+A solução tem duas opções:
+	- Cria uma nova instancia
+	- Elastic IP
+
+Vamos corrigir através Elastic IP:
+	- EC2 > Elastic IP addresses
+		- Clica em: Allocate Elastic IP address
+			- não precisa alterar nada
+			- clica em: Allocate (vai criar um IP)
+		- Seleciona o IP criado
+		- Clica em: Actions
+			- Seleciona a opção: Associate Elastic IP address
+			- Elastic IP address: 52.23.46.241
+				- Instance: i-0832816b24a139ee8 (conectividade-publica-ec2-linux) - running
+			- Clica em: Associate
+
+Detalhe: repita o processo para bia-conectividade-Windows
+
+Agora vamos conectar na instancia via terminal através do SSH na instancia conectividade-publica-ec2-linux:
+	- No console da AWS: EC2 > Instances:
+		- Selecione a instancia: conectividade-publica-ec2-linux
+		- Clica em: Connect
+		- Selecione a opção: In SSH client
+	- EC2 > Instances > i-0832816b24a139ee8 > Connect to instance:
+		- Como se conectar:
+			1. Abra um cliente SSH.
+			2. Localize ou baixe o arquivo da sua chave privada.
+			3. Certifique-se de que sua chave não esteja visível publicamente.
+			chmod 400 "bia-conectividade-linux.pem"
+			4. Conecte-se à sua instância usando o DNS público dela.
+			ssh -i "bia-conectividade-linux.pem" ec2-user@ec2-52-23-46-241.compute-1.amazonaws.com
+
+Opcional para encontrar o arquivo, dentro do terminal no Ubuntu:
+cd ~/formacaoaws/modulo-conectividade-e-seguranca
+
+cp "/mnt/c/Users/Rafael/OneDrive/Documentos/1 - Repos_pessoal/18 - Henrylle Maia AWS/1 - DESAFIOS FUNDAMENTAIS/4 - Desafio 4/bia-conectividade-linux.pem" .
+
+cp "/mnt/c/Users/Rafael/OneDrive/Documentos/1 - Repos_pessoal/18 - Henrylle Maia AWS/1 - DESAFIOS FUNDAMENTAIS/4 - Desafio 4/bia-conectividade-windows.pem" .
+
+chmod 400 bia-conectividade-linux.pem
+chmod 400  bia-conectividade-windows.pem
+
+ls -l *.pem
+
+Agora no terminal digite esse comando para acessar a instancia EC2 via SHH:
+	- comando: rafael@Silva:~/formacaoaws/modulo-conectividade-e-seguranca$ chmod 400 "bia-conectividade-linux.pem"
+	- comando: rafael@Silva:~/formacaoaws/modulo-conectividade-e-seguranca$ ssh -i "bia-conectividade-linux.pem" ec2-user@ec2-52-23-46-241.compute-1.amazonaws.com
+
+The authenticity of host 'ec2-52-23-46-241.compute-1.amazonaws.com (52.23.46.241)' can't be established.
+ED25519 key fingerprint is SHA256:MC+t7y9E8dKuPTw2cA07o5EHfY6NzqxKgX+S0LGNg1s.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added 'ec2-52-23-46-241.compute-1.amazonaws.com' (ED25519) to the list of known hosts.
+   ,     #_
+   ~\_  ####_        Amazon Linux 2023
+  ~~  \_#####\
+  ~~     \###|
+  ~~       \#/ ___   https://aws.amazon.com/linux/amazon-linux-2023
+   ~~       V~' '->
+    ~~~         /
+      ~~._.   _/
+         _/ _/
+       _/m/'
+[ec2-user@ip-172-33-30-132 ~]$
+	     ------------
+		   |
+		   |
+		   |
+	           ------> Consegui fazer a conexão via SHH no EC2 e esse é o número do IP Privado
+
+
+Lembrando que Elastic IP pagamos por IP não utilizado, se você estiver utilizando você não paga, se estiver sem utilizar você paga, a regra é essa.
+
+Observação:
+Se o terminal ficar muito tempo parado sem mostrar nada, é provável que a conexão esteja travada. Isso pode acontecer por:
+	- Security Group não liberando a porta 22 (SSH);
+	- instância sem acesso público à Internet;
+	- IP público da instância alterado;
+	- DNS público incorreto;
+	- sua rede bloqueando a conexão SSH.
+Teste rápido:
+Pressione Ctrl + C para cancelar e tente:
+	- ssh -vvv -i "bia-conectividade-linux.pem" ec2-user@ec2-52-23-46-241.compute-1.amazonaws.com
+
+O -vvv mostra em qual etapa a conexão está parando.
+Se aparecer:
+	- Connecting to ec2-52-23-46-241.compute-1.amazonaws.com...
+e ficar parado nessa etapa, o problema provavelmente é de rede/conectividade ou Security Group, e não da chave .pem.
+
+Agora vamos conectar na instancia via terminal através do SSH na instancia conectividade-publica-ec2-windows:
+	- No console da AWS: EC2 > Instances:
+		- Selecione a instancia: conectividade-publica-ec2-windows
+		- Clica em: Connect
+		- Selecione a opção: RDP (Remote Desktop Protocol)
+	- EC2 > Instances > i-0a556084371e19ae5 > Connect to instance
+		- Como se conectar:
+			1. Abra ou instale um cliente de Área de Trabalho Remota (RDP).
+			2. Baixe o arquivo de atalho RDP.
+			3. Abra o cliente RDP e execute o arquivo de atalho.
+			4. Obtenha a senha.
+			5. Digite o nome de usuário e a senha.
+			6. Conecte-se.
+
+Então conexão com o Windows Server também funcionou.
+
+Procedimento opcional:
+
+Abrir o arquivo RDP pelo PowerShell
+Como o Windows não possuía o mstsc.exe, foi utilizado o cliente msrdc.exe disponível no ambiente WSL.
+No PowerShell, executar:
+	- & "C:\Program Files\WSL\msrdc.exe" "C:\Users\Rafael\Downloads\conectividade-publica-ec2-windows.rdp"
+
+Recuperar a senha da instância Windows
+
+No console da AWS:
+	1. Acessar EC2.
+	2. Entrar em Instances / Instâncias.
+	3. Selecionar a instância Windows do Desafio 4.
+	4. Clicar em Connect / Conectar.
+	5. Selecionar RDP client.
+	6. Clicar em Get password / Obter senha.
+	7. Selecionar Upload private key file.
+	8. Informar o arquivo:
+		- bia-conectividade-windows.pem
+	9. Clicar em Decrypt password / Descriptografar senha.
+	10. Copiar a senha apresentada pela AWS.
+		- Importante: a senha descriptografada não deve ser compartilhada.
+	
+
+Pronto agora estou conectado nas duas instancias, agora vamos para RDS conectado no DBeaver.
+
+Detalhe precisa verificar essa opção:
+
+Publicly accessible
+	- No
+*falta essa opção aqui, banco publicamente acessível, está como não.
+
+Agora estou conectado em todos os recursos.
+
+Depois de todos os teste, desativar (deletar) todos os recursos.
+E lembrar também de desalocar o nosso IP Elástico, porque o que você paga é por recurso não alocado, estou com dois não alocados, se eu não fizer isso eu vou pagar.
+
+Com isso desaloquei todos os recursos, então mostramos o processo de conexão publicamente acessível tanto para Windows, quanto para Linux, quanto para RDS, perceba que dessa forma nossos recursos estão públicos, claro que isso é coberto de problemas e de insegurança, mas muitas vezes a gente começa por esse processo, agora a partir daí nós vamos evoluir e mostrar modelos mais seguros e modelos criados pela AWS para trazer ainda mais robustez para essas operações.
+
+===============================================================================================
+
+Aula 07: SSM: Conceito + vantagens + montagem de ambiente em subnet pública e privada
+
+Após já termos explicado todo o processo que envolve baixo host, utilizando SSH, utilizado o Instance Connect para jogar uma chave PM temporária, agora vamos falar de um serviço que eu acho que é uma grande virada quando falamos sobre segurança para esse modelo de conexão na AWS, que é o SSM.
+
+Trabalhando no modelo público, que foi a primeira aula que fizemos desse modelo de conectividade, parecia o melhor modelo, mas nós avançamos, mostramos o processo do baixo host e como ele traz inúmeros benefícios, agora vamos mostrar que o nosso modelo de baixo host com SSH, de certa forma, fica para trás no quesito segurança quando a gente coloca o SSM na jogada.
+
+PM = porteiro moderno
+Nesse PM também tem um Security Group, mas apenas para controle das entradas nas instâncias que queremos nos comunicar.
+
+Nesse tipo de conexão nenhuma regra de entrada precisa e aqui é a grande vantagem é um processo de autorização que acontece através de IAM, então aqui nosso controle de segurança acontece através do IAM, existem inúmeras vantagens desse processo, o primeiro deles é a centralização, a gente não precisa aqui de chave PM, nem chave fixa, nem chave temporária, onde o EC2 Instance Connect era uma alternativa, a gente faz o processo de controle de acesso apenas por IAM, então o nosso IAM vai precisar ter permissões que autorizem, a nossa EC2 vai precisar de um Instance Profile que permita que um serviço que tem nela chamado Agente do SSM possa operar e
+permitir a comunicação do nosso usuário, esse cara (PM) aqui por não ter precisado de nenhuma regra de entrada, ele precisa se comunicar com a internet para que a
+comunicação aconteça.
+
+O SSM é um serviço da AWS e dentro do EC2 temos um agente, algumas instâncias da AWS já têm esse agente pré-instalado para você simplesmente utilizar, basta que a gente configura as permissões e IAM, a Role para essa EC2, permitir que esse cara consiga fazer a comunicação com o serviço da AWS.
+
+O Fluxo de comunicação:
+Nosso usuário vai iniciar o processo com permissões de IAM através do Cli da nossa máquina, quando acontece esse fluxo, a gente vai passar o ID da instância, então ele vai saber que se trata dessa instância e o processo de comunicação vai partir do agente, ou seja, se parte do agente eu não estou batendo direto no agente, o tráfego é de outbound, não inbound.
+
+Outbound, pessoal, por padrão é o tráfego que que sai da instancia, deixamos abertos (0.0.0.0/0). A gente deixa aberto, então com isso o tráfego de saída da instância está livre para a internet, então com isso ele consegue se comunicar com o serviço do SSM e a partir daí a comunicação consegue ser estabelecida. Então esse cara aqui não precisa ter entrada e não precisa ter nenhum tráfego de entrada, mas ele precisa conseguir sair para a internet, esse é o grande detalhe, esse cara precisa conseguir sair para a internet, ou seja, existem duas forma de sair para internet.
+
+- Uma delas é esse agente estar em uma subnet pública.
+- É ele estando em uma subnet privada, mas tendo saída para a internet, usando NAT Gateway na subnet pública e configurando rota de saída por aqui, então o tráfego vai sair para internet.
+
+Para esse ambiente nós vamos precisar de dois security groups:
+	- um security group para subnet pública
+	- outro security group para subnet privada
+
+Diagrama de Comunicação: AWS Systems Manager (SSM)
+
++---------+
+| USUÁRIO |
+|  (IAM)  |
++----┬----+
+     │ (CLI: Envia ID da Instância)
+     ▼
++------------------------------------------------------------------------------+
+| AWS CLOUD                                                                    |
+|                                                                              |
+| +-------------+     +------------------------------------------------------+ |
+| |             |     | VPC                                                  | |
+| |     SSM     |     |  +------------------------+ +----------------------+ | |
+| |   SERVICE   |     |  |     SUBNET PÚBLICA     | |    SUBNET PRIVADA    | | |
+| |             |     |  |        (SG 1)          | |        (SG 2)        | | |
+| |             |     |  |                        | |                      | | |
+| |             |◄──┼──┼────+-------+ 		  | |      +-------+       | | |
+| |             |     |  |      | AGENT |         | |      | AGENT |       | | |
+| |             |     |  |      +-------+         | |      +---┬---+ 	   | | |
+| |             |     |  |                        | |          │       	   | | |
+| |             |     |  |      +-------+         | | Outbound │    	   | | |
+| |             |◄──┼──┼───┤  NG    |◄─────┼┼───────┘   		   | | |
+| +-------------+     |  |      +-------+         | |                      | | |
+|                     |  +------------------------+ +----------------------+ | |
+|                     +------------------------------------------------------+ |
++------------------------------------------------------------------------------+
+
+Vamos para a pratica no console da AWS:
+
+Criação da VPC pública e privada:
+Criando uma VPC:
+	- Create VPC:
+		- VPC > Your VPCs > Create VPC
+		VPC settings:
+			- Resources to create: Selecione: VPC and more
+			- Auto-generate: formacao-conectividade-ssm
+			- IPv4 CIDR block: 172.32.0.0/16
+			- Number of Availability Zones (AZs): 2
+			- Number of public subnets: 2
+			- Number of private subnets: 2
+			- NAT gateways ($) - updated: None
+			- VPC endpoints: None
+			- Clicar em: Create VPC
+
+Vamos criar security group:
+	- EC2 > Security Groups > Create security group
+		- Basic details
+			- Security group name: pm-ssm-private-subnet
+			- Description: acesso do porteiro moderno numa subnet privada
+			- VPC: vpc-0258d6f8af1aed078 (formacao-conectividade-publica-vpc)
+		- Clicar em: Create securgy group
+
+		- Basic details
+			- Security group name: pm-ssm-public-subnet
+			- Description: acesso do porteiro moderno numa subnet publica
+			- VPC: conectividade-bastion-ssh-vpc
+		- Clicar em: Create securgy group
+
+Criando a NAT Gateway (NG):
+	- VPC > NAT gateways > Create NAT gateway
+		- Clicar em: Create NAT gateway
+		- NAT gateway settings
+			- Name: ng-ssm
+		- Availability mode: Zonal
+		- Subnet: subnet-02401 aOce08377083 (formacao-conectividade-ssm-subnet-public1-us-east-1a)
+		- Connectivity type: Public (para ter saída para a internet)
+		- Elastic IP allocation ID: Clicar em > Allocate Elastic IP
+			- Clica em: Create NAT gateway
+
+Criado o NAT Gateway, vamos para a tabela de rotas e vamos procurar:
+	- VPC > Route tables
+	- Selecionar: formacao-conectividade-ssm-rtb-private1-us-east-la (editado para a zona A)
+	- clicar e seleciona a opção Routes
+	- clica em: Edit Routes
+		- vpc > Route tables > rtb-06c5a567d83ca1379 > Edit routes
+			- Destination: 0.0.0.0/0
+			- Target: Selecionar o NAT Gateway que foi crido
+			- Clica em: Save Changes
+
+	- Selecionar: formacao-conectividade-ssm-rtb-private2-us-east-1b (editado para a zona B)
+	- clicar e seleciona a opção Routes
+	- clica em: Edit Routes
+	- vpc > Route tables > rtb-06c5a567d83ca1379 > Edit routes
+		- Destination: 0.0.0.0/0
+		- Target: Selecionar o NAT Gateway que foi crido
+		- Clica em: Save Changes
+
+
+Então foi feito a etapa da criação do NAT Gateway e com as tabelas de rotas configuradas, agora preciso criar os meus dois agentes, o da subnet pública
+Agora com os dois security group criado, vamos criar as EC2.
+
+Criando as instancias EC2:
+	- EC2 > Instances > Launch an instance:
+	- Name and tags:
+		- Name: ssm-subnet-publica
+	- Application and OS Images (Amazon Machine Image):
+		- Quick Start: Amazon Linux
+	- Instance type:
+		- Instance type: t3.micro
+	- Key pair (login)
+		- Key pair name - required: Proceed without a key pair (Not recommended) (Não precisa porque o processo todo acontece com agente e com IAM)
+	- Network settings
+		- Clica em: Edit
+		- VPC - required: vpc-Oc91 b32257584ddda (formacao-conectividade-ssm-vpc)
+		- Subnet: formacao-conectividade-ssm-su bnet-private1-us-east-1a
+		- Auto-assign public IP: Enable
+		- Firewall (security groups): Select existing security group
+		- Common security groups: pm-ss-public-subnet
+
+	- Ponto de atenção: Uma outra configuração que a gente precisa fazer, como eu falei para vocês, são as permissões a policy que a gente vai atachar a nosso EC2, a gente precisa de uma a policy para que ele consiga iniciar o agente, para que o agente consiga se comunicar com esse serviço da AWS, nesse momento nós não mexemos ainda com a parte de IAM, a gente vai mexer agora, para que a gente possa atachar, mas antes a gente precisa criar uma Role para essa finalidade.
+	
+	- IAM > Roles > Create role
+		- Use case: EC2
+		- Next
+		- AmazonSSMManagedInstanceCore
+		- Next
+		- Role name: role-acesso-ssm-modulo-conectividade
+		- Description: role para o modulo de conectividade usando ssm
+		- Clica em: Create role
+
+	- Agora com a role criada, podemos voltar na instancia
+
+	- Clicar em: Advanced details
+		- IAM instance profile: role-acesso-ssm-modulo-conectividade
+	- Clicar em: Launch instance
+
+	- Agora lançar a nossa segunda instância, agora vai ser o da subnet privada.
+	
+	- EC2 > Instances > Launch an instance:
+	- Name and tags:
+		- Name: ssm-subnet-privada
+	- Application and OS Images (Amazon Machine Image):
+		- Quick Start: Amazon Linux
+	- Instance type:
+		- Instance type: t3.micro
+	- Key pair (login)
+		- Key pair name - required: Proceed without a key pair (Not recommended) (Não precisa porque o processo todo acontece com agente e com IAM)
+	- Network settings
+		- Clica em: Edit
+		- VPC - required: vpc-Oc91 b32257584ddda (formacao-conectividade-ssm-vpc)
+		- Subnet: formacao-conectividade-ssm-su bnet-private1-us-east-1a
+		- Auto-assign public IP: Disable
+		- Firewall (security groups): Select existing security group
+		- Common security groups: pm-ssm-private-subnet
+	- Clicar em: Advanced details
+		- IAM instance profile: role-acesso-ssm-modulo-conectividade
+	- Clicar em: Launch instance
+
+Em vista de ambiente, temos os nossos agentes lançados, NAT Gateway configurado, Security Groups configurados, esse ambiente, para quem possa trabalhar com o SSM, está montado, próxima aula, a próxima etapa é configurar a permissão IAM do nosso usuário que vai fazer essa comunicação com o SSM.
+
+=====================================================================================
+
+Aula 08: SSM: Conexão de subnet pública e privada + acesso do console, cloud shell e terminal
+
+Conexão via cloud shell:
+	- Clicar no símbolo de terminal: cloud shell
+		- irá abril um terminal: CloudShell
+		- No terminal podemos colar essa linha de código:
+			- endereço: bia/scripts/start-session-bash.sh:
+				- aws ssm start-session --target i-03f10e22a5d8a6f6d
+				- aws ssm start-session --target i-03f10e22a5d8a6f6d --document-name AWS-StartInteractiveCommand --parameters command="bash -l"
+
++--------------------------------------------------------------------------------------------------+
+| >_ CloudShell                                                         	   Actions ▼   X   |
++-------------+---+                                                                                |
+|  us-east-1  | + |                                                                                |
++-------------+---+--------------------------------------------------------------------------------+
+| ~ $ aws ssm start-session --target i-03f10e22a5d8a6f6d --document-name AWS-StartInteractive...   |
+| Starting session with SessionId: root-q5b5h44oj5rgzj6t6ko2snbpl4                                 |
+| [ssm-user@ip-172-32-141-157 bin]$ █                                                       	   |
+|                                                                                                  |
++--------------------------------------------------------------------------------------------------+
+
+Então, o primeiro processo de conexão funcionou, fizemos através do CloudShell.
+
+Conexão via AWS CLI
+
+Sendo através de um usuário root, vai funcionar porque ele já tem todas as permissões, mas se eu quiser fazer através do AWS CLI aqui da minha máquina, como é que funcionaria?
+Eu preciso de uma policy para o meu usuário para que eu consiga iniciar a seção.
+
+AWS Command Line Interface
+A AWS Command Line Interface (AWS CLI) é uma ferramenta unificada para o gerenciamento de seus serviços da AWS. Com apenas uma ferramenta para baixar e configurar, você poderá controlar vários serviços da AWS pela linha de comando e automatizá-los usando scripts
+
+Mas precisamos de um policy:
+
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ssm:StartSession"
+			],
+			"Resource": [
+				"arn:aws:ssm:*:*:document/AWS-StartSSHSession",
+				"arn:aws:ssm:*:*:document/AWS-StartPortForwardingSessionToRemoteHost",
+				"arn:aws:ec2:us-east-1:*:instance/ID_DA_EC2"
+			]
+		},
+		{
+			"Effect": "Allow",
+			"Action": [
+				"ssm:TerminateSession",
+				"ssm:ResumeSession"
+			],
+			"Resource": [
+				"arn:aws:ssm:*:*:session/${aws:username}-*"
+			]
+		}
+	]
+}
+
+
+	- Vamos criar essa policy:
+		- IAM > Policies > Create policy
+			- Selecionar: JSON
+			- colar a policy acima.
+			- Next
+		- Policy name: ssm-start-session-modulo-conectividade
+		- Description: policy para iniciar ssm do modulo conectividade e seguranca da formacao aws
+		- Clica em: Create policy
+
+		- Agora precisamos anexar essa policy ao usuário.
+		- IAM > IAM users > fundamentos_aws > Add permissions
+			- Selecionar: ssm-start-session-modulo-conectividade
+			- Next
+			- Add permissions
+
+	- Conexão através da minha máquina:
+		- No terminal podemos colar essa linha de código:
+			- aws ssm start-session --target i-03f10e22a5d8a6f6d --document-name AWS-StartInteractiveCommand --parameters command="bash -l" --profile formacao_aws
+			- Certifique-se também de que você já tenha feito o login (autenticação) das credenciais desse profile formacao_aws no seu terminal antes de rodar o comando (por exemplo, usando o aws sso login --profile formacao_aws se você estiver usando AWS SSO).
+			- Precisa ter também as credenciais do seu profile formacao_aws
+
++--------------------------------------------------------------------------------------------------+
+| Ubuntu-24.04                                                                           _  O  X   |
++--------------------------------------------------------------------------------------------------+
+| rafael@Silva:~$ aws ssm start-session --target i-03f10e22a5d8a6f6d --document-name AWS-StartInte |
+| ractiveCommand --parameters command="bash -l" --profile formacao_aws                             |
+|                                                                                                  |
+| aws: [ERROR]: Your session has expired. Please reauthenticate using 'aws login'.                 |
+| rafael@Silva:~$ aws login --profile formacao_aws                                                 |
+| Attempting to open your default browser. If the browser does not open, open the following URL.   |
+| If you are unable to open the URL on this device, run this command again with the '--remote' opt |
+| ion.                                                                                             |
+|                                                                                                  |
+| https://us-east-1.signin.aws.amazon.com/v1/authorize?response_type=code&client_id=arn%3Aaws%3Asi |
+| gnin%3A%3A%3Adevtools%2Fsame-device&state=98d5f1e3-5f00-4a40-be93-d0d1cd5b3d1c&code_challenge_me |
+| thod=SHA-256&scope=openid&redirect_uri=http%3A%2F%2F127.0.0.1%3A34459%2Foauth%2Fcallback&code_ch |
+| allenge=fqBYNzuOo2hd_hLgnKa6-wC7EdzqiKMiffYHKkv5bSA                                              |
+|                                                                                                  |
+| gio: https://us-east-1.signin.aws.amazon.com/v1/authorize?response_type=code&client_id=arn%3Aaws |
+| %3Asignin%3A%3A%3Adevtools%2Fsame-device&state=98d5f1e3-5f00-4a40-be93-d0d1cd5b3d1c&code_challen |
+| ge_method=SHA-256&scope=openid&redirect_uri=http%3A%2F%2F127.0.0.1%3A34459%2Foauth%2Fcallback&co |
+| de_challenge=fqBYNzuOo2hd_hLgnKa6-wC7EdzqiKMiffYHKkv5bSA: Operation not supported                |
+|                                                                                                  |
+| Updated profile formacao_aws to use arn:aws:iam::<ACCOUNT_ID>:user/fundamentos_aws credentials.  |
+| Use "--profile formacao_aws" to use the new credentials, such as "aws sts get-caller-identity -- |
+| profile formacao_aws"										   |
+| rafael@Silva:~$ aws ssm start-session --target i-03f10e22a5d8a6f6d --document-name               |
+| AWS-StartInteractiveCommand --parameters command="bash -l" --profile formacao_aws                |
+| Starting session with SessionId: fundamentos_aws-6bztrhhvhnlz2p4g3qqun33d7e                      |
+| [ssm-user@ip-172-32-141-157 bin]$ █                                  							   |
++--------------------------------------------------------------------------------------------------+
+
+Conectando — troque pelo ID da sua instância:
+
+aws ssm start-session --target i-0abcd1234efgh5681 --profile formacao_aws
+Starting session with SessionId: formacao_aws-xxxxxxxxxxxxxxxxxxxxxxxxx
+
+sh-5.2$
+Agora troque para o usuário de trabalho:
+
+sudo su - ec2-user
+[ec2-user@ip-172-31-15-143 ~]$
+💡 Por que sudo su - ec2-user e não trabalhar onde você caiu:
+
+/usr/bin é reservado aos executáveis do sistema operacional e ao gerenciador de pacotes. Misturar código de aplicação ali gera conflito — uma atualização do SO pode sobrescrever arquivos.
+Escrever nessas pastas exige root, e rodar aplicação como root é uma falha grave de segurança.
+ec2-user é o usuário padrão do Amazon Linux. Em /home/ec2-user você tem controle total para clonar repositórios e instalar bibliotecas sem risco de quebrar o servidor.
+A prova de que a sessão é SSM — a árvore de processos:
+
+ps -ef --forest | grep ssm
+root        1427       1  /usr/bin/amazon-ssm-agent
+root        1528    1427   \_ /usr/bin/ssm-agent-worker
+root        3792    1528       \_ /usr/bin/ssm-session-worker formacao_aws-xxxxxxxx
+ssm-user    3805    3792           \_ sh
+A presença de /usr/bin/ssm-session-worker é a prova categórica: a conexão foi estabelecida pelo Systems Manager, sem a porta 22 aberta para a internet.
+
+amazon-ssm-agent  (PID 1427) ─ serviço base, escuta pedidos de conexão da AWS
+   └── ssm-agent-worker (PID 1528) ─ gerencia tarefas e processos da máquina
+        └── ssm-session-worker (PID 3792) ─ criado exclusivamente para a SUA sessão
+             └── sh (PID 3805) ─ shell inicial, sob o usuário 'ssm-user'
+                  └── su - ec2-user ─ ambiente de trabalho seguro
+⚠ Para sair, exit precisa ser executado mais de uma vez, porque há camadas empilhadas: ec2-user → ssm-user → terminal local.
+
+Script parar checar o status do agent do SSM:
+	- aws ssm describe-instance-information --region [SUA_REGIAO] --instance-information-filter-list key=InstanceIds,valueSet=ID_DA_EC2 --query "InstanceInformationList"
+	- aws ssm describe-instance-information --region us-east-1 --instance-information-filter-list key=InstanceIds,valueSet=i-03f10e22a5d8a6f6d --query "InstanceInformationList"
+
+Consegui me conectar na minha EC2, então já funcionou aqui para mim, já está funcionando a minha comunicação, sem regra de entrada.
+Nós vamos trabalhar com redirecionamento.
+
+Informações complementar sobre AWS CLI:
+
+AWS LOGIN
+- Credenciais de curta duração
+- Renova automaticamente em 15 min
+- Validade de 12h
+- Após 12h, novo aws login
+- Policy necessária:
+	- SignlnLocalDevelopmentAccess
+
+Agora vamos fazer a configuração do AWS Client.
+
+Criar o usuário IAM no console:
+Por que esta etapa existe: o seu terminal ainda não é ninguém para a AWS. Antes de qualquer comando, precisa existir uma identidade — e essa identidade precisa carregar as permissões do que vamos fazer.
+
+Toda requisição do CLI responde a duas perguntas, que são as duas camadas:
+
+1. QUEM ESTÁ FAZENDO ESTA REQUISIÇÃO?   →  Autenticação (credenciais)
+2. ESSA IDENTIDADE TEM PERMISSÃO?       →  Autorização (IAM Policy)
+                                        →  Executar ou negar a ação
+
+┌─────────────────────────────────────────────┐
+│  1. COMUNICAÇÃO                                              │
+│     Eu consigo chegar até o serviço?                         │
+│     VPC + Subnet + Rotas + Internet/NAT Gateway + SG         │
+└────────────────────┬────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────┐
+│  2. AUTORIZAÇÃO                                              │
+│     Agora que cheguei, posso executar essa ação?             │
+│     IAM User + IAM Role + IAM Policy                         │
+└────────────────────┬────────────────────────┘
+                             ▼
+                    ┌────────────┐
+                    │ AÇÃO EXECUTADA │
+                    └────────────┘
+
+
+Passo a passo no console:
+
+Só que no final de 2025, a AWS liberou um mecanismo mais seguro para a gente realizar esse trabalho, que é utilizando a AWS Login.
+Na aula anterior foi criado o usuário e configuramos apenas acesso com Security Credentials. Nós não vamos mais trabalhar dessa forma,trabalhando com Security Credentials. A gente vai trabalhar com credenciais temporárias, aquelas Security Credentials são credenciais de longa duração. Obviamente, se alguém pega essas credenciais, elas podem acessar a sua conta. Com credenciais de curta duração, isso não acontece, são credenciais que vão expirar em 12 horas e elas são rotacionadas automaticamente nessa janela de 12 horas a cada 15 minutos, ou seja, um meio simples e muito mais seguro.
+
+Mas existe um pré-requisitos, precisamos conseguir acessar a nossa conta pelo console.
+
+Comando: IAM > para criar o usuário e conceder as permissões
+	IAM users > Create user > User name (exemplo: fundamentos) > clicar na opção:
+		- Provide user access to the AWS Management Console - optional
+	Next > Selecionar: Attach policies directly > Selecionar:
+		- AmazonSSMFullAccess
+		- AmazonEC2ContainerRegistryFullAccess
+		- SignlnLocalDevelopmentAccess
+	> Next > Create user > vai mostrar essas informações:
+		Console sign-in URL
+			https://<ACCOUNT_ID>.signin.aws.amazon.com/console
+		User name
+			fundamentos_aws
+		Console password
+			***************
+	> Clicar par baixar: "Download .csv file"
+	> Nova janela anônima > colar : Console sign-in URL > nos campos vamos colocar essas informações:
+		IAM username: User name
+		Password: Console password
+		Depois só clicar em: Sign in
+
+Agora o próximo passo é no terminal para configurar as suas credenciais para uso temporário.
+
+Autenticar o terminal na AWS:
+Por que esta etapa existe: é aqui que a máquina local ganha o crachá para agir em nome do usuário IAM criado na etapa anterior.
+
+1. Fazer login
+aws login --profile formacao_aws
+AWS Region [us-east-1]: us-east-1
+
+O comando abre o navegador (ou imprime a URL para você abrir manualmente) e, depois da escolha da conta, devolve:
+
+Updated profile formacao_aws to use arn:aws:iam::111122223333:user/formacao_aws credentials.
+Use "--profile formacao_aws" to use the new credentials.
+
+2. Definir o contexto do shell
+Este passo evita o erro mais chato do desafio inteiro. Faça agora:
+export AWS_PROFILE=formacao_aws
+export AWS_DEFAULT_REGION=us-east-1
+
+Meu profile default foi assumido para ser formacao_aws.
+
+3. Confirmar quem você é para a AWS
+aws sts get-caller-identity --profile formacao_aws
+
+{
+    "UserId": "AIDAEXAMPLEUSERID123",
+    "Account": "111122223333",
+    "Arn": "arn:aws:iam::111122223333:user/formacao_aws"
+}
+
+
+Se a sua conta ainda não tiver o aws login disponível, o caminho antigo continua funcionando. Crie uma Access Key no console e rode:
+
+aws configure --profile formacao_aws
+
+AWS Access Key ID     [None]: <sua-access-key>
+AWS Secret Access Key [None]: <sua-secret-key>
+Default region name   [None]: us-east-1
+Default output format [None]: table
+
+Para encerrar a sessão a qualquer momento:
+
+aws logout --profile formacao_aws
+
+Importante distinguir os dois papéis: aws login resolve quem eu sou — autentica o seu terminal na conta. O SSM (Etapa 9) resolve como eu entro na máquina. São problemas diferentes, resolvidos por serviços diferentes.
+
+1. NOSSA MÁQUINA
+
+WSL / Terminal
+      │
+      ▼
+AWS CLI
+      │
+      │ Usa credenciais
+      ▼
+IAM USER
+      │
+      ▼
+AWS API
+      │
+      └──► Executa ações permitidas pelas Policies
+
+
+2. RECURSO DENTRO DA AWS
+
+EC2
+ │
+ │ Não precisa armazenar Access Key e Secret Key
+ │
+ ▼
+IAM ROLE
+ │
+ ▼
+IAM POLICIES
+ │
+ ├──► Permissão para SSM
+ │
+ ├──► Permissão para ECR
+ │
+ └──► Permissão para outros serviços AWS
+
+
+Comando: IAM > para criar o usuário e conceder as permissões
+	IAM users > Create user > User name (exemplo: fundamentos) > Next > Selecionar: Attach policies directly > Selecionar:
+		- AmazonSSMFullAccess
+		- AmazonEC2ContainerRegistryFullAccess
+	> Next > Create user
+	Criando o usuário vamos fazer: Depois clicar na IAM que foi criado, exemplo: "fundamentos" > Security credentials > Create access key > Other > Next > Fornecer um nome para identificar onde você está usando a access key, exemplo: vm-linux-formacao > Creat access key > vai fornecer dois acessos para colocar no termial:
+		- Access key
+		- Secret access key
+	> No console da AWS clica em Done.
+
+Acessar o terminal para configurar ao acesso
+Comando: aws configure
+	- quando colocamos "aws configure" estaremos trabalhando com "default profile"
+	- caso queira definir um profile use: aws configure --profile fundamento
+Comando: aws configure
+	AWS Access Key ID [None]: Access key
+	AWS Secret Access Key [None]: Secret access key
+	Default region name [None]: us-east-l
+	Default output format [None]: table (para ver o resultado depois do comando)
+
+Usuário criado, mas sem acesso ao console, com login e senha, porque não foi habilitado, mas foi habilitei o acesso por credenciais, e no meu terminal, isso já está configurado.
+
+Vamos fazer um teste conectar via SSM da máquina local usando o terminal para conectar em um EC2 via terminal:
+
+Primeiro: Pegar o ID da instancia "i-093af6c222a5c4126"
+Segundo: No terminal colocar aws ssm start-session --target i-093af6c222a5c4126
+Esta linha confirma que a sessão SSM foi estabelecida: Starting session with SessionId: fundamentos-er43r4ejg3svj3zu2e4q5b9de4
+E agora você está dentro da sua instância EC2: sh-5.2$
+O fluxo agora está assim:
+
+Seu computador
+    │
+    │ aws ssm start-session
+    ▼
+AWS Systems Manager
+    │
+    │ Session Manager
+    ▼
+EC2 bia-dev
+    │
+    ▼
+Amazon Linux 2023
+    │
+    ▼
+sh-5.2$
+
+Próximo comando: descobrir qual usuário você está usando: whoami
+Opção mais limpa (mostra apenas o número do IP): hostname -I
+	- o comando hostname -I não procura especificamente pelo "IP da EC2" ou pelo "IP do Docker". A função dele é simplesmente listar todos os endereços IP de todas as interfaces de rede ativas no sistema operacional.
+
+*Security group é usado para liberar a máquina (BIA-DEV) para está acessível na porta 3001 (são as regras de entrada), além dessas regras precisa associar uma autorização (role-acesso-ssm), onde vamos dizer o objetivo dessa role, no nosso caso é da autorização para a minha instância consiga se comunicar com outros serviços da AWS, para isso preciso associar uma role e nessa role vamos colocar as poles que são as autorizações que ela vai ter, sem isso ela não consegue conectar com os serviços da AWS.
+
+================================================================================
+                    COMPARAÇÃO DE ACESSO: SSM vs SSH NA EC2
+================================================================================
+
+                                    +-------+
+                       +----------->|  IAM  | (Autenticação / Permissão)
+                       |            +-------+
+                       |
++-------------+        |          (OUTBOUND / Resposta)
+| USER (SSM)  | ◄────┼──────────────────────+
++------+------+        |  [ SSM SESSION ]             |
+       |               |                              |
+       +---------------+                              |
+                                                      |
+                                             +--------+--------+
+                                             | EC2             |
+                                             |                 |
++-------------+       (INBOUND / Porta 22)   |   AGENT SSM     |
+| USER (SSH)  |────────────────────► |                 |
+|  (Chave     |       [ CONEXÃO SSH ]        |                 |
+|   .PEM)     |                              |                 |
++------+------+                              |                 |
+       |                                     |                 |
+       +---------------- (Chave .PEM) ────►|                 |
+                                             +-----------------+
+
+
+1. Como Funciona o Acesso via SSH (Tradicional)
+Autenticação por Par de Chaves: 
+	- O usuário precisa possuir localmente o arquivo de chave privada (.pem) correspondente à chave pública instalada na EC2 (authorized_keys).
+	- O usuário precisa ter uma chave SSH e precisa liberar uma regra de entrada para se conectar no servidor
+
+2. Como Funciona o Acesso via SSM (Systems Manager)
+Autenticação via IAM: 
+	- O usuário não usa chaves .pem. O acesso é validado pelas políticas do AWS IAM (com suporte a MFA, SSO e Session Policies).
+	- No SSM o mecanismos de comunicação é outro, ao invés de liberar regras de entrada no servidor, não precisamos liberar nada, porque a comunicação com o SSM acontece de forma inversa. Na AWS existe um Agente SSM e ele, a partir do start do usuário ele abre a comunicação com o usuário, mas isso é um serviço da AWS, para esse agente iniciar, ele precisa de autorização e no script tem essa autorização, para abrir um canal de comunicação e se conectar com a instância.
+
++-----------------------+-----------------------------+-----------------------------+
+| CARACTERÍSTICA        | ACESSO SSH TRADICIONAL      | ACESSO AWS SSM (SESSION M.) |
++-----------------------+-----------------------------+-----------------------------+
+| Autenticação          | Arquivo de Chave (.PEM)     | AWS IAM (Usuários/Roles)    |
++-----------------------+-----------------------------+-----------------------------+
+| Portas de Entrada     | Requer Porta 22 Aberta      | Zero Portas Abertas (0)     |
++-----------------------+-----------------------------+-----------------------------+
+| Direção do Tráfego    | Inbound (Entrada na EC2)    | Outbound (EC2 -> AWS SSM)   |
++-----------------------+-----------------------------+-----------------------------+
+| Necessidade IP Púb.   | Sim (ou Bastion Host / VPN) | Não (pode ser 100% privada) |
++-----------------------+-----------------------------+-----------------------------+
+| Gestão de Chaves      | Manual / Compartilhamento   | Centralizada pelo IAM       |
++-----------------------+-----------------------------+-----------------------------+
+| Auditoria e Logs      | Logs locais no Linux        | CloudTrail, S3 e CloudWatch |
++-----------------------+-----------------------------+-----------------------------+
+| Superfície de Ataque  | Alta (Porta exposta na net) | Mínima (Sem portas abertas) |
++-----------------------+-----------------------------+-----------------------------+
+

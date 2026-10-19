@@ -1,0 +1,2382 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Roteiro passo a passo do Desafio 4 da formação AWS: lançar uma EC2 porteiro na zona b, abrir túneis SSM para o RDS na porta 5433 e para a BIA na porta 3002, gravar um registro no banco e parar o porteiro.">
+<meta name="color-scheme" content="light dark">
+<title>Desafio 4 — Porteiro e túneis SSM</title>
+<script>
+  /* Aplica o tema salvo antes da primeira pintura: no rodape, quem escolheu
+     escuro veria um lampejo branco a cada carregamento. */
+  (function () {
+    try {
+      var t = localStorage.getItem("desafio4-guia-tema");
+      if (t === "dark" || t === "light") {
+        document.documentElement.setAttribute("data-theme", t);
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+
+<style>
+  :root {
+    --bg:        #E9EDEF;
+    --surface:   #FFFFFF;
+    --surface-2: #F3F6F7;
+    --ink:       #0E1619;
+    --ink-2:     #44555C;
+    --ink-3:     #6F8188;
+    --line:      #D3DBDE;
+    --line-2:    #E4EAEC;
+    --accent:    #0A6A72;
+    --accent-2:  #08535A;
+    --accent-soft:#DBECED;
+    --warn:      #A05712;
+    --warn-soft: #FAEDDC;
+    --ok:        #1E6F45;
+    --ok-soft:   #DEF0E6;
+    --stop:      #A13327;
+    --stop-soft: #FAE3E0;
+    --term-bg:   #0D1619;
+    --term-line: #1E2E34;
+    --term-ink:  #D6E3E7;
+    --term-dim:  #7C949B;
+    --shadow:    0 1px 2px rgba(14,22,25,.05), 0 8px 24px -16px rgba(14,22,25,.28);
+    --radius: 10px;
+    --maxw: 1180px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #0B1214;
+      --surface:   #121B1E;
+      --surface-2: #162126;
+      --ink:       #E7EFF1;
+      --ink-2:     #A8BBC1;
+      --ink-3:     #7C9199;
+      --line:      #24343A;
+      --line-2:    #1C282D;
+      --accent:    #5AC6CE;
+      --accent-2:  #8BDBE1;
+      --accent-soft:#10333A;
+      --warn:      #E2A75E;
+      --warn-soft: #2C2216;
+      --ok:        #6FCB95;
+      --ok-soft:   #13291D;
+      --stop:      #EA8B7D;
+      --stop-soft: #2E1A17;
+      --term-bg:   #08100F;
+      --term-line: #1B2A2F;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg:        #0B1214;
+    --surface:   #121B1E;
+    --surface-2: #162126;
+    --ink:       #E7EFF1;
+    --ink-2:     #A8BBC1;
+    --ink-3:     #7C9199;
+    --line:      #24343A;
+    --line-2:    #1C282D;
+    --accent:    #5AC6CE;
+    --accent-2:  #8BDBE1;
+    --accent-soft:#10333A;
+    --warn:      #E2A75E;
+    --warn-soft: #2C2216;
+    --ok:        #6FCB95;
+    --ok-soft:   #13291D;
+    --stop:      #EA8B7D;
+    --stop-soft: #2E1A17;
+    --term-bg:   #08100F;
+    --term-line: #1B2A2F;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -0.015em;
+  }
+
+  code, kbd, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  }
+
+  /* ---------- barra superior ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-in {
+    max-width: var(--maxw); margin: 0 auto; padding: 10px 24px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  }
+  .topbar-id { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+  .topbar-id strong { font-family: "Archivo", sans-serif; font-size: 15px; font-weight: 700; }
+  .topbar-id span { font-size: 12px; color: var(--ink-3); font-family: "IBM Plex Mono", monospace; }
+
+  .prog { display: flex; align-items: center; gap: 10px; }
+  .prog-track { width: 190px; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .prog-fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .prog-num {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500;
+    color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 78px;
+  }
+  .btn-ghost {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-3); background: none;
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer;
+  }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--ink-3); }
+
+  /* ---------- estrutura ---------- */
+  .shell { max-width: var(--maxw); margin: 0 auto; padding: 0 24px 96px; display: grid; gap: 40px; grid-template-columns: 218px minmax(0,1fr); }
+  @media (max-width: 940px) { .shell { grid-template-columns: 1fr; gap: 0; } }
+
+  nav.toc { position: sticky; top: 72px; align-self: start; padding: 32px 0; max-height: calc(100vh - 90px); overflow-y: auto; }
+  @media (max-width: 940px) { nav.toc { display: none; } }
+  .toc-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+  .toc a {
+    display: flex; gap: 9px; align-items: baseline; padding: 5px 0;
+    color: var(--ink-2); text-decoration: none; font-size: 13.5px; line-height: 1.35;
+    border-left: 2px solid transparent; padding-left: 10px; margin-left: -12px;
+  }
+  .toc a b { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-3); font-weight: 500; }
+  .toc a:hover { color: var(--ink); }
+  .toc a.on { color: var(--accent); border-left-color: var(--accent); font-weight: 500; }
+  .toc a.on b { color: var(--accent); }
+  .toc a.done b::after { content: "✓"; margin-left: 4px; color: var(--ok); }
+
+  main { padding: 32px 0 0; min-width: 0; }
+
+  /* ---------- abertura ---------- */
+  .hero { padding: 26px 0 34px; border-bottom: 1px solid var(--line); margin-bottom: 40px; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+  }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); line-height: 1.08; font-weight: 700; }
+  .lede { font-size: 17px; color: var(--ink-2); max-width: 64ch; margin-top: 16px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .fact {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px;
+  }
+  .fact b { color: var(--ink-3); font-weight: 500; }
+
+  /* ---------- fases ---------- */
+  .phase { margin: 0 0 60px; scroll-margin-top: 76px; }
+  .phase-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
+  .phase-n {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--accent); background: var(--accent-soft); border-radius: 6px;
+    padding: 6px 9px; line-height: 1; margin-top: 5px; white-space: nowrap;
+  }
+  .phase-head h2 { font-size: clamp(21px, 2.6vw, 27px); font-weight: 600; }
+  .phase-head p { margin: 6px 0 0; color: var(--ink-2); font-size: 15px; max-width: 68ch; }
+  .phase-count {
+    margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--ink-3); white-space: nowrap; padding-top: 9px; font-variant-numeric: tabular-nums;
+  }
+  .phase-count.full { color: var(--ok); }
+
+  /* ---------- passo ---------- */
+  .step {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px 22px; margin-bottom: 14px; box-shadow: var(--shadow); scroll-margin-top: 76px;
+  }
+  .step-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .step-id {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--ink-3); font-variant-numeric: tabular-nums;
+    text-decoration: none; transition: color .12s;
+  }
+  a.step-id:hover, a.step-id:focus-visible { color: var(--accent); }
+  .step h3 { font-size: 17px; font-weight: 600; }
+  .where {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .07em;
+    text-transform: uppercase; padding: 3px 7px; border-radius: 4px; margin-left: auto; white-space: nowrap;
+  }
+  .w-wsl { background: var(--accent-soft); color: var(--accent); }
+  .w-ec2 { background: var(--warn-soft); color: var(--warn); }
+  .w-web { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+  .step > p { color: var(--ink-2); font-size: 14.5px; margin: 8px 0 0; max-width: 72ch; }
+
+  /* ---------- comandos ---------- */
+  .cmd { position: relative; margin: 14px 0 0; }
+  .cmd-label, .out-label {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; display: block;
+  }
+  pre {
+    margin: 0; padding: 14px 16px; border-radius: 8px; overflow-x: auto;
+    font-size: 13px; line-height: 1.62; tab-size: 2;
+  }
+  .cmd pre { background: var(--term-bg); color: var(--term-ink); border: 1px solid var(--term-line); }
+  .cmd pre .p { color: #6FCB95; user-select: none; }
+  .cmd pre .c { color: var(--term-dim); }
+  .copy {
+    position: absolute; top: 22px; right: 8px; font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    background: rgba(255,255,255,.07); color: #9FB6BC; border: 1px solid rgba(255,255,255,.13);
+    border-radius: 5px; padding: 4px 8px; cursor: pointer; opacity: 0; transition: opacity .15s;
+  }
+  .cmd:hover .copy, .copy:focus-visible { opacity: 1; }
+  .copy.ok { color: #6FCB95; border-color: #6FCB95; opacity: 1; }
+  .out { margin-top: 14px; }
+  .out pre {
+    background: var(--surface-2); color: var(--ink-2);
+    border: 1px solid var(--line-2); border-left: 3px solid var(--ink-3);
+  }
+  .out.good pre { border-left-color: var(--ok); }
+  .out.bad pre { border-left-color: var(--stop); }
+  p code, li code, td code {
+    background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 4px;
+    padding: 1px 5px; font-size: .875em; color: var(--ink);
+  }
+
+  /* ---------- checklist ---------- */
+  .check { margin: 16px 0 0; padding: 14px 16px; background: var(--surface-2); border-radius: 8px; border: 1px solid var(--line-2); }
+  .check-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+  .check ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  .check li label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  .check input[type=checkbox] {
+    appearance: none; -webkit-appearance: none; flex: 0 0 auto;
+    width: 17px; height: 17px; margin: 3px 0 0; border: 1.5px solid var(--ink-3);
+    border-radius: 4px; background: var(--surface); cursor: pointer; position: relative; transition: .12s;
+  }
+  .check input[type=checkbox]:hover { border-color: var(--accent); }
+  .check input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .check input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5px; top: 1.5px; width: 4px; height: 9px;
+    border: solid var(--surface); border-width: 0 2px 2px 0; transform: rotate(43deg);
+  }
+  .check label span { font-size: 14.5px; color: var(--ink-2); line-height: 1.45; }
+  .check input:checked + span { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line); }
+
+  /* ---------- avisos ---------- */
+  .note { border-radius: 8px; padding: 13px 16px; margin: 14px 0 0; font-size: 14.5px; border: 1px solid; }
+  .note b { display: block; font-family: "Archivo", sans-serif; font-size: 13px; letter-spacing: .01em; margin-bottom: 3px; }
+  .note p { margin: 0; }
+  .note p + p { margin-top: 7px; }
+  .note ul, .note ol { margin: 6px 0 7px; padding-left: 20px; }
+  .note li b { display: inline; font-family: inherit; font-size: inherit; margin: 0; }
+  .note li + li { margin-top: 3px; }
+  .n-warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, transparent); color: var(--ink); }
+  .n-warn b { color: var(--warn); }
+  .n-tip  { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 32%, transparent); color: var(--ink); }
+  .n-tip b { color: var(--accent); }
+  .n-key  { background: var(--stop-soft); border-color: color-mix(in srgb, var(--stop) 32%, transparent); color: var(--ink); }
+  .n-key b { color: var(--stop); }
+
+  details.fallback { margin-top: 14px; border: 1px dashed var(--line); border-radius: 8px; padding: 0 14px; background: var(--surface-2); }
+  details.fallback summary { cursor: pointer; padding: 11px 0; font-size: 14px; font-weight: 500; color: var(--ink-2); }
+  details.fallback[open] summary { border-bottom: 1px solid var(--line-2); margin-bottom: 12px; }
+  details.fallback > *:last-child { margin-bottom: 14px; }
+
+  /* ---------- tabelas ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin-top: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 520px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-3); font-weight: 500; background: var(--surface-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .ascii { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-top: 16px; }
+  .ascii pre { background: none; color: var(--ink-2); font-size: 12px; line-height: 1.5; padding: 20px; }
+
+  footer { max-width: var(--maxw); margin: 0 auto; padding: 28px 24px 60px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+  footer p { margin: 0 0 6px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  @media (max-width: 620px) {
+    .shell, .topbar-in, footer { padding-left: 16px; padding-right: 16px; }
+    .step { padding: 16px; }
+    .where { margin-left: 0; }
+    .prog-track { width: 110px; }
+  }
+  /* ---------- impressao ---------- */
+  @media print {
+    /* Paleta clara forcada: quem le no escuro nao deve imprimir paginas pretas. */
+    :root, :root[data-theme="dark"], :root[data-theme="light"] {
+      --bg: #FFFFFF; --surface: #FFFFFF; --surface-2: #F5F7F8;
+      --ink: #000000; --ink-2: #263338; --ink-3: #55666C;
+      --line: #B9C4C8; --line-2: #DDE4E6;
+      --accent: #0A6A72; --accent-2: #08535A; --accent-soft: #EDF4F5;
+      --warn: #7A430E; --warn-soft: #FBF3E9; --ok: #165634; --ok-soft: #EDF6F1;
+      --stop: #7D2820; --stop-soft: #FBEEEC;
+      --term-bg: #F2F5F6; --term-line: #C8D2D5; --term-ink: #0E1619; --term-dim: #55666C;
+      --shadow: none;
+    }
+    .topbar, nav.toc, .copy, #tema, #reset { display: none !important; }
+    .shell { display: block; max-width: none; padding: 0; }
+    body { background: #fff; }
+    .step, .cmd, .out, .note, .check, .ascii, .tablewrap, details {
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    h2, h3, .step-top, .phase-head { break-after: avoid; page-break-after: avoid; }
+    .phase { margin-bottom: 24px; }
+    .step { box-shadow: none; border-color: #B9C4C8; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="topbar-id">
+      <strong>Desafio 4</strong>
+      <span>porteiro + túneis SSM · us-east-1</span>
+    </div>
+    <div class="prog">
+      <span class="prog-num" id="progNum">0 / 0</span>
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+    <button class="btn-ghost" id="tema" type="button">Tema: claro</button>
+    <button class="btn-ghost" id="reset" type="button">Limpar progresso</button>
+  </div>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc" aria-label="Fases do desafio">
+    <div class="toc-label">Roteiro</div>
+  </nav>
+
+  <main>
+
+    <header class="hero">
+      <div class="eyebrow">Desafios Fundamentais · Formação AWS · Dia 4</div>
+      <h1>Um porteiro na zona&nbsp;b, dois túneis SSM e um registro gravado à mão</h1>
+      <p class="lede">
+        Roteiro de execução do Desafio 4 — de abrir o Windows Terminal até parar a máquina no fim.
+        São quatro entregas em shell script: <b>lançar</b> o porteiro, <b>abrir o túnel do banco</b> na porta 5433,
+        <b>abrir o túnel da BIA</b> na porta 3002 e <b>parar</b> o porteiro. Cada passo traz <b>onde executar</b>,
+        o <b>comando</b>, o <b>porquê daquele código</b>, a <b>resposta esperada</b> e um <b>checklist</b>.
+        O progresso fica salvo neste navegador.
+      </p>
+      <div class="facts">
+        <span class="fact"><b>conta</b> xxxxxxxxxxxx</span>
+        <span class="fact"><b>região</b> us-east-1</span>
+        <span class="fact"><b>profile</b> formacao_aws</span>
+        <span class="fact"><b>porteiro</b> porteiro-bia</span>
+        <span class="fact"><b>zona</b> us-east-1b</span>
+        <span class="fact"><b>RDS</b> bia</span>
+        <span class="fact"><b>túneis</b> 5433 · 3002</span>
+      </div>
+    </header>
+
+    <section class="phase" id="p-mapa" data-title="O que o desafio pede">
+      <div class="phase-head">
+        <span class="phase-n">MAPA</span>
+        <div>
+          <h2>O que o desafio pede, e o que já existe</h2>
+          <p>
+            O enunciado tem quatro linhas. Elas parecem quatro tarefas soltas, mas são uma coisa só: montar um
+            <b>bastion host</b> descartável — uma máquina sem porta aberta, ligada só quando você precisa, que serve
+            de ponte entre o seu notebook e recursos privados da AWS.
+          </p>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>O enunciado</th><th>Vira, neste guia</th><th>Onde</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Crie script que lance o porteiro na zona b (subnet default)</td>
+              <td><code>01-lancar-porteiro-zona-b.sh</code> — descobre a subnet default da zona b, a AMI mais recente e o security group, e sobe a EC2</td>
+              <td>Fase 3</td>
+            </tr>
+            <tr>
+              <td>Crie script que inicie o porteiro com túnel para o RDS na porta local 5433</td>
+              <td><code>02-iniciar-porteiro-tunel-rds.sh</code> — liga a máquina se estiver parada, resolve o endpoint do banco e abre o túnel</td>
+              <td>Fase 5</td>
+            </tr>
+            <tr>
+              <td>Estabeleça comunicação, insira 1 registro manualmente no banco</td>
+              <td><code>psql</code> apontando para <code>localhost:5433</code> e um <code>INSERT</code> na tabela <code>"Tarefas"</code></td>
+              <td>Fase 6</td>
+            </tr>
+            <tr>
+              <td>Crie túnel para a bia e conecte nela na porta 3002 para ver o registro adicionado</td>
+              <td><code>03-tunel-bia.sh</code> — o mesmo porteiro, agora encaminhando para a porta da API da BIA</td>
+              <td>Fase 7</td>
+            </tr>
+            <tr>
+              <td>Crie script que para a máquina do porteiro</td>
+              <td><code>04-parar-porteiro.sh</code> — encontra a instância mesmo desligada e para se estiver de pé</td>
+              <td>Fase 8</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p style="margin-top:22px"><b>O desenho de onde você quer chegar:</b></p>
+      <div class="ascii">
+<pre>
+       WSL / Ubuntu (Windows Terminal)            AWS - us-east-1 - VPC default
+ +-------------------------------+      +--------------------------------------------+
+ |  aws cli v2  (formacao_aws)   |      |                                            |
+ |  session-manager-plugin       |      |  zona b  (subnet default)                  |
+ |  psql (cliente do postgres)   | ssm  |  +--------------------------------------+  |
+ |                               |=====>|  |  EC2 PORTEIRO                        |  |
+ |  localhost:5433  ---(tunel 1)-|------|->|  sem porta de entrada, sem key pair  |  |
+ |  localhost:3002  ---(tunel 2)-|------|->|  alcancada so por SSM                |  |
+ |                               |      |  +------+-------------------+-----------+  |
+ |  pasta do repositorio         |      |         | 5432              | porta da BIA |
+ |    +-- 01-lancar-porteiro..sh |      |         v                   v              |
+ |    +-- 02-iniciar-porteiro.sh |      |  +--------------+   +--------------------+ |
+ |    +-- 03-tunel-bia.sh        |      |  | RDS "bia"    |   | EC2 do cluster ECS | |
+ |    +-- 04-parar-porteiro.sh   |      |  | nao publico  |&lt;--| API da BIA         | |
+ +-------------------------------+      |  +--------------+   +--------------------+ |
+                                        +--------------------------------------------+
+   WSL --X--&gt; RDS   bloqueado: o banco nao e publico, e e assim que tem que ser
+</pre>
+      </div>
+
+      <div class="note n-tip">
+        <b>Por que "porteiro"</b>
+        <p>O nome técnico é <b>bastion host</b>: uma máquina que não hospeda nada e existe só para ser o ponto de entrada controlado de uma rede privada. Ela não tem porta aberta para a internet, não tem chave SSH, e só responde a quem tem permissão de SSM na sua conta AWS.</p>
+        <p>A vantagem prática aparece no dia da demissão: tirar a permissão de SSM de um usuário no IAM derruba o acesso dele na hora — sem trocar senha de banco, sem revogar chave, sem mexer em Security Group.</p>
+      </div>
+
+      <div class="note n-tip">
+        <b>Como ler as etiquetas de cada passo</b>
+        <p><b>WSL</b> = terminal Ubuntu no seu Windows · <b>WSL · T2</b> e <b>WSL · T3</b> = uma <i>segunda</i> e uma <i>terceira</i> aba do mesmo terminal — os túneis prendem a aba onde rodam, então a partir da Fase 5 você trabalha com mais de uma · <b>CONSOLE</b> = navegador, no Console da AWS · <b>NAVEGADOR</b> = navegador, na sua própria máquina.</p>
+      </div>
+
+      <div class="note n-warn">
+        <b>Dois detalhes dos arquivos da aula que quebram se copiados como estão</b>
+        <p><b>1. O profile.</b> Todo script da aula termina em <code>--profile desafios-fundamentais</code>. Esse profile é o do instrutor e <b>não existe</b> na sua máquina — o seu chama <code>formacao_aws</code>. Os scripts deste guia não passam <code>--profile</code> nenhum: eles herdam o <code>AWS_PROFILE</code> que você exporta na Fase 0. Assim o mesmo arquivo funciona para qualquer pessoa que clonar o repositório.</p>
+        <p><b>2. A policy.</b> O <code>05-policy-criar-tunel</code> libera <code>ssm:StartSession</code> sobre <code>AWS-StartSSHSession</code> e <code>AWS-StartPortForwardingSessionToRemoteHost</code> — mas <b>não</b> sobre <code>AWS-StartPortForwardingSession</code>. Quem anexar essa policy e rodar o <code>06-1-ligar-porteiro.sh</code> da aula toma <code>AccessDeniedException</code> exatamente no túnel. Os dois túneis deste guia usam <code>ToRemoteHost</code>, que está na lista — então funcionam com a policy como ela está no repositório.</p>
+      </div>
+
+      <div class="note n-warn">
+        <b>Variáveis não atravessam a sessão</b>
+        <p><code>$PORTEIRO_NOME</code>, <code>$RDS_ID</code> e <code>$BIA_HOST</code> existem <b>só</b> no terminal onde você rodou o <code>source</code>. Cada aba nova começa vazia — e comando com variável vazia é a origem de metade dos erros do Anexo B.</p>
+      </div>
+    </section>
+
+    <section class="phase" id="p0" data-title="Abrir o terminal">
+      <div class="phase-head">
+        <span class="phase-n">FASE 0</span>
+        <div>
+          <h2>Abrir o terminal, autenticar e carregar as variáveis</h2>
+          <p>Tudo começa provando quem você é. O profile <code>default</code> desta máquina autentica como um usuário sem permissão de EC2 — o profile certo é o <code>formacao_aws</code>. Depois de autenticar, o resto da fase é preparar o terreno: conferir as ferramentas, entrar na pasta do repositório e guardar as variáveis do desafio.</p>
+        </div>
+        <span class="phase-count" data-count-for="p0"></span>
+      </div>
+
+      <div class="step" id="passo-0-1">
+        <div class="step-top"><a class="step-id" href="#passo-0-1">0.1</a><h3>Abrir o terminal do Ubuntu</h3><span class="where w-web">WINDOWS</span></div>
+        <p>O Ubuntu já está instalado no WSL desta máquina — não há nada a instalar. São três movimentos:</p>
+        <div class="out"><span class="out-label">O caminho</span><pre>1.  Win + R                 abre a caixa "Executar"
+2.  cmd  +  Enter           abre o Windows Terminal, na aba do Prompt de Comando
+3.  seta  v  ao lado do +   lista os perfis instalados  ->  escolher "Ubuntu"</pre></div>
+        <p>No Windows 11 o console padrão é o <b>Windows Terminal</b>: por isso o <code>cmd</code> não abre mais aquela janela preta isolada, e sim uma aba dentro dele. Essa primeira aba é o Prompt de Comando — e <b>não</b> é onde este guia roda. O terceiro movimento é o que importa: a seta ao lado do <b>+</b> na barra de abas abre a lista de perfis, e o <b>Ubuntu</b> é um deles.</p>
+        <div class="out good"><span class="out-label">Como saber que deu certo — o prompt muda</span><pre>antes   C:\Users\Rafael&gt;
+depois  rafael@DESKTOP-XXXX:~$</pre></div>
+        <p>De agora em diante, todo comando com <code>$</code> na frente é digitado nessa aba. O <code>$</code> faz parte do prompt, não do comando — o botão <b>copiar</b> de cada bloco já o descarta.</p>
+        <div class="note n-tip"><b>Duas portas de entrada, dois diretórios diferentes</b><p>A aba do perfil <b>Ubuntu</b> começa em <code>~</code>, a sua home do Linux. Digitar <code>wsl</code> dentro da aba do <code>cmd</code> também entra no Ubuntu, mas começa em <code>/mnt/c/...</code>, a pasta do Windows em que o <code>cmd</code> estava.</p><p>Nenhum dos dois está errado — só muda o que o <code>pwd</code> responde. Como o passo 0.6 entra na pasta do repositório com um caminho completo, tanto faz por onde você entrou.</p></div>
+        <div class="note n-tip"><b>Atalhos que valem a pena agora</b><p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> abre outra aba do mesmo perfil. Você vai precisar de <b>três</b> a partir da Fase 5: cada túnel prende a aba onde roda, e ainda sobra uma para trabalhar.</p><p><kbd>Win</kbd>+<kbd>R</kbd> e depois <code>ubuntu</code> pula o <code>cmd</code> e abre direto no Linux. E <code>wsl -l -v</code>, numa aba do Prompt de Comando, lista as distribuições instaladas e qual delas é a padrão.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Aba do <b>Ubuntu</b> aberta no Windows Terminal</span></label></li>
+          <li><label><input type="checkbox"><span>O prompt está no formato <code>usuario@maquina:~$</code></span></label></li>
+          <li><label><input type="checkbox"><span>Sei abrir uma aba nova com <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-2">
+        <div class="step-top"><a class="step-id" href="#passo-0-2">0.2</a><h3>Conferir os profiles disponíveis</h3><span class="where w-wsl">WSL</span></div>
+        <p>Antes de autenticar, veja o que já está configurado nesta máquina. Um <b>profile</b> é um conjunto nomeado de credenciais guardado em <code>~/.aws/</code> — e aqui existem dois, que autenticam como usuários diferentes.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws configure list-profiles</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>default
+formacao_aws</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>formacao_aws</code> aparece na lista</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-3">
+        <div class="step-top"><a class="step-id" href="#passo-0-3">0.3</a><h3>Renovar o login (credenciais temporárias)</h3><span class="where w-wsl">WSL</span></div>
+        <p>As credenciais da formação são temporárias e expiram. Se qualquer comando das próximas fases responder <code>Your session has expired</code>, é aqui que se volta.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws login --profile formacao_aws</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Attempting to open your default browser...
+Updated profile formacao_aws to use arn:aws:iam::xxxxxxxxxxxx:user/usuario-xxxx credentials.
+Use "--profile formacao_aws" to use the new credentials.</pre></div>
+        <div class="note n-tip"><b>O navegador não abriu?</b><p>Não é erro fatal: o próprio comando imprime a URL de autorização. Copie e abra no navegador do Windows — o fluxo continua e o profile é atualizado ao final.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Login concluído no navegador</span></label></li>
+          <li><label><input type="checkbox"><span>A mensagem confirma o usuário <code>usuario-xxxx</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-4">
+        <div class="step-top"><a class="step-id" href="#passo-0-4">0.4</a><h3>Promover o profile a padrão da sessão</h3><span class="where w-wsl">WSL</span></div>
+        <p>Os scripts deste desafio chamam <code>aws</code> sem <code>--profile</code>. Sem esta variável eles usariam o <code>default</code> — que autentica como outro usuário e reporta que os recursos "não existem".</p>
+        <p>O CLI procura o profile nesta ordem: a opção <code>--profile</code> na linha de comando, depois a variável <code>AWS_PROFILE</code>, e só então o <code>default</code>. Exportando a variável, você tira a escolha do profile de dentro do código — é o que permite o mesmo script funcionar para quem clonar o repositório com outro nome de profile.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>export AWS_PROFILE=formacao_aws
+<span class="p">$ </span>aws sts get-caller-identity</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>{
+    "UserId": "AIDAxxxxxxxxxxxxxxxxx",
+    "Account": "xxxxxxxxxxxx",
+    "Arn": "arn:aws:iam::xxxxxxxxxxxx:user/usuario-xxxx"
+}</pre></div>
+        <div class="note n-warn"><b>Pare se aparecer outro ARN</b><p>Se o <code>Arn</code> terminar em <code>user/fundamentos</code> (sem o <code>_aws</code>), você está no profile errado e todos os comandos de EC2 vão falhar com <code>AccessDenied</code>. Refaça o passo 0.3.</p></div>
+        <div class="note n-tip"><b>O <code>export</code> vale só nesta aba</b><p>Por isso ele também está no arquivo do passo 0.7: cada aba nova começa sem ele.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Conta <code>xxxxxxxxxxxx</code></span></label></li>
+          <li><label><input type="checkbox"><span>ARN termina em <code>user/usuario-xxxx</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-5">
+        <div class="step-top"><a class="step-id" href="#passo-0-5">0.5</a><h3>Conferir as três ferramentas do desafio</h3><span class="where w-wsl">WSL</span></div>
+        <p>Este desafio depende de três programas, e é melhor descobrir agora qual está faltando do que no meio de um túnel. O <b>CLI</b> fala com a AWS; o <b>session-manager-plugin</b> é quem realmente segura o túnel — sem ele o <code>start-session</code> falha; o <b>psql</b> é o cliente que vai gravar o registro na Fase 6.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws --version
+<span class="p">$ </span>session-manager-plugin --version
+<span class="p">$ </span>psql --version</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>aws-cli/2.x.x Python/3.x.x Linux/x.x.x
+1.2.xxx.0
+psql (PostgreSQL) 16.x</pre></div>
+        <p>Os números não precisam bater — o que importa é as três linhas responderem em vez de <code>command not found</code>.</p>
+        <details class="fallback">
+          <summary>Faltou alguma das três — como instalar</summary>
+          <p>O <b>session-manager-plugin</b> não vem junto com o CLI: é um pacote separado da AWS, e a falta dele aparece só na hora do túnel, com a mensagem <code>SessionManagerPlugin is not found</code>.</p>
+          <div class="cmd"><span class="cmd-label">session-manager-plugin (Ubuntu x86_64)</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>curl -o /tmp/session-manager-plugin.deb \
+  "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb"
+<span class="p">$ </span>sudo dpkg -i /tmp/session-manager-plugin.deb
+<span class="p">$ </span>session-manager-plugin --version</pre></div>
+          <div class="cmd"><span class="cmd-label">psql — só o cliente, sem instalar servidor</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>sudo apt-get update
+<span class="p">$ </span>sudo apt-get install -y postgresql-client
+<span class="p">$ </span>psql --version</pre></div>
+          <p>É <code>postgresql-client</code>, e não <code>postgresql</code>: você quer o cliente que conecta em um banco remoto, não um servidor PostgreSQL rodando dentro do WSL.</p>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>aws --version</code> responde v2</span></label></li>
+          <li><label><input type="checkbox"><span><code>session-manager-plugin --version</code> responde um número</span></label></li>
+          <li><label><input type="checkbox"><span><code>psql --version</code> responde um número</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-6">
+        <div class="step-top"><a class="step-id" href="#passo-0-6">0.6</a><h3>Ir para a pasta do repositório</h3><span class="where w-wsl">WSL</span></div>
+        <p>É onde os quatro scripts vão nascer e de onde eles sobem para o GitHub. Troque o caminho pelo da <b>sua</b> pasta do Desafio 4.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cd "/mnt/c/Users/SEU_USUARIO/caminho/ate/4 - Desafio 4/GitHub"
+<span class="p">$ </span>pwd
+<span class="p">$ </span>ls</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>/mnt/c/Users/SEU_USUARIO/caminho/ate/4 - Desafio 4/GitHub
+01-zip.sh   02-unzip.sh   04-command_substitution.sh
+05-1-criar-tunel-propria-ec2.sh   05-2-criar-tunel-rds.sh   05-policy-criar-tunel
+06-1-ligar-porteiro.sh   06-2-parar-porteiro.sh
+Desafio 4.txt   guia-desafio-4.html   imagens   post-linkedin.txt</pre></div>
+        <div class="note n-key"><b>Arquivos da aula × entregas do desafio</b><p>Os números se repetem, mas são coisas diferentes. Os arquivos que já estão na pasta são os <b>exercícios da aula</b> e ficam como referência (explicados no <a href="#p-anexo-a">Anexo A</a>). As <b>quatro entregas</b> são arquivos novos, criados nas Fases 3, 5, 7 e 8:</p><ul><li><code>01-lancar-porteiro-zona-b.sh</code> — não confundir com <code>01-zip.sh</code></li><li><code>02-iniciar-porteiro-tunel-rds.sh</code> — nasce do <code>05-2</code> + <code>06-1</code>; não confundir com <code>02-unzip.sh</code></li><li><code>03-tunel-bia.sh</code> — nasce do <code>05-1</code></li><li><code>04-parar-porteiro.sh</code> — nasce do <code>06-2</code>; não confundir com <code>04-command_substitution.sh</code></li></ul></div>
+        <div class="note n-tip"><b>As aspas não são enfeite</b><p>O caminho tem espaços (<code>4 - Desafio 4</code>). Sem as aspas, o Bash entende <code>4</code>, <code>-</code> e <code>Desafio</code> como três argumentos diferentes e responde <code>cd: too many arguments</code>.</p><p><code>/mnt/c/</code> é como o WSL enxerga o seu disco <code>C:</code>. Para este desafio não tem problema morar aí: são quatro arquivos de texto, não um <code>node_modules</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O <code>pwd</code> mostra a pasta do Desafio 4</span></label></li>
+          <li><label><input type="checkbox"><span>O <code>ls</code> lista os scripts da aula e o <code>guia-desafio-4.html</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-7">
+        <div class="step-top"><a class="step-id" href="#passo-0-7">0.7</a><h3>Salvar as variáveis do desafio em um arquivo</h3><span class="where w-wsl">WSL</span></div>
+        <p>Cada aba nova perde os <code>export</code>. Guarde-os uma vez e recarregue com um comando só — é o ritual de abertura de toda aba deste desafio.</p>
+        <div class="note n-key"><b>Dois valores ficam com máscara de propósito</b><p><code>BIA_HOST</code> e <code>BIA_PORT</code> você só descobre na <b>Fase 1</b>, porque dependem da EC2 do cluster estar ligada. Salve o arquivo assim mesmo agora; o passo 1.4 corrige os dois.</p><p>Os outros valores são nomes fixos que você já conhece dos desafios anteriores: a instância do RDS chama <code>bia</code>, o cluster chama <code>cluster-bia</code>, o serviço chama <code>service-bia</code>.</p></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>mkdir -p ~/DESAFIOS-FUNDAMENTAIS &amp;&amp; cat &gt; ~/DESAFIOS-FUNDAMENTAIS/desafio4.sh &lt;&lt;'FIM'
+export AWS_PROFILE=formacao_aws
+export AWS_REGION=us-east-1
+export AWS_DEFAULT_REGION=us-east-1
+
+# o porteiro que este desafio cria
+export PORTEIRO_NOME=porteiro-bia
+export PORTEIRO_AZ=us-east-1b
+export PORTEIRO_SG_NOME=bia-porteiro
+
+# o que ja existe desde os desafios 2 e 3
+export RDS_ID=bia
+export ECS_CLUSTER=cluster-bia
+export ECS_SERVICE=service-bia
+
+# preenchidos no passo 1.4, quando a EC2 do cluster estiver de pe
+export BIA_HOST=172.31.x.x
+export BIA_PORT=80
+
+# as portas locais que o enunciado pede
+export PORTA_RDS_LOCAL=5433
+export PORTA_BIA_LOCAL=3002
+FIM
+</pre></div>
+        <div class="cmd"><span class="cmd-label">Carregar e conferir</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/desafio4.sh
+<span class="p">$ </span>echo "$AWS_PROFILE | $PORTEIRO_NOME | $PORTEIRO_AZ | $RDS_ID"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>formacao_aws | porteiro-bia | us-east-1b | bia</pre></div>
+        <div class="note n-tip"><b>O <code>&lt;&lt;'FIM'</code> com aspas tem um motivo</b><p>É um <i>here-document</i>: tudo entre a primeira linha e o <code>FIM</code> vai para dentro do arquivo. As aspas em <code>'FIM'</code> desligam a expansão — sem elas, o Bash trocaria <code>$PORTEIRO_NOME</code> pelo valor <b>na hora de criar o arquivo</b>, e o arquivo nasceria com as variáveis já resolvidas (ou vazias). Com as aspas, o texto é gravado literal e a expansão acontece só no <code>source</code>.</p></div>
+        <details class="fallback">
+          <summary>Parando no meio e voltando depois</summary>
+          <p><b>Pode desligar o notebook.</b> A EC2, os Security Groups e o registro no banco ficam na AWS; os scripts ficam no disco; o progresso marcado neste guia fica salvo neste navegador.</p>
+          <p>Duas coisas <b>não</b> sobrevivem: as credenciais do <code>aws login</code>, que são temporárias, e as variáveis do terminal. O ritual de volta são três comandos:</p>
+          <div class="cmd"><span class="cmd-label">Ao retomar</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws login --profile formacao_aws
+<span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/desafio4.sh
+<span class="p">$ </span>aws sts get-caller-identity</pre></div>
+          <div class="note n-warn"><b>A AWS continua ligada — e cobrando</b><p>Desligar o notebook não pausa nada. Se você parou no meio, rode pelo menos o <code>04-parar-porteiro.sh</code> da Fase 8 antes de sair. O roteiro completo de pausa está na Fase 9.</p></div>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Arquivo <code>~/DESAFIOS-FUNDAMENTAIS/desafio4.sh</code> criado</span></label></li>
+          <li><label><input type="checkbox"><span>O <code>echo</code> mostra os quatro valores preenchidos</span></label></li>
+          <li><label><input type="checkbox"><span>Entendi que toda aba nova começa com o <code>source</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p1" data-title="Religar o ambiente">
+      <div class="phase-head">
+        <span class="phase-n">FASE 1</span>
+        <div>
+          <h2>Religar o que o Desafio 3 deixou pausado</h2>
+          <p>O porteiro só tem sentido se houver alguma coisa do outro lado do túnel. Esta fase acorda o <b>RDS</b> (destino do túnel 1) e a <b>API da BIA no ECS</b> (destino do túnel 2), e anota os dois endereços que os scripts vão precisar.</p>
+        </div>
+        <span class="phase-count" data-count-for="p1"></span>
+      </div>
+
+      <div class="note n-tip"><b>Se você não pausou nada, esta fase é só conferência</b><p>Rode o passo 1.1: se o RDS estiver <code>available</code> e a EC2 do cluster aparecer <code>running</code>, pule direto para o 1.4, que é onde os endereços são anotados.</p></div>
+
+      <div class="step" id="passo-1-1">
+        <div class="step-top"><a class="step-id" href="#passo-1-1">1.1</a><h3>Fotografar o estado atual</h3><span class="where w-wsl">WSL</span></div>
+        <p>Antes de ligar qualquer coisa, veja o que já está de pé. Duas perguntas: quais EC2 estão rodando, e em que estado está o banco.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=instance-state-name,Values=running" \
+  --query 'Reservations[].Instances[].{Nome:Tags[?Key==`Name`]|[0].Value,Id:InstanceId,IPpub:PublicIpAddress,IPpriv:PrivateIpAddress}' \
+  --output table
+<span class="p">$ </span>aws rds describe-db-instances \
+  --query 'DBInstances[].[DBInstanceIdentifier,DBInstanceStatus]' --output text</pre></div>
+        <div class="out"><span class="out-label">Resposta esperada se você seguiu a Fase 9 do Desafio 3</span><pre>-------------------------------------------------
+|               DescribeInstances               |
++------+---------+-----------+------------------+
+(vazia, ou so a bia-dev se voce a religou)
+
+bia     stopped</pre></div>
+        <p>Nenhuma EC2 rodando e o banco <code>stopped</code> é exatamente o estado de quem desligou tudo no fim do desafio anterior. Os próximos dois passos revertem isso.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Sei quais EC2 estão rodando agora</span></label></li>
+          <li><label><input type="checkbox"><span>Sei em que estado está o RDS <code>bia</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-2">
+        <div class="step-top"><a class="step-id" href="#passo-1-2">1.2</a><h3>Ligar o RDS</h3><span class="where w-web">CONSOLE</span></div>
+        <p>O banco é o destino do túnel da porta 5433. Sem ele <code>available</code>, o túnel até abre — mas o <code>psql</code> da Fase 6 morre em timeout.</p>
+        <div class="out"><span class="out-label">Caminho no Console</span><pre>RDS  &gt;  Databases  &gt;  bia  &gt;  Actions  &gt;  Start</pre></div>
+        <div class="note n-warn"><b>Por que pelo Console, e não pelo terminal</b><p>O seu usuário tem <code>AmazonRDSReadOnlyAccess</code>: ele <b>lê</b> o RDS, mas não liga nem desliga. O <code>aws rds start-db-instance</code> responde <code>AccessDenied</code>. Se você anexou uma policy de escrita de RDS por conta própria, o comando equivalente é <code>aws rds start-db-instance --db-instance-identifier bia</code>.</p></div>
+        <div class="cmd"><span class="cmd-label">Acompanhar até ficar available</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws rds describe-db-instances --db-instance-identifier "$RDS_ID" \
+  --query 'DBInstances[0].[DBInstanceIdentifier,DBInstanceStatus,Endpoint.Address]' --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — depois de alguns minutos</span><pre>bia     available       bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com</pre></div>
+        <p>Enquanto responder <code>starting</code>, é só esperar e repetir o comando. Um RDS parado leva de 3 a 10 minutos para voltar. Aproveite para adiantar a Fase 2 em outra aba.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>RDS <code>bia</code> em <code>available</code></span></label></li>
+          <li><label><input type="checkbox"><span>Anotei o endpoint que apareceu na terceira coluna</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-3">
+        <div class="step-top"><a class="step-id" href="#passo-1-3">1.3</a><h3>Religar a EC2 do cluster e a task da API</h3><span class="where w-wsl">WSL</span></div>
+        <p>Duas camadas, nesta ordem: primeiro o <b>Auto Scaling Group</b> devolve a máquina, depois o <b>serviço do ECS</b> recoloca a task nela. Inverter a ordem só faz o ECS ficar esperando capacidade que ainda não existe.</p>
+        <div class="cmd"><span class="cmd-label">1. Devolver a capacidade ao Auto Scaling</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>ASG=$(aws autoscaling describe-auto-scaling-groups \
+  --query "AutoScalingGroups[?contains(AutoScalingGroupName, 'cluster-bia')].AutoScalingGroupName" \
+  --output text)
+<span class="p">$ </span>echo "$ASG"
+<span class="p">$ </span>aws autoscaling update-auto-scaling-group \
+  --auto-scaling-group-name "$ASG" --min-size 1 --max-size 1 --desired-capacity 1</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Infra-ECS-Cluster-cluster-bia-xxxxxxxx-ECSAutoScalingGroup-xxxxxxxxxxxx</pre></div>
+        <p>O <code>update-auto-scaling-group</code> não imprime nada quando dá certo — o silêncio é a resposta boa. A instância nova leva de 2 a 4 minutos para subir e se registrar no cluster.</p>
+        <div class="note n-warn"><b><code>Max bound, 0, must be greater than or equal to min bound, 1</code></b><p>Aparece quando a pausa do Desafio 3 zerou também o <b>máximo</b> do ASG. Sem o <code>--max-size 1</code> o comando falha, nenhuma EC2 sobe e o serviço fica para sempre em <code>Rodando 0</code>. Confira os três valores com:</p><pre>aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
+  --query 'AutoScalingGroups[0].{Min:MinSize,Max:MaxSize,Desejado:DesiredCapacity,Instancias:length(Instances)}' --output table</pre></div>
+        <div class="cmd"><span class="cmd-label">2. Devolver a task ao serviço</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+  --desired-count 1 --query 'service.{Servico:serviceName,Desejado:desiredCount}' --output table</pre></div>
+        <div class="cmd"><span class="cmd-label">3. Esperar a task ficar RUNNING</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+  --query 'services[0].{Desejado:desiredCount,Rodando:runningCount,Status:status}' --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>-------------------------------------
+|          DescribeServices         |
++-----------+-----------+-----------+
+| Desejado  |  Rodando  |  Status   |
++-----------+-----------+-----------+
+|  1        |  1        |  ACTIVE   |
++-----------+-----------+-----------+</pre></div>
+        <p>Enquanto <code>Rodando</code> for <code>0</code>, repita o comando. Se ele travar em <code>0</code> por mais de cinco minutos, a causa quase sempre é a instância do ASG ainda não ter aparecido — confira com o <code>describe-instances</code> do passo 1.1 e com <code>aws ecs describe-clusters --clusters "$ECS_CLUSTER" --query 'clusters[0].registeredContainerInstancesCount'</code> (deve ser <code>1</code>). Se a instância já está registrada e mesmo assim nada roda, <code>aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query 'services[0].events[:5].message'</code> diz o motivo.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O ASG voltou para <code>desired 1</code></span></label></li>
+          <li><label><input type="checkbox"><span>A EC2 do <code>cluster-bia</code> aparece <code>running</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>runningCount</code> do serviço é <code>1</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-4">
+        <div class="step-top"><a class="step-id" href="#passo-1-4">1.4</a><h3>Descobrir o endereço e a porta da BIA</h3><span class="where w-wsl">WSL</span></div>
+        <p>Aqui estão os dois valores que faltavam no <code>desafio4.sh</code>. O túnel da Fase 7 vai da sua máquina até <b>este endereço, nesta porta</b> — e ele usa o <b>IP privado</b>, não o público: quem alcança a máquina é o porteiro, que está dentro da mesma VPC.</p>
+        <div class="cmd"><span class="cmd-label">1. O IP privado da EC2 do cluster</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=instance-state-name,Values=running" \
+  --query 'Reservations[].Instances[].{Nome:Tags[?Key==`Name`]|[0].Value,IPpriv:PrivateIpAddress,IPpub:PublicIpAddress}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>------------------------------------------------------------
+|                    DescribeInstances                     |
++----------------+---------------+-------------------------+
+|    IPpriv      |    IPpub      |          Nome           |
++----------------+---------------+-------------------------+
+|  172.31.x.x    |  xx.xx.xx.xx  |  ECS Instance -         |
+|                |               |  cluster-bia            |
++----------------+---------------+-------------------------+</pre></div>
+        <div class="cmd"><span class="cmd-label">2. A porta que a task publicou no host</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>TASK=$(aws ecs list-tasks --cluster "$ECS_CLUSTER" --service-name "$ECS_SERVICE" \
+  --query 'taskArns[0]' --output text)
+<span class="p">$ </span>aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK" \
+  --query 'tasks[0].containers[0].networkBindings' --output table</pre></div>
+        <div class="note n-warn"><b><code>taskId length should be one of [32,36]</code></b><p>Significa que <code>$TASK</code> ficou valendo <code>None</code>: ainda não há nenhuma task rodando. Volte ao passo 1.3 e só siga quando <code>Rodando</code> for <code>1</code>.</p></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>------------------------------------------------------
+|                    DescribeTasks                   |
++---------------+-----------+------------+-----------+
+| bindIP        | container | hostPort   | protocol  |
+|               |   Port    |            |           |
++---------------+-----------+------------+-----------+
+|  0.0.0.0      |  8080     |  80        |  tcp      |
++---------------+-----------+------------+-----------+</pre></div>
+        <div class="note n-key"><b>O que vale é o <code>hostPort</code></b><p>São dois números diferentes e confundi-los faz o túnel abrir e não responder nada. O <code>containerPort</code> (<code>8080</code>) é a porta <b>dentro</b> do contêiner. O <code>hostPort</code> (<code>80</code>) é a porta na <b>máquina</b> — e é nela que o porteiro vai bater. É esse número que vai para o <code>BIA_PORT</code>.</p><p>Se a sua saída mostrar <code>hostPort 3001</code>, use <code>3001</code>. O guia usa <code>80</code> porque é o que esta task definition publica.</p></div>
+        <div class="cmd"><span class="cmd-label">3. Gravar os dois nas variáveis — preenchidos automaticamente</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>BIA_HOST=$(aws ec2 describe-instances \
+  --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=ECS Instance - cluster-bia" \
+  --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text)
+<span class="p">$ </span>BIA_PORT=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK" \
+  --query 'tasks[0].containers[0].networkBindings[0].hostPort' --output text)
+<span class="p">$ </span>sed -i "s|^export BIA_HOST=.*|export BIA_HOST=$BIA_HOST|" ~/DESAFIOS-FUNDAMENTAIS/desafio4.sh
+<span class="p">$ </span>sed -i "s|^export BIA_PORT=.*|export BIA_PORT=$BIA_PORT|" ~/DESAFIOS-FUNDAMENTAIS/desafio4.sh
+<span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/desafio4.sh
+<span class="p">$ </span>echo "$BIA_HOST:$BIA_PORT"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>172.31.x.x:80</pre></div>
+        <div class="note n-warn"><b>Nada de <code>x.x</code>, <code>None</code> ou vazio</b><p>O <code>echo</code> precisa mostrar o IP privado real da <code>ECS Instance - cluster-bia</code> (o mesmo do comando 1). Se aparecer <code>172.31.x.x</code>, <code>None</code> ou só <code>:</code>, uma das variáveis não foi preenchida — não siga adiante. Lembre também: se o ASG trocar a instância (depois de pausar e religar), o IP muda e este passo precisa ser refeito.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>BIA_HOST</code> é o <b>IP privado</b> da EC2 do cluster</span></label></li>
+          <li><label><input type="checkbox"><span><code>BIA_PORT</code> é o <code>hostPort</code>, não o <code>containerPort</code></span></label></li>
+          <li><label><input type="checkbox"><span>O <code>echo</code> mostra os dois preenchidos</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-5">
+        <div class="step-top"><a class="step-id" href="#passo-1-5">1.5</a><h3>Provar que a API responde — e fotografar o banco antes</h3><span class="where w-wsl">WSL</span></div>
+        <p>Este teste é feito pelo <b>IP público</b>, sem túnel nenhum. O motivo é diagnóstico: se a API já não responde agora, o problema é do ECS, e não vale a pena descobrir isso depois de montar dois túneis. O endereço é o <code>IPpub</code> da <b><code>ECS Instance - cluster-bia</code></b> — não o da <code>bia-dev</code>. O comando abaixo busca esse IP sozinho e usa a <code>BIA_PORT</code> gravada no passo 1.4.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>BIA_PUB=$(aws ec2 describe-instances \
+  --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=ECS Instance - cluster-bia" \
+  --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+<span class="p">$ </span>echo "$BIA_PUB"
+<span class="p">$ </span>curl -s http://$BIA_PUB:$BIA_PORT/api/versao ; echo
+<span class="p">$ </span>curl -s http://$BIA_PUB:$BIA_PORT/api/tarefas ; echo</pre></div>
+        <div class="note n-warn"><b>O <code>curl</code> ficou mudo ou demorou e voltou vazio?</b><p>Confira duas coisas: se o <code>runningCount</code> do serviço é <code>1</code> (passo 1.3) e se o security group da instância do cluster libera a porta <code>80</code> para o seu IP. Se <code>$BIA_PUB</code> saiu <code>None</code>, a instância não está <code>running</code>.</p></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Bia 4.3.0
+[{"uuid":"xxxxxxxx-...","titulo":"Teste do S3","importante":true,"createdAt":"..."}]</pre></div>
+        <p><b>Guarde essa lista.</b> Ela é a foto do "antes": na Fase 6 você insere um registro direto no banco, e na Fase 7 a mesma rota — agora pelo túnel — tem que devolver <b>um item a mais</b>. É essa diferença que prova a ida e a volta inteira.</p>
+        <p>Se a resposta for uma lista vazia (<code>[]</code>), tudo bem: o registro da Fase 6 vai ser o primeiro.</p>
+        <div class="note n-warn"><b>Se vier 500 com <code>database "bia" does not exist</code></b><p>O banco voltou, mas o database foi apagado (ou este é um ambiente novo). Rode a Fase 4 do <b>Desafio 3</b> — <code>db:create</code> e <code>db:migrate</code> — antes de continuar: sem a tabela <code>"Tarefas"</code> não há onde inserir o registro.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>/api/versao</code> devolve <code>Bia 4.3.0</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>/api/tarefas</code> devolve 200 com uma lista (mesmo vazia)</span></label></li>
+          <li><label><input type="checkbox"><span>Anotei quantos itens a lista tem <b>agora</b></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p2" data-title="Ingredientes da EC2">
+      <div class="phase-head">
+        <span class="phase-n">FASE 2</span>
+        <div>
+          <h2>Os quatro ingredientes para lançar uma EC2</h2>
+          <p>Antes de escrever o script, descubra à mão o que ele vai descobrir sozinho. Lançar uma instância exige quatro respostas: <b>onde</b> (subnet), <b>qual sistema</b> (AMI), <b>quem ela é</b> (instance profile) e <b>que firewall</b> (security group). Rodar cada consulta separada agora é o que faz o script da Fase 3 deixar de ser mágica.</p>
+        </div>
+        <span class="phase-count" data-count-for="p2"></span>
+      </div>
+
+      <div class="step" id="passo-2-1">
+        <div class="step-top"><a class="step-id" href="#passo-2-1">2.1</a><h3>A subnet default da zona b</h3><span class="where w-wsl">WSL</span></div>
+        <p>O enunciado diz "zona b (subnet default)". Toda conta AWS nasce com uma <b>VPC default</b> que tem exatamente uma subnet por zona de disponibilidade, marcada com o atributo <code>DefaultForAz</code>. É esse atributo que o filtro procura — assim o script funciona em qualquer conta, sem ninguém precisar decorar um <code>subnet-xxxxxxxx</code>.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-subnets \
+  --filters "Name=default-for-az,Values=true" \
+  --query 'sort_by(Subnets,&AvailabilityZone)[].{AZ:AvailabilityZone,Subnet:SubnetId,Vpc:VpcId,IPpublico:MapPublicIpOnLaunch}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>-----------------------------------------------------------------------
+|                           DescribeSubnets                           |
++--------------+-------------+---------------------+------------------+
+|      AZ      | IPpublico   |       Subnet        |       Vpc        |
++--------------+-------------+---------------------+------------------+
+|  us-east-1a  |  True       |  subnet-xxxxxxxxa   |  vpc-xxxxxxxx    |
+|  us-east-1b  |  True       |  subnet-xxxxxxxxb   |  vpc-xxxxxxxx    |
+|  us-east-1c  |  True       |  subnet-xxxxxxxxc   |  vpc-xxxxxxxx    |
+|  ...         |  ...        |  ...                |  ...             |
++--------------+-------------+---------------------+------------------+</pre></div>
+        <div class="cmd"><span class="cmd-label">Agora só a da zona b — é o que o script vai fazer</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-subnets \
+  --filters "Name=default-for-az,Values=true" "Name=availability-zone,Values=$PORTEIRO_AZ" \
+  --query 'Subnets[0].SubnetId' --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>subnet-xxxxxxxxb</pre></div>
+        <div class="note n-tip"><b>Dois filtros, um E lógico</b><p>Passar <code>--filters</code> com dois pares separados por espaço significa "as duas condições ao mesmo tempo". O <code>--query 'Subnets[0].SubnetId'</code> pega o primeiro item e devolve só o ID; o <code>--output text</code> tira as aspas do JSON. É a combinação que faz a saída caber dentro de uma variável de shell sem tratamento nenhum.</p></div>
+        <div class="note n-tip"><b><code>MapPublicIpOnLaunch = True</code> importa mais do que parece</b><p>Significa que a instância nasce com IP público e rota para a internet. O porteiro <b>precisa</b> de saída para a internet — não para ser acessado de fora (não há porta aberta), mas porque o agente do SSM é quem <b>liga para a AWS</b> pedindo instruções. Sem essa saída, a máquina sobe e nunca aparece no SSM.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Anotei o <code>SubnetId</code> da <code>us-east-1b</code></span></label></li>
+          <li><label><input type="checkbox"><span>A coluna <code>IPpublico</code> dessa linha é <code>True</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-2">
+        <div class="step-top"><a class="step-id" href="#passo-2-2">2.2</a><h3>A AMI, sem decorar o ID</h3><span class="where w-wsl">WSL</span></div>
+        <p>A AWS publica o ID da imagem mais recente do Amazon Linux 2023 em um <b>parâmetro público do SSM</b>. Ler de lá é melhor do que copiar um <code>ami-0abc123</code> do Console por dois motivos: o ID muda a cada atualização da imagem, e ele é <b>diferente em cada região</b> — um script com AMI fixa quebra sozinho em alguns meses.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ssm get-parameters \
+  --names /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+  --query 'Parameters[0].Value' --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>ami-xxxxxxxxxxxxxxxxx</pre></div>
+        <div class="note n-tip"><b>Por que Amazon Linux 2023</b><p>Porque o <b>agente do SSM já vem instalado e ligado</b> nela. Em uma Ubuntu ou Debian você teria que instalar o agente na mão (ou por <code>user-data</code>) antes de qualquer túnel funcionar. Para um porteiro, escolher a imagem que já sabe falar SSM economiza o passo mais chato do desafio.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O comando devolveu um <code>ami-...</code></span></label></li>
+          <li><label><input type="checkbox"><span>Entendi por que o ID não vai escrito dentro do script</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-3">
+        <div class="step-top"><a class="step-id" href="#passo-2-3">2.3</a><h3>O instance profile que dá identidade ao porteiro</h3><span class="where w-wsl">WSL</span></div>
+        <p>Uma EC2 não guarda usuário e senha da AWS. Ela recebe uma <b>role</b>, entregue por um <b>instance profile</b>, e o agente do SSM usa essa identidade para se registrar. É a mesma <code>role-acesso-ssm</code> que você criou no Desafio 3 para a <code>bia-dev</code> — e reaproveitar é o certo aqui: uma role por finalidade, não uma por máquina.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws iam get-instance-profile --instance-profile-name role-acesso-ssm \
+  --query 'InstanceProfile.{Perfil:InstanceProfileName,Role:Roles[0].RoleName}' --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>------------------------------------------
+|           GetInstanceProfile           |
++-------------------+--------------------+
+|      Perfil       |       Role         |
++-------------------+--------------------+
+|  role-acesso-ssm  |  role-acesso-ssm   |
++-------------------+--------------------+</pre></div>
+        <div class="note n-tip"><b>Role e instance profile têm o mesmo nome — mas não são a mesma coisa</b><p>A <b>role</b> é o conjunto de permissões. O <b>instance profile</b> é o envelope que entrega essa role a uma EC2 — é ele, e não a role, que aparece em <code>--iam-instance-profile</code>. Quando você cria a role pelo Console escolhendo o caso de uso "EC2", a AWS cria o profile junto, com o mesmo nome. Por isso os dois batem aqui.</p></div>
+        <details class="fallback">
+          <summary>O comando deu <code>AccessDenied</code>, ou a role não existe</summary>
+          <p><code>iam:GetInstanceProfile</code> é leitura de IAM, e o usuário da formação pode não ter. Confirme pelo Console — <b>IAM &gt; Roles &gt; role-acesso-ssm</b> — e siga: o que importa é a role existir, não você conseguir lê-la pelo CLI.</p>
+          <p>Se ela realmente não existir, crie assim:</p>
+          <div class="out"><span class="out-label">Caminho no Console</span><pre>IAM  &gt;  Roles  &gt;  Create role
+     &gt;  Trusted entity type: AWS service
+     &gt;  Use case: EC2
+     &gt;  Permissions: AmazonSSMManagedInstanceCore
+     &gt;  Role name: role-acesso-ssm  &gt;  Create role</pre></div>
+          <p>A policy <code>AmazonSSMManagedInstanceCore</code> é o mínimo: ela deixa o agente se registrar e receber sessões. Nada de S3, nada de banco.</p>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A role <code>role-acesso-ssm</code> existe</span></label></li>
+          <li><label><input type="checkbox"><span>Ela tem a policy <code>AmazonSSMManagedInstanceCore</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-4">
+        <div class="step-top"><a class="step-id" href="#passo-2-4">2.4</a><h3>Testar a permissão de lançar, sem lançar</h3><span class="where w-wsl">WSL</span></div>
+        <p>O <code>--dry-run</code> manda o pedido inteiro para a AWS, ela avalia as permissões e responde — <b>sem criar nada</b>. É o jeito de descobrir agora, de graça, se falta policy, em vez de descobrir no meio do script da Fase 3.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>AMI=$(aws ssm get-parameters \
+  --names /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+  --query 'Parameters[0].Value' --output text)
+<span class="p">$ </span>SUBNET=$(aws ec2 describe-subnets \
+  --filters "Name=default-for-az,Values=true" "Name=availability-zone,Values=$PORTEIRO_AZ" \
+  --query 'Subnets[0].SubnetId' --output text)
+<span class="p">$ </span>aws ec2 run-instances --dry-run \
+  --image-id "$AMI" --instance-type t3.micro --subnet-id "$SUBNET" \
+  --iam-instance-profile Name=role-acesso-ssm \
+  --metadata-options "HttpTokens=required,HttpEndpoint=enabled" \
+  --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$PORTEIRO_NOME}]"</pre></div>
+        <p>O <code>--tag-specifications</code> está aí de propósito: o script da Fase 3 dá nome à máquina no mesmo pedido, e isso exige <code>ec2:CreateTags</code>. Sem ele, o dry-run passaria e o script quebraria depois.</p>
+        <div class="out good"><span class="out-label">Resposta esperada — isto aqui é <b>sucesso</b></span><pre>aws: [ERROR]: An error occurred (DryRunOperation) when calling the RunInstances operation:
+Request would have succeeded, but DryRun flag is set.</pre></div>
+        <div class="note n-warn"><b>A palavra <code>error</code> confunde, e é normal</b><p>A API sempre responde com uma exceção num dry-run: <code>DryRunOperation</code> quando você <b>tem</b> a permissão, <code>UnauthorizedOperation</code> quando não tem. Só a segunda é problema de verdade.</p></div>
+        <div class="out bad"><span class="out-label">Se faltar permissão</span><pre>aws: [ERROR]: An error occurred (UnauthorizedOperation) when calling the RunInstances operation:
+You are not authorized to perform this operation. User: arn:aws:iam::xxxxxxxxxxxx:user/usuario-xxxx
+is not authorized to perform: iam:PassRole on resource: .../role-acesso-ssm</pre></div>
+        <div class="note n-key"><b><code>iam:PassRole</code> é uma permissão à parte — e o motivo é bom</b><p>Poder criar uma EC2 não é poder <b>entregar uma identidade</b> a ela. Se fosse a mesma permissão, qualquer pessoa que pudesse lançar uma máquina poderia anexar a role mais poderosa da conta e virar administradora por tabela. A AWS trata delegação de privilégio como um ato separado.</p><p>Se essa mensagem aparecer, anexe ao seu usuário uma policy com <code>ec2:RunInstances</code>, <code>ec2:CreateTags</code>, <code>ec2:CreateSecurityGroup</code>, <code>ec2:AuthorizeSecurityGroupIngress</code> e <code>iam:PassRole</code> sobre a <code>role-acesso-ssm</code> — ou lance a instância pelo Console, que é o caminho do bloco abaixo.</p></div>
+        <details class="fallback">
+          <summary>Sem permissão para lançar pelo CLI — o caminho pelo Console</summary>
+          <p>O script da Fase 3 continua sendo a entrega; você o escreve e o comita do mesmo jeito. Só a execução muda de lugar:</p>
+          <div class="out"><span class="out-label">EC2 &gt; Instances &gt; Launch instances</span><pre>Name                    porteiro-bia
+AMI                     Amazon Linux 2023 (a primeira da lista)
+Instance type           t3.micro
+Key pair                Proceed without a key pair
+Network settings  &gt;  Edit
+  Subnet                a subnet default de us-east-1b
+  Auto-assign public IP Enable
+  Firewall              Create security group  &gt;  bia-porteiro
+                        REMOVA a regra de SSH que vem sugerida
+Advanced details
+  IAM instance profile  role-acesso-ssm
+</pre></div>
+          <p>A regra de SSH sugerida pelo Console é o oposto do que este desafio quer: o porteiro não tem porta de entrada.</p>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O dry-run respondeu <code>DryRunOperation ... would have succeeded</code></span></label></li>
+          <li><label><input type="checkbox"><span>Ou eu sei que vou lançar pelo Console, e por quê</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p3" data-title="Entrega 1: lançar">
+      <div class="phase-head">
+        <span class="phase-n">FASE 3</span>
+        <div>
+          <h2>Entrega 1 — o script que lança o porteiro na zona b</h2>
+          <p>Primeiro dos quatro arquivos do desafio. Ele junta as quatro consultas da Fase 2 e termina com um <code>run-instances</code>. Escreva, leia, e só então execute.</p>
+        </div>
+        <span class="phase-count" data-count-for="p3"></span>
+      </div>
+
+      <div class="step" id="passo-3-1">
+        <div class="step-top"><a class="step-id" href="#passo-3-1">3.1</a><h3>Criar o arquivo</h3><span class="where w-wsl">WSL</span></div>
+        <p>Rode este bloco inteiro dentro da pasta do repositório (a do passo 0.6). Ele grava o script no disco — nada é executado ainda.</p>
+        <div class="note n-tip"><b>Por que não rodar direto o <code>05-1-criar-tunel-propria-ec2.sh</code>?</b><p>Porque ele não lança máquina nenhuma: procura uma EC2 que <b>já existe e está running</b> e abre um túnel <code>3002 → 3001</code> nela. Nenhum script da aula (<code>05-1</code>, <code>05-2</code>, <code>06-1</code>, <code>06-2</code>) faz <code>run-instances</code> — por isso a Entrega 1 é um arquivo novo. A equivalência de cada um está no <a href="#anexo-aula-tuneis">Anexo A.4</a>.</p><p>Você <b>vai</b> executar um script: este bloco só cria o arquivo, e quem o roda é o passo 3.3. Se preferir, crie o <code>01-lancar-porteiro-zona-b.sh</code> no VS Code e cole só o conteúdo entre a linha do <code>cat</code> e a linha <code>FIM</code>.</p></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cat &gt; 01-lancar-porteiro-zona-b.sh &lt;&lt;'FIM'
+#!/usr/bin/env bash
+# Lanca a EC2 "porteiro" na subnet default da zona informada.
+# Uso: ./01-lancar-porteiro-zona-b.sh &lt;nome&gt; [zona] [tipo]
+# O profile vem do ambiente (export AWS_PROFILE), nao do codigo.
+
+NOME=$1
+ZONA=${2:-us-east-1b}
+TIPO=${3:-t3.micro}
+PERFIL_SSM=role-acesso-ssm
+SG_NOME=bia-porteiro
+
+if [ -z "$NOME" ]; then
+    echo "Uso: $0 &lt;nome-do-porteiro&gt; [zona] [tipo]"
+    exit 1
+fi
+
+# 1. ja existe uma instancia com esse nome? entao nao lance outra.
+EXISTENTE=$(aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=$NOME" \
+              "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+    --query "Reservations[].Instances[].InstanceId[]" \
+    --output text)
+
+if [ -n "$EXISTENTE" ]; then
+    echo "Porteiro ja existe: $EXISTENTE - nada a fazer"
+    exit 0
+fi
+
+# 2. a subnet default da zona pedida
+SUBNET_ID=$(aws ec2 describe-subnets \
+    --filters "Name=default-for-az,Values=true" "Name=availability-zone,Values=$ZONA" \
+    --query "Subnets[0].SubnetId" --output text)
+
+if [ -z "$SUBNET_ID" ] || [ "$SUBNET_ID" = "None" ]; then
+    echo "Subnet default da zona $ZONA nao encontrada"
+    exit 1
+fi
+
+VPC_ID=$(aws ec2 describe-subnets --subnet-ids "$SUBNET_ID" \
+    --query "Subnets[0].VpcId" --output text)
+
+# 3. a AMI mais recente do Amazon Linux 2023, direto do parametro publico
+AMI_ID=$(aws ssm get-parameters \
+    --names /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+    --query "Parameters[0].Value" --output text)
+
+if [ -z "$AMI_ID" ] || [ "$AMI_ID" = "None" ]; then
+    echo "AMI do Amazon Linux 2023 nao encontrada"
+    exit 1
+fi
+
+# 4. o security group do porteiro: criado sem regra de entrada, de proposito
+SG_ID=$(aws ec2 describe-security-groups \
+    --filters "Name=group-name,Values=$SG_NOME" "Name=vpc-id,Values=$VPC_ID" \
+    --query "SecurityGroups[0].GroupId" --output text)
+
+if [ -z "$SG_ID" ] || [ "$SG_ID" = "None" ]; then
+    echo "Criando o security group $SG_NOME"
+    SG_ID=$(aws ec2 create-security-group \
+        --group-name "$SG_NOME" \
+        --description "EC2 porteiro - entrada apenas por SSM" \
+        --vpc-id "$VPC_ID" \
+        --query "GroupId" --output text)
+
+    if [ -z "$SG_ID" ]; then
+        echo "Falha ao criar o security group $SG_NOME"
+        exit 1
+    fi
+fi
+
+echo "Zona:   $ZONA"
+echo "Subnet: $SUBNET_ID (VPC $VPC_ID)"
+echo "AMI:    $AMI_ID"
+echo "SG:     $SG_ID"
+
+# 5. lancar a instancia
+INSTANCE_ID=$(aws ec2 run-instances \
+    --image-id "$AMI_ID" \
+    --instance-type "$TIPO" \
+    --subnet-id "$SUBNET_ID" \
+    --security-group-ids "$SG_ID" \
+    --iam-instance-profile Name=$PERFIL_SSM \
+    --metadata-options "HttpTokens=required,HttpEndpoint=enabled" \
+    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$NOME}]" \
+    --query "Instances[0].InstanceId" --output text)
+
+if [ -z "$INSTANCE_ID" ]; then
+    echo "Falha ao lancar a instancia"
+    exit 1
+fi
+
+echo "Porteiro lancado: $INSTANCE_ID"
+echo "Aguardando o estado running..."
+aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+echo "Pronto: $NOME esta running na zona $ZONA"
+FIM
+</pre></div>
+        <div class="cmd"><span class="cmd-label">Dar permissão de execução</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>chmod +x 01-lancar-porteiro-zona-b.sh
+<span class="p">$ </span>ls -l 01-lancar-porteiro-zona-b.sh</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>-rwxr-xr-x 1 rafael rafael 2431 set  3 10:12 01-lancar-porteiro-zona-b.sh</pre></div>
+        <p>Os <code>x</code> nas permissões são o que permite chamar o arquivo com <code>./</code>. Sem o <code>chmod</code>, o Bash responde <code>Permission denied</code> — o arquivo existe, mas não é executável.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Arquivo <code>01-lancar-porteiro-zona-b.sh</code> criado na pasta do repositório</span></label></li>
+          <li><label><input type="checkbox"><span>O <code>ls -l</code> mostra os <code>x</code> de executável</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3-2">
+        <div class="step-top"><a class="step-id" href="#passo-3-2">3.2</a><h3>Ler o script antes de rodar</h3></div>
+        <p>Vale gastar dois minutos aqui: quase tudo que aparece neste arquivo se repete nos outros três.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>O trecho</th><th>O que faz</th><th>Por que está aí</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>NOME=$1</code></td>
+                <td>Guarda o primeiro argumento da linha de comando</td>
+                <td>O script não decora o nome da máquina. Quem chama decide — é o que o torna reutilizável</td>
+              </tr>
+              <tr>
+                <td><code>ZONA=${2:-us-east-1b}</code></td>
+                <td>Usa o segundo argumento; se não vier nenhum, assume <code>us-east-1b</code></td>
+                <td>Atende o enunciado por padrão (zona b) sem impedir lançar em outra zona quando você quiser</td>
+              </tr>
+              <tr>
+                <td><code>VAR=$(comando)</code></td>
+                <td><b>Command substitution</b>: roda o comando, captura a saída e guarda na variável</td>
+                <td>É o coração de todos os scripts do dia. Sem isso, você teria que copiar IDs na mão entre um comando e outro</td>
+              </tr>
+              <tr>
+                <td><code>if [ -z "$VAR" ]</code></td>
+                <td>Verdadeiro quando a variável está <b>vazia</b></td>
+                <td>Para o script cedo, com uma mensagem que se entende. Sem isso, o erro aparece lá na frente como <code>Invalid length for parameter</code></td>
+              </tr>
+              <tr>
+                <td><code>if [ -n "$EXISTENTE" ]</code></td>
+                <td>O contrário: verdadeiro quando <b>tem</b> conteúdo</td>
+                <td>Torna o script idempotente — rodar duas vezes não cria dois porteiros. Rodar de novo por engano é barato; pagar por duas EC2 esquecidas, não</td>
+              </tr>
+              <tr>
+                <td><code>[ "$SUBNET_ID" = "None" ]</code></td>
+                <td>Compara com a palavra <code>None</code></td>
+                <td>Detalhe traiçoeiro do CLI: quando o <code>--query</code> não encontra nada, o <code>--output text</code> imprime a string <code>None</code> — que <b>não</b> é vazia. Só o <code>-z</code> não pegaria esse caso</td>
+              </tr>
+              <tr>
+                <td><code>--query "Subnets[0].SubnetId"</code></td>
+                <td>Filtra a resposta JSON e devolve um único campo</td>
+                <td>É o que faz a saída caber numa variável limpa. Sem <code>--query</code> viria o JSON inteiro, e você precisaria de <code>jq</code> ou <code>grep</code></td>
+              </tr>
+              <tr>
+                <td><code>--output text</code></td>
+                <td>Imprime sem aspas nem colchetes</td>
+                <td>Com o padrão (<code>json</code>), a variável guardaria <code>"subnet-xxxx"</code> <b>com</b> as aspas, e o comando seguinte falharia</td>
+              </tr>
+              <tr>
+                <td><code>--iam-instance-profile Name=...</code></td>
+                <td>Entrega a role à instância no momento do lançamento</td>
+                <td>É o que permite o agente do SSM se registrar. Anexar depois funciona, mas exige reiniciar a máquina para o agente pegar a credencial</td>
+              </tr>
+              <tr>
+                <td><code>--metadata-options HttpTokens=required</code></td>
+                <td>Exige IMDSv2 no serviço de metadados</td>
+                <td>Boa prática de segurança: fecha a porta para leitura das credenciais da instância a partir de uma falha de SSRF na aplicação</td>
+              </tr>
+              <tr>
+                <td><code>--tag-specifications ...Key=Name...</code></td>
+                <td>Coloca a tag <code>Name</code> já no lançamento</td>
+                <td>Todos os outros três scripts encontram a máquina <b>pela tag</b>. Sem ela, nada do resto do desafio funciona</td>
+              </tr>
+              <tr>
+                <td><code>aws ec2 wait instance-running</code></td>
+                <td>Bloqueia até a instância sair de <code>pending</code></td>
+                <td>Evita o <code>sleep 30</code> chutado da aula: espera o tempo real, nem mais nem menos</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-tip"><b>Onde está o <code>--key-name</code>?</b><p>Não existe, e é de propósito. Sem key pair não há chave privada para guardar, vazar ou rodar. O acesso é 100% por SSM, autorizado pelo IAM — e revogável em um clique.</p></div>
+        <div class="note n-warn"><b>Onde estão as regras de entrada do Security Group?</b><p>Também não existem. Um SG novo já nasce com saída liberada e <b>zero</b> entrada, e é assim que ele fica. O túnel SSM não é uma conexão de fora para dentro: é o agente da máquina que abre a conexão <b>para</b> a AWS. Nenhuma porta precisa ser aberta — este é o ponto central do desafio.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Entendi o <code>$( )</code> e o <code>if [ -z ]</code></span></label></li>
+          <li><label><input type="checkbox"><span>Entendi por que o script não abre porta nenhuma</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3-3">
+        <div class="step-top"><a class="step-id" href="#passo-3-3">3.3</a><h3>Lançar o porteiro</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>./01-lancar-porteiro-zona-b.sh "$PORTEIRO_NOME" "$PORTEIRO_AZ"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — leva de 30 a 60 segundos</span><pre>Criando o security group bia-porteiro
+Zona:   us-east-1b
+Subnet: subnet-xxxxxxxxb (VPC vpc-xxxxxxxx)
+AMI:    ami-xxxxxxxxxxxxxxxxx
+SG:     sg-xxxxxxxxxxxxxxxxx
+Porteiro lancado: i-xxxxxxxxxxxxxxxxx
+Aguardando o estado running...
+Pronto: porteiro-bia esta running na zona us-east-1b</pre></div>
+        <div class="note n-warn"><b><code>Group names may not be in the format sg-*</code></b><p>A AWS reserva o prefixo <code>sg-</code> para os <b>IDs</b> dos security groups, então nenhum nome pode começar assim. O SG do porteiro se chama <code>bia-porteiro</code>. Se o seu arquivo ainda tem <code>SG_NOME=sg-porteiro</code>, troque e rode de novo — a tentativa que falhou não criou nada na AWS.</p></div>
+        <div class="note n-warn"><b><code>not authorized to perform: ec2:CreateTags on resource: ...instance/*</code></b><p>O seu usuário pode lançar a EC2, mas não pode dar nome a ela — e o script lança já com a tag <code>Name</code>, que é como todos os outros scripts acham o porteiro. Com um usuário administrador (ou a conta root), no Console: <b>IAM &gt; Users &gt; o seu usuário &gt; Add permissions &gt; Create inline policy &gt; JSON</b>, e cole:</p><pre>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "ec2:CreateTags",
+    "Resource": "arn:aws:ec2:*:*:*",
+    "Condition": {"StringEquals": {"ec2:CreateAction": ["RunInstances", "CreateSecurityGroup"]}}
+  }]
+}</pre><p>A condição limita a permissão a etiquetar recursos <b>no momento em que são criados</b>. Rode o script de novo depois: o security group criado na tentativa anterior é reaproveitado.</p></div>
+        <p>Na segunda vez que você rodar, a saída é uma linha só — <code>Porteiro ja existe: i-xxxx - nada a fazer</code>. É a verificação do <code>-n</code> funcionando.</p>
+        <div class="cmd"><span class="cmd-label">Conferir onde a máquina nasceu</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=$PORTEIRO_NOME" \
+  --query 'Reservations[].Instances[].{Id:InstanceId,Estado:State.Name,Zona:Placement.AvailabilityZone,Subnet:SubnetId,Perfil:IamInstanceProfile.Arn}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>----------------------------------------------------------------------
+|                          DescribeInstances                         |
++-----------+------------------------+--------------+----------------+
+|  Estado   |          Id            |    Zona      |    Subnet      |
++-----------+------------------------+--------------+----------------+
+|  running  |  i-xxxxxxxxxxxxxxxxx   |  us-east-1b  | subnet-xxxxb   |
++-----------+------------------------+--------------+----------------+</pre></div>
+        <p><b>Zona <code>us-east-1b</code> é a prova da primeira entrega.</b> Guarde esta saída — ela é a evidência do primeiro item do enunciado.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O script rodou e imprimiu o <code>i-...</code> da instância</span></label></li>
+          <li><label><input type="checkbox"><span><code>Zona</code> é <code>us-east-1b</code></span></label></li>
+          <li><label><input type="checkbox"><span>A instância tem um <code>IamInstanceProfile</code> associado</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3-4">
+        <div class="step-top"><a class="step-id" href="#passo-3-4">3.4</a><h3>Esperar o agente do SSM aparecer</h3><span class="where w-wsl">WSL</span></div>
+        <p>Estar <code>running</code> não é estar pronto. O sistema ainda precisa iniciar, o agente do SSM subir, pegar a credencial da role e se registrar no serviço. São mais 1 a 3 minutos, e é aqui que quase todo mundo se apressa e toma <code>TargetNotConnected</code>.</p>
+        <div class="cmd"><span class="cmd-label">Comando — repita até aparecer Online</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ssm describe-instance-information \
+  --query 'InstanceInformationList[].{Id:InstanceId,Ping:PingStatus,Plataforma:PlatformName,Agente:AgentVersion}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>-------------------------------------------------------------------
+|                   DescribeInstanceInformation                   |
++-----------+-----------------------+-----------+-----------------+
+|  Agente   |          Id           |   Ping    |   Plataforma    |
++-----------+-----------------------+-----------+-----------------+
+|  3.3.x.x  | i-xxxxxxxxxxxxxxxxx   |  Online   | Amazon Linux    |
++-----------+-----------------------+-----------+-----------------+</pre></div>
+        <div class="note n-warn"><b>Lista vazia por mais de 5 minutos</b><p>Não é lentidão, é uma das três causas: a instância subiu <b>sem</b> instance profile; a role não tem a policy <code>AmazonSSMManagedInstanceCore</code>; ou a subnet não dá saída para a internet. Confira nessa ordem — a primeira é de longe a mais comum.</p></div>
+        <div class="cmd"><span class="cmd-label">Teste opcional: abrir um shell na máquina</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>PORTEIRO_ID=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=$PORTEIRO_NOME" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[].Instances[].InstanceId[]' --output text)
+<span class="p">$ </span>aws ssm start-session --target "$PORTEIRO_ID"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Starting session with SessionId: usuario-xxxx-xxxxxxxxxxxxxxxxx
+sh-5.2$</pre></div>
+        <p>Digite <code>exit</code> para sair. Este teste é opcional, mas separa dois problemas: se o shell abre, o SSM está saudável e qualquer erro nas próximas fases é de <b>rede</b> ou de <b>permissão de documento</b>, não de agente.</p>
+        <div class="note n-tip"><b>Se este teste der <code>AccessDeniedException</code> mas os túneis funcionarem</b><p>É a policy do repositório sendo literal: ela autoriza <code>ssm:StartSession</code> sobre documentos específicos, e o shell interativo usa o <code>SSM-SessionManagerRunShell</code>, que não está na lista. Não é problema para o desafio — nenhuma das quatro entregas precisa de shell na máquina.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O porteiro aparece com <code>PingStatus = Online</code></span></label></li>
+          <li><label><input type="checkbox"><span>Guardei o <code>i-...</code> do porteiro</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p4" data-title="Abrir o caminho">
+      <div class="phase-head">
+        <span class="phase-n">FASE 4</span>
+        <div>
+          <h2>Abrir o caminho do porteiro até o banco e até a BIA</h2>
+          <p>O túnel entrega o tráfego <b>na</b> máquina do porteiro. Do porteiro para frente, quem manda é o Security Group de cada destino — e nenhum deles conhece a máquina que você acabou de criar. Sem esta fase, os dois túneis abrem e ficam mudos.</p>
+        </div>
+        <span class="phase-count" data-count-for="p4"></span>
+      </div>
+
+      <div class="ascii">
+<pre>
+  WSL                    PORTEIRO                RDS "bia"        EC2 do cluster
+   |                        |                        |                    |
+   | localhost:5433         |                        |                    |
+   |----- tunel SSM -------&gt;|                        |                    |
+   |                        |--- tcp 5432 ---------&gt;|  SG bia-db         |
+   |                        |                      X   &lt;-- morre aqui    |
+   |                        |                          sem a regra 4.2   |
+   |                        |                                            |
+   | localhost:3002         |                                            |
+   |----- tunel SSM -------&gt;|--- tcp 80 ---------------------------------&gt;|  SG bia-web
+   |                        |                                           X   &lt;-- morre aqui
+   |                        |                                               sem a regra 4.3
+</pre>
+      </div>
+
+      <div class="step" id="passo-4-1">
+        <div class="step-top"><a class="step-id" href="#passo-4-1">4.1</a><h3>Descobrir os três Security Groups</h3><span class="where w-wsl">WSL</span></div>
+        <p>Um de origem (o porteiro) e dois de destino (o do banco e o da EC2 do cluster). Este bloco guarda os três em variáveis para os próximos passos.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>SG_PORTEIRO=$(aws ec2 describe-security-groups \
+  --filters "Name=group-name,Values=$PORTEIRO_SG_NOME" \
+  --query 'SecurityGroups[0].GroupId' --output text)
+<span class="p">$ </span>SG_DB=$(aws ec2 describe-security-groups \
+  --filters "Name=group-name,Values=bia-db" \
+  --query 'SecurityGroups[0].GroupId' --output text)
+<span class="p">$ </span>SG_WEB=$(aws ec2 describe-security-groups \
+  --filters "Name=group-name,Values=bia-web" \
+  --query 'SecurityGroups[0].GroupId' --output text)
+<span class="p">$ </span>echo "porteiro=$SG_PORTEIRO  banco=$SG_DB  web=$SG_WEB"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>porteiro=sg-xxxxxxxxxxxxxxxxx  banco=sg-xxxxxxxxxxxxxxxxx  web=sg-xxxxxxxxxxxxxxxxx</pre></div>
+        <div class="cmd"><span class="cmd-label">Conferir que a EC2 do cluster usa mesmo o bia-web</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=ECS Instance - cluster-bia" \
+  --query 'Reservations[0].Instances[0].SecurityGroups[].[GroupName,GroupId]' --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — o ID tem que ser o mesmo de <code>$SG_WEB</code></span><pre>bia-web sg-xxxxxxxxxxxxxxxxx</pre></div>
+        <p>Se aparecer outro grupo, é nele que a regra do passo 4.3 precisa entrar: rode <code>SG_WEB=sg-...</code> com o ID que apareceu antes de seguir.</p>
+        <div class="note n-warn"><b>Se algum vier <code>None</code></b><p>O nome do grupo é outro na sua conta. Liste todos e ache os equivalentes com <code>aws ec2 describe-security-groups --query 'SecurityGroups[].[GroupName,GroupId,Description]' --output table</code>. O do banco é o associado ao RDS <code>bia</code>; o da web é o da EC2 do cluster (passo 1.4).</p></div>
+        <div class="note n-tip"><b>Estas três variáveis vivem só nesta aba</b><p>Elas não entram no <code>desafio4.sh</code> de propósito: são IDs que você usa duas vezes e nunca mais. Se abrir outra aba antes de terminar a fase, rode o bloco de novo.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Os três IDs apareceram preenchidos</span></label></li>
+          <li><label><input type="checkbox"><span>Nenhum deles é <code>None</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-4-2">
+        <div class="step-top"><a class="step-id" href="#passo-4-2">4.2</a><h3>Liberar a 5432 do banco para o porteiro</h3><span class="where w-wsl">WSL</span></div>
+        <p>Repare no que a regra diz: a origem não é um IP, é <b>um Security Group</b>. Quem chegar no banco vindo de qualquer máquina que use o <code>bia-porteiro</code> passa — hoje é uma EC2, amanhã pode ser outra, e a regra continua valendo. É o oposto de liberar o seu IP residencial, que muda toda semana.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 authorize-security-group-ingress \
+  --group-id "$SG_DB" \
+  --ip-permissions "IpProtocol=tcp,FromPort=5432,ToPort=5432,UserIdGroupPairs=[{GroupId=$SG_PORTEIRO,Description=porteiro-desafio-4}]" \
+  --query 'SecurityGroupRules[].{Regra:SecurityGroupRuleId,Porta:FromPort,Origem:ReferencedGroupInfo.GroupId}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>------------------------------------------------------------
+|               AuthorizeSecurityGroupIngress              |
++-----------------------+--------+-------------------------+
+|        Origem         | Porta  |          Regra          |
++-----------------------+--------+-------------------------+
+|  sg-xxxxxxxxxxxxxxxxx |  5432  |  sgr-xxxxxxxxxxxxxxxxx  |
++-----------------------+--------+-------------------------+</pre></div>
+        <p>A <code>Origem</code> tem que ser o ID do <code>bia-porteiro</code> (o <code>$SG_PORTEIRO</code> do passo 4.1). A CLI ordena as colunas em ordem alfabética, por isso <code>Origem</code> vem antes de <code>Porta</code>.</p>
+        <div class="note n-tip"><b><code>InvalidPermission.Duplicate</code> não é erro</b><p>Significa que a regra já existe — normalmente porque você rodou o comando duas vezes. Siga em frente.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A regra 5432 com origem <code>bia-porteiro</code> existe no SG do banco</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-4-3">
+        <div class="step-top"><a class="step-id" href="#passo-4-3">4.3</a><h3>Liberar a porta da BIA para o porteiro</h3><span class="where w-wsl">WSL</span></div>
+        <p>Mesma ideia, outro destino: a porta que você anotou em <code>BIA_PORT</code> no passo 1.4, no Security Group da EC2 do cluster.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 authorize-security-group-ingress \
+  --group-id "$SG_WEB" \
+  --ip-permissions "IpProtocol=tcp,FromPort=$BIA_PORT,ToPort=$BIA_PORT,UserIdGroupPairs=[{GroupId=$SG_PORTEIRO,Description=porteiro-desafio-4}]" \
+  --query 'SecurityGroupRules[].{Regra:SecurityGroupRuleId,Porta:FromPort,Origem:ReferencedGroupInfo.GroupId}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>------------------------------------------------------------
+|               AuthorizeSecurityGroupIngress              |
++-----------------------+--------+-------------------------+
+|        Origem         | Porta  |          Regra          |
++-----------------------+--------+-------------------------+
+|  sg-xxxxxxxxxxxxxxxxx |  80    |  sgr-xxxxxxxxxxxxxxxxx  |
++-----------------------+--------+-------------------------+</pre></div>
+        <div class="note n-tip"><b>Pode ser que já esteja liberado</b><p>Se a porta da API já estiver aberta para <code>0.0.0.0/0</code> desde o Desafio 2, o túnel funcionaria sem esta regra. Faça mesmo assim: a regra por Security Group é o que permite <b>fechar</b> o <code>0.0.0.0/0</code> depois sem derrubar o seu acesso — que é exatamente a lição do desafio.</p></div>
+        <div class="cmd"><span class="cmd-label">Conferir as duas regras de uma vez</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-security-groups --group-ids "$SG_DB" "$SG_WEB" \
+  --query 'SecurityGroups[].{Grupo:GroupName,Regras:IpPermissions[].{Porta:FromPort,Grupos:UserIdGroupPairs[].GroupId,Faixas:IpRanges[].CidrIp}}' \
+  --output json</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — o ID do porteiro nos dois grupos</span><pre>[
+    {
+        "Grupo": "bia-web",
+        "Regras": [
+            {
+                "Porta": 80,
+                "Grupos": [ "sg-ID-DO-PORTEIRO" ],
+                "Faixas": [ "0.0.0.0/0" ]
+            }
+        ]
+    },
+    {
+        "Grupo": "bia-db",
+        "Regras": [
+            {
+                "Porta": 5432,
+                "Grupos": [ "sg-ID-DO-BIA-WEB", "sg-ID-DO-BIA-DEV", "sg-ID-DO-PORTEIRO" ],
+                "Faixas": []
+            }
+        ]
+    }
+]</pre></div>
+        <p>Os grupos a mais no <code>bia-db</code> (o <code>bia-web</code> e o <code>bia-dev</code>) e o <code>0.0.0.0/0</code> na porta 80 do <code>bia-web</code> vêm dos desafios anteriores. É normal, e a ordem dos itens pode variar. O que importa é o ID do <code>bia-porteiro</code> aparecer nos dois.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A porta da BIA aceita origem <code>bia-porteiro</code></span></label></li>
+          <li><label><input type="checkbox"><span>Entendi por que a origem é um SG e não um IP</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-4-4">
+        <div class="step-top"><a class="step-id" href="#passo-4-4">4.4</a><h3>Endpoint e credenciais do banco</h3><span class="where w-wsl">WSL</span></div>
+        <p>O script da Fase 5 descobre o endpoint sozinho — este passo é para <b>você</b> reconhecer o valor quando ele aparecer, e para pegar a senha que o <code>psql</code> vai pedir na Fase 6.</p>
+        <div class="cmd"><span class="cmd-label">1. O endereço do banco</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws rds describe-db-instances --db-instance-identifier "$RDS_ID" \
+  --query 'DBInstances[0].{Endpoint:Endpoint.Address,Porta:Endpoint.Port,Publico:PubliclyAccessible,Usuario:MasterUsername}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>-------------------------------------------------------------------------------
+|                            DescribeDBInstances                              |
++-----------------------------------------------+-------+---------+-----------+
+|                   Endpoint                    | Porta | Publico | Usuario   |
++-----------------------------------------------+-------+---------+-----------+
+|  bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com |  5432 |  False  | postgres  |
++-----------------------------------------------+-------+---------+-----------+</pre></div>
+        <p><code>Publico = False</code> é o que dá sentido ao desafio inteiro. O banco não aceita conexão da internet — nem do seu WSL. O túnel existe justamente para contornar isso sem tornar o banco público.</p>
+        <div class="cmd"><span class="cmd-label">2. A senha, na definição da tarefa do ECS</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecs describe-task-definition --task-definition task-def-bia \
+  --query 'taskDefinition.containerDefinitions[0].environment' --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>--------------------------------------------------------------
+|                   DescribeTaskDefinition                   |
++-----------+------------------------------------------------+
+|   name    |                     value                      |
++-----------+------------------------------------------------+
+|  DB_PWD   |  (a senha do banco, em texto puro)             |
+|  DB_HOST  |  bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com   |
+|  DB_PORT  |  5432                                          |
+|  DB_USER  |  postgres                                      |
++-----------+------------------------------------------------+</pre></div>
+        <div class="note n-warn"><b>Não publique essa saída</b><p>A senha aparece em texto puro. Ela serve para você digitar no <code>psql</code> da Fase 6 — não vai para print, para o repositório nem para o post. O caminho correto em produção é o <b>Secrets Manager</b>, e a BIA já sabe lê-lo pela variável <code>DB_SECRET_NAME</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Sei o endpoint do RDS e que ele não é público</span></label></li>
+          <li><label><input type="checkbox"><span>Tenho <code>DB_USER</code> e <code>DB_PWD</code> à mão para a Fase 6</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p5" data-title="Entrega 2: túnel do RDS">
+      <div class="phase-head">
+        <span class="phase-n">FASE 5</span>
+        <div>
+          <h2>Entrega 2 — ligar o porteiro e abrir o túnel do banco na 5433</h2>
+          <p>Segundo arquivo. Ele faz três coisas em sequência: encontra a máquina, <b>liga se estiver parada</b>, e abre o encaminhamento de porta até o RDS. É o script que você vai rodar todo dia de trabalho.</p>
+        </div>
+        <span class="phase-count" data-count-for="p5"></span>
+      </div>
+
+      <div class="step" id="passo-5-1">
+        <div class="step-top"><a class="step-id" href="#passo-5-1">5.1</a><h3>Criar o arquivo</h3><span class="where w-wsl">WSL</span></div>
+        <div class="note n-tip"><b>Por que não rodar o <code>05-2-criar-tunel-rds.sh</code> da aula?</b><p>Este arquivo <b>nasce</b> dele (o túnel até o RDS) somado ao <code>06-1-ligar-porteiro.sh</code> (ligar a máquina). O <code>05-2</code> sozinho não cumpre o "inicie o porteiro" do enunciado:</p><ul><li>Filtra só instâncias <code>running</code> — com o porteiro parado ele responde "Instancia nao localizada" em vez de ligá-lo.</li><li>Não espera o agente do SSM: logo depois de ligar, o túnel falharia com <code>TargetNotConnected</code>.</li><li>Termina em <code>--profile desafios-fundamentais</code>, que não existe na sua máquina.</li><li>Tem as portas fixas no código.</li></ul><p>Os arquivos da aula continuam no repositório como referência. A equivalência completa está no <a href="#anexo-aula-tuneis">Anexo A.4</a>. Se preferir, crie o arquivo no VS Code colando só o conteúdo entre a linha do <code>cat</code> e a linha <code>FIM</code>.</p></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cat &gt; 02-iniciar-porteiro-tunel-rds.sh &lt;&lt;'FIM'
+#!/usr/bin/env bash
+# Liga o porteiro (se preciso) e abre o tunel SSM ate o RDS.
+# Uso: ./02-iniciar-porteiro-tunel-rds.sh &lt;nome-do-porteiro&gt; &lt;id-do-rds&gt; [porta-local]
+
+NOME=$1
+NOME_RDS=$2
+PORTA_LOCAL=${3:-5433}
+
+if [ -z "$NOME" ] || [ -z "$NOME_RDS" ]; then
+    echo "Uso: $0 &lt;nome-do-porteiro&gt; &lt;id-do-rds&gt; [porta-local]"
+    exit 1
+fi
+
+# 1. achar o porteiro em qualquer estado - inclusive desligado
+INSTANCE_ID=$(aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=$NOME" \
+              "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+    --query "Reservations[].Instances[].InstanceId[]" \
+    --output text)
+
+if [ -z "$INSTANCE_ID" ]; then
+    echo "Porteiro '$NOME' nao encontrado"
+    exit 1
+fi
+echo "Porteiro encontrado: $INSTANCE_ID"
+
+# 2. ligar, se estiver parado
+ESTADO=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+    --query "Reservations[].Instances[].State.Name" --output text)
+
+if [ "$ESTADO" != "running" ]; then
+    echo "Porteiro esta '$ESTADO' - ligando"
+    aws ec2 start-instances --instance-ids "$INSTANCE_ID" &gt; /dev/null
+    aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+fi
+
+# 3. esperar o agente do SSM responder, no maximo 5 minutos
+echo "Aguardando o agente do SSM..."
+PING=""
+for _ in $(seq 1 30); do
+    PING=$(aws ssm describe-instance-information \
+        --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+        --query "InstanceInformationList[0].PingStatus" --output text)
+    [ "$PING" = "Online" ] &amp;&amp; break
+    sleep 10
+done
+
+if [ "$PING" != "Online" ]; then
+    echo "O agente do SSM nao ficou Online a tempo"
+    exit 1
+fi
+echo "SSM: Online"
+
+# 4. descobrir o endereco do banco
+ENDPOINT_RDS=$(aws rds describe-db-instances --db-instance-identifier "$NOME_RDS" \
+    --query "DBInstances[0].Endpoint.Address" --output text)
+
+if [ -z "$ENDPOINT_RDS" ] || [ "$ENDPOINT_RDS" = "None" ]; then
+    echo "RDS '$NOME_RDS' nao localizado"
+    exit 1
+fi
+
+echo "Endpoint do RDS: $ENDPOINT_RDS"
+echo "Tunel: localhost:$PORTA_LOCAL --&gt; $ENDPOINT_RDS:5432"
+echo "Deixe este terminal aberto. Ctrl+C encerra o tunel."
+
+# 5. abrir o encaminhamento de porta
+aws ssm start-session --target "$INSTANCE_ID" \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters "{\"host\":[\"$ENDPOINT_RDS\"],\"portNumber\":[\"5432\"],\"localPortNumber\":[\"$PORTA_LOCAL\"]}"
+FIM
+<span class="p">$ </span>chmod +x 02-iniciar-porteiro-tunel-rds.sh</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Arquivo <code>02-iniciar-porteiro-tunel-rds.sh</code> criado e executável</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-5-2">
+        <div class="step-top"><a class="step-id" href="#passo-5-2">5.2</a><h3>As três novidades deste script</h3></div>
+        <p>A base é a mesma da Fase 3. Vale olhar só o que mudou.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>O trecho</th><th>O que faz</th><th>Por que está aí</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>Values=pending,running,stopping,stopped</code></td>
+                <td>Aceita a instância em qualquer estado, menos encerrada</td>
+                <td>O script da aula filtra por <code>running</code> — e aí ele nunca encontra uma máquina desligada, que é justamente a que precisa ser ligada. Este é o detalhe que faz o script funcionar de manhã</td>
+              </tr>
+              <tr>
+                <td><code>for _ in $(seq 1 30)</code> com <code>PingStatus</code></td>
+                <td>Pergunta 30 vezes, a cada 10 segundos, se o agente já respondeu</td>
+                <td>Substitui o <code>sleep 30</code> chutado da aula. Se a máquina ficar pronta em 40 segundos, o script segue em 40 segundos; se demorar, ele espera até 5 minutos em vez de falhar</td>
+              </tr>
+              <tr>
+                <td><code>AWS-StartPortForwardingSessionToRemoteHost</code></td>
+                <td>Encaminha para <b>outra</b> máquina, alcançada a partir do porteiro</td>
+                <td>É o documento que transforma a EC2 em ponte. O outro documento, <code>AWS-StartPortForwardingSession</code>, só encaminha para uma porta da própria instância — não serviria para chegar no RDS</td>
+              </tr>
+              <tr>
+                <td><code>--parameters "{\"host\":[...]}"</code></td>
+                <td>Passa o destino como JSON, com as aspas escapadas</td>
+                <td>O documento espera <b>listas</b> de strings, daí os colchetes. As aspas escapadas permitem usar aspas duplas por fora e o <code>$ENDPOINT_RDS</code> ser expandido — com aspas simples, o nome do banco iria literal</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-tip"><b>Por que a porta local é 5433, e não 5432</b><p>Porque a 5432 pode já estar ocupada por um PostgreSQL instalado na sua própria máquina. Usar 5433 do lado de cá evita o conflito — e deixa explícito, ao olhar a string de conexão, que aquilo ali é um túnel e não um banco local.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Entendi a diferença entre os dois documentos de port forwarding</span></label></li>
+          <li><label><input type="checkbox"><span>Entendi por que o filtro de estado inclui <code>stopped</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-5-3">
+        <div class="step-top"><a class="step-id" href="#passo-5-3">5.3</a><h3>Abrir o túnel</h3><span class="where w-wsl">WSL · T1</span></div>
+        <div class="note n-warn"><b>Esta aba fica ocupada até o fim do desafio</b><p>O túnel é um processo que continua rodando: enquanto ele estiver de pé, este terminal não aceita outro comando. A partir daqui, abra uma aba nova (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>) para tudo o mais — e em cada aba nova entre na pasta do repositório (passo 0.6) e rode o <code>source ~/DESAFIOS-FUNDAMENTAIS/desafio4.sh</code>.</p></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>./02-iniciar-porteiro-tunel-rds.sh "$PORTEIRO_NOME" "$RDS_ID" "$PORTA_RDS_LOCAL"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Porteiro encontrado: i-xxxxxxxxxxxxxxxxx
+Aguardando o agente do SSM...
+SSM: Online
+Endpoint do RDS: bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com
+Tunel: localhost:5433 --&gt; bia.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432
+Deixe este terminal aberto. Ctrl+C encerra o tunel.
+
+Starting session with SessionId: usuario-xxxx-xxxxxxxxxxxxxxxxx
+Port 5433 opened for sessionId usuario-xxxx-xxxxxxxxxxxxxxxxx.
+Waiting for connections...</pre></div>
+        <p><b><code>Waiting for connections...</code> é a linha que importa.</b> O túnel está de pé e ninguém o usou ainda. Quando o <code>psql</code> da próxima fase conectar, aparece aqui um <code>Connection accepted for session</code> — o terminal do túnel vira, de graça, o seu monitor de conexões.</p>
+        <div class="note n-key"><b>E agora? O terminal parece travado — é assim mesmo</b><p>O túnel só funciona enquanto este comando estiver rodando. Não há nada para digitar aqui. O próximo passo acontece em <b>outra</b> aba:</p><ol><li><b>Deixe esta aba (T1) quieta, do jeito que está.</b> Não aperte nenhuma tecla nela: um <kbd>Ctrl</kbd>+<kbd>C</kbd> derruba o túnel.</li><li>Abra uma aba nova no Windows Terminal: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>, ou o <code>+</code> no topo &gt; Ubuntu. Essa é a <b>T2</b>. <b>Todos os comandos a seguir vão na T2, não na T1.</b></li><li>Na T2, a aba começa na sua pasta pessoal (<code>~</code>). Entre na pasta do repositório (o mesmo <code>cd "..."</code> do passo 0.6) e rode <code>source ~/DESAFIOS-FUNDAMENTAIS/desafio4.sh</code>.</li><li>Ainda na T2, siga para o <a href="#passo-6-1">passo 6.1</a>: <code>psql "host=localhost port=5433 user=postgres dbname=bia sslmode=require"</code>. A senha é a <code>DB_PWD</code> do passo 4.4.</li><li>Quando aparecer o prompt <code>bia=&gt;</code> na T2, olhe a T1: surgiu <code>Connection accepted for session</code>. É o túnel sendo usado.</li></ol><p>Se o <code>psql</code> respondeu <code>Connection refused</code> na hora, o túnel da T1 provavelmente foi fechado (ou o <code>psql</code> rodou na própria T1 depois de um <kbd>Ctrl</kbd>+<kbd>C</kbd>). Volte à T1, rode o script do 5.3 de novo, espere o <code>Waiting for connections...</code> e use a T2 para o <code>psql</code>.</p></div>
+        <div class="note n-warn"><b><code>Address already in use</code> ou <code>bind: address already in use</code></b><p>Alguma coisa já ocupa a 5433 — um túnel antigo que ficou aberto, ou um PostgreSQL local. Descubra com <code>ss -ltnp | grep 5433</code>, feche o processo, ou chame o script com outra porta: <code>./02-iniciar-porteiro-tunel-rds.sh "$PORTEIRO_NOME" "$RDS_ID" 5434</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O script ligou o porteiro (ou confirmou que já estava ligado)</span></label></li>
+          <li><label><input type="checkbox"><span>Apareceu <code>Port 5433 opened for sessionId ...</code></span></label></li>
+          <li><label><input type="checkbox"><span>A última linha é <code>Waiting for connections...</code></span></label></li>
+          <li><label><input type="checkbox"><span>Abri uma aba nova e rodei o <code>source</code> nela</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p6" data-title="O registro manual">
+      <div class="phase-head">
+        <span class="phase-n">FASE 6</span>
+        <div>
+          <h2>Estabelecer a comunicação e inserir o registro à mão</h2>
+          <p>O túnel está aberto. Agora o teste que o enunciado pede: conectar no banco a partir da <b>sua</b> máquina, como se ele fosse local, e gravar uma linha — sem passar pela aplicação.</p>
+        </div>
+        <span class="phase-count" data-count-for="p6"></span>
+      </div>
+
+      <div class="step" id="passo-6-1">
+        <div class="step-top"><a class="step-id" href="#passo-6-1">6.1</a><h3>Conectar no banco pelo localhost</h3><span class="where w-wsl">WSL · T2</span></div>
+        <p>Repare no endereço: <code>localhost</code>. Do ponto de vista do <code>psql</code>, o banco está na sua máquina — ele não sabe que existe túnel, VPC ou AWS. É o túnel que faz o disfarce.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>psql "host=localhost port=5433 user=postgres dbname=bia sslmode=require"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Password for user postgres:
+psql (16.x (Ubuntu ...), server 18.x)
+WARNING: psql major version 16, server major version 18.
+         Some psql features might not work.
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off)
+Type "help" for help.
+
+bia=&gt;</pre></div>
+        <div class="note n-tip"><b>O <code>WARNING</code> de versão não é erro</b><p>O Ubuntu 24.04 instala o cliente <code>psql</code> 16, e o RDS roda o PostgreSQL 18. O aviso só diz que alguns atalhos novos do <code>psql</code> podem não funcionar. <code>\dt</code>, <code>\d</code>, <code>SELECT</code> e <code>INSERT</code> — tudo que o desafio usa — funcionam normalmente.</p></div>
+        <p>A senha é a <code>DB_PWD</code> do passo 4.4 — ela não aparece na tela enquanto você digita. O prompt <code>bia=&gt;</code> é a confirmação de que o enunciado já está cumprido pela metade: <b>comunicação estabelecida</b>.</p>
+        <p>Vá até a aba do túnel e olhe: apareceu <code>Connection accepted for session</code>. Esse par de linhas — <code>Waiting for connections</code> de um lado, <code>bia=&gt;</code> do outro — é a melhor evidência do desafio para um print.</p>
+        <div class="note n-warn"><b>Se travar e terminar em timeout</b><p>O túnel abriu, mas o pacote morre entre o porteiro e o banco. É a regra da Fase 4.2 faltando ou apontando para o SG errado. O diagrama do topo da Fase 4 mostra exatamente onde.</p><p>Se em vez disso vier <code>Connection refused</code> na hora, o problema é do lado de cá: o túnel caiu ou você está na porta errada.</p></div>
+        <details class="fallback">
+          <summary>Prefere fazer pelo DBeaver ou pgAdmin</summary>
+          <p>Funciona igual — a ferramenta gráfica também só enxerga <code>localhost</code>. No DBeaver:</p>
+          <div class="out"><span class="out-label">Nova conexão</span><pre>Database  &gt;  New Database Connection  &gt;  PostgreSQL
+  Host      localhost
+  Port      5433
+  Database  bia
+  Username  postgres
+  Password  (a DB_PWD do passo 4.4)
+  Test Connection  &gt;  Finish</pre></div>
+          <p>Depois: <b>SQL Editor &gt; New SQL script</b>, cole o <code>INSERT</code> do passo 6.3 e execute com <kbd>Ctrl</kbd>+<kbd>Enter</kbd>. O túnel precisa estar aberto na aba T1 o tempo todo — se ele cair, o DBeaver perde a conexão na hora.</p>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O prompt <code>bia=&gt;</code> apareceu</span></label></li>
+          <li><label><input type="checkbox"><span>A aba do túnel registrou <code>Connection accepted</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-6-2">
+        <div class="step-top"><a class="step-id" href="#passo-6-2">6.2</a><h3>Olhar a tabela antes de escrever nela</h3><span class="where w-wsl">WSL · T2</span></div>
+        <p>Três comandos do próprio <code>psql</code>, dentro do prompt <code>bia=&gt;</code>. O terceiro é o que evita o erro mais chato desta fase: descobrir, no meio do <code>INSERT</code>, que existe uma coluna obrigatória que você não preencheu.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">bia=&gt; </span>\dt
+<span class="p">bia=&gt; </span>SELECT count(*) FROM "Tarefas";
+<span class="p">bia=&gt; </span>\d "Tarefas"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>              List of relations
+ Schema |     Name      | Type  |  Owner
+--------+---------------+-------+----------
+ public | SequelizeMeta | table | postgres
+ public | Tarefas       | table | postgres
+
+ count
+-------
+     1
+
+                          Table "public.Tarefas"
+    Column     |           Type           | Collation | Nullable | Default
+---------------+--------------------------+-----------+----------+---------
+ uuid          | uuid                     |           | not null |
+ titulo        | character varying(255)   |           | not null |
+ dia_atividade | character varying(255)   |           |          |
+ importante    | boolean                  |           |          | false
+ createdAt     | timestamp with time zone |           | not null |
+ updatedAt     | timestamp with time zone |           | not null |
+Indexes:
+    "Tarefas_pkey" PRIMARY KEY, btree (uuid)</pre></div>
+        <div class="note n-key"><b>A chave é <code>uuid</code>, e ela não tem <code>Default</code></b><p>Não existe coluna <code>id</code> numérica nem sequência. A chave primária é <code>uuid</code>, obrigatória (<code>not null</code>) e com a coluna <code>Default</code> vazia: quem gera esse valor é a própria BIA, no Node, antes de gravar. Num <code>INSERT</code> à mão, <b>você</b> tem que gerá-lo — é o que o <code>gen_random_uuid()</code> do próximo passo faz.</p></div>
+        <div class="note n-warn"><b>As aspas duplas são obrigatórias</b><p>O Sequelize criou a tabela como <code>"Tarefas"</code>, com T maiúsculo. Sem aspas, o PostgreSQL converte tudo para minúsculo e responde <code>relation "tarefas" does not exist</code>. Vale para <code>"createdAt"</code> e <code>"updatedAt"</code> também.</p></div>
+        <div class="note n-tip"><b>Se o seu <code>\d</code> mostrar outras colunas <code>not null</code></b><p>Inclua-as no <code>INSERT</code> do próximo passo. O guia preenche <code>uuid</code>, <code>titulo</code>, <code>importante</code>, <code>createdAt</code> e <code>updatedAt</code> porque são as obrigatórias desta versão da BIA — <code>dia_atividade</code> é opcional e fica vazia. A sua saída manda.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A tabela <code>Tarefas</code> aparece no <code>\dt</code></span></label></li>
+          <li><label><input type="checkbox"><span>Anotei quantas linhas existem <b>antes</b> do meu registro</span></label></li>
+          <li><label><input type="checkbox"><span>Sei quais colunas são <code>not null</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-6-3">
+        <div class="step-top"><a class="step-id" href="#passo-6-3">6.3</a><h3>Inserir o registro</h3><span class="where w-wsl">WSL · T2</span></div>
+        <p>Este é o item do enunciado. Um <code>INSERT</code> escrito à mão, entrando no banco por um caminho que não existe para a internet.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">bia=&gt; </span>INSERT INTO "Tarefas" (uuid, titulo, importante, "createdAt", "updatedAt")
+VALUES (gen_random_uuid(), 'Registro manual pelo tunel SSM - Desafio 4', true, NOW(), NOW())
+RETURNING uuid, titulo, "createdAt";</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>                 uuid                 |                   titulo                   |          createdAt
+--------------------------------------+--------------------------------------------+-------------------------------
+ xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx | Registro manual pelo tunel SSM - Desafio 4 | 2026-09-15 13:41:02.118+00
+(1 row)
+
+INSERT 0 1</pre></div>
+        <div class="note n-tip"><b><code>gen_random_uuid()</code> e <code>RETURNING</code></b><p><code>gen_random_uuid()</code> gera um UUID aleatório dentro do próprio PostgreSQL — é nativo desde a versão 13, sem extensão. O <code>RETURNING</code> devolve a linha recém-criada com o <code>uuid</code> que saiu e o horário do <code>NOW()</code>, sem precisar de outro <code>SELECT</code>.</p><p><code>INSERT 0 1</code> é a confirmação do PostgreSQL: uma linha inserida.</p></div>
+        <div class="note n-warn"><b><code>null value in column "uuid" ... violates not-null constraint</code></b><p>Faltou o <code>uuid</code> na lista de colunas ou o <code>gen_random_uuid()</code> nos valores. Nada foi gravado — corrija e rode de novo.</p></div>
+        <div class="note n-warn"><b>Aspas simples no texto, duplas no nome da coluna</b><p>São coisas diferentes em SQL, e trocá-las é o erro clássico: aspas <b>simples</b> delimitam um valor de texto (<code>'Registro manual...'</code>), aspas <b>duplas</b> delimitam um identificador que tem maiúsculas (<code>"createdAt"</code>). Trocar as duas dá <code>column "Registro manual..." does not exist</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Respondeu <code>INSERT 0 1</code></span></label></li>
+          <li><label><input type="checkbox"><span>Anotei o <code>uuid</code> e o título que o <code>RETURNING</code> devolveu</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-6-4">
+        <div class="step-top"><a class="step-id" href="#passo-6-4">6.4</a><h3>Conferir e sair</h3><span class="where w-wsl">WSL · T2</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">bia=&gt; </span>SELECT uuid, titulo, importante, "createdAt" FROM "Tarefas" ORDER BY "createdAt";
+<span class="p">bia=&gt; </span>\q</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>                 uuid                 |                   titulo                   | importante |          createdAt
+--------------------------------------+--------------------------------------------+------------+-------------------------------
+ xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx | Teste do S3                                | t          | 2026-09-01 14:38:57.561+00
+ xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx | Registro manual pelo tunel SSM - Desafio 4 | t          | 2026-09-15 13:41:02.118+00
+(2 rows)</pre></div>
+        <p>Sem coluna numérica, a ordem cronológica vem do <code>"createdAt"</code>: o seu registro aparece por último.</p>
+        <p>O <code>\q</code> sai do <code>psql</code> e devolve o prompt do shell. <b>Não</b> feche a aba T1 do túnel — a Fase 7 continua precisando do porteiro ligado, e desligar o túnel do banco agora não atrapalha, mas manter é mais simples.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O <code>SELECT</code> mostra uma linha a mais do que no passo 6.2</span></label></li>
+          <li><label><input type="checkbox"><span>Saí do <code>psql</code> com <code>\q</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p7" data-title="Entrega 3: túnel da BIA">
+      <div class="phase-head">
+        <span class="phase-n">FASE 7</span>
+        <div>
+          <h2>Entrega 3 — o túnel da BIA na porta 3002</h2>
+          <p>Terceiro arquivo, e o fecho do enunciado: ver <b>pela aplicação</b> o registro que você gravou direto no banco. O mesmo porteiro, o mesmo documento do SSM, outro destino.</p>
+        </div>
+        <span class="phase-count" data-count-for="p7"></span>
+      </div>
+
+      <div class="step" id="passo-7-1">
+        <div class="step-top"><a class="step-id" href="#passo-7-1">7.1</a><h3>Criar o arquivo</h3><span class="where w-wsl">WSL · T2</span></div>
+        <div class="note n-tip"><b>De onde vem: o <code>05-1-criar-tunel-propria-ec2.sh</code> da aula</b><p>Na aula, a BIA rodava na própria EC2 do túnel, então o <code>05-1</code> usa <code>AWS-StartPortForwardingSession</code> (porta 3001 da mesma máquina). Aqui a BIA roda na <b>EC2 do cluster</b>, e o porteiro é só a passagem. Por isso este arquivo:</p><ul><li>Usa <code>AWS-StartPortForwardingSessionToRemoteHost</code>, com o IP privado da EC2 do cluster como destino. Esse documento também é o que a <code>05-policy-criar-tunel</code> libera.</li><li>Recebe destino e portas por argumento, em vez de <code>3001</code>/<code>3002</code> fixos.</li><li>Não usa <code>--profile</code>: herda o <code>AWS_PROFILE</code>.</li></ul></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cat &gt; 03-tunel-bia.sh &lt;&lt;'FIM'
+#!/usr/bin/env bash
+# Abre o tunel SSM ate a aplicacao BIA, passando pelo porteiro.
+# Uso: ./03-tunel-bia.sh &lt;nome-do-porteiro&gt; &lt;host-da-bia&gt; [porta-remota] [porta-local]
+
+NOME=$1
+HOST_BIA=$2
+PORTA_REMOTA=${3:-80}
+PORTA_LOCAL=${4:-3002}
+
+if [ -z "$NOME" ] || [ -z "$HOST_BIA" ]; then
+    echo "Uso: $0 &lt;nome-do-porteiro&gt; &lt;host-da-bia&gt; [porta-remota] [porta-local]"
+    exit 1
+fi
+
+# o host precisa ser um endereco de verdade, nao o exemplo do guia
+case "$HOST_BIA" in
+    *x.x*|None)
+        echo "Host da BIA invalido: '$HOST_BIA' - refaca o passo 1.4"
+        exit 1
+        ;;
+esac
+
+# o porteiro precisa estar de pe: quem liga e o script 02
+INSTANCE_ID=$(aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=$NOME" "Name=instance-state-name,Values=running" \
+    --query "Reservations[].Instances[].InstanceId[]" \
+    --output text)
+
+if [ -z "$INSTANCE_ID" ]; then
+    echo "Porteiro '$NOME' nao esta rodando."
+    echo "Rode antes: ./02-iniciar-porteiro-tunel-rds.sh $NOME bia"
+    exit 1
+fi
+
+echo "Porteiro: $INSTANCE_ID"
+echo "Tunel: localhost:$PORTA_LOCAL --&gt; $HOST_BIA:$PORTA_REMOTA"
+echo "Teste em: http://localhost:$PORTA_LOCAL/api/versao"
+
+aws ssm start-session --target "$INSTANCE_ID" \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters "{\"host\":[\"$HOST_BIA\"],\"portNumber\":[\"$PORTA_REMOTA\"],\"localPortNumber\":[\"$PORTA_LOCAL\"]}"
+FIM
+<span class="p">$ </span>chmod +x 03-tunel-bia.sh</pre></div>
+        <div class="note n-tip"><b>Este script não liga a máquina — e é de propósito</b><p>Ele filtra por <code>running</code> e desiste se não achar. A responsabilidade de ligar é do script 02, que é o "abrir o expediente". Um script, uma responsabilidade: se este também ligasse a máquina, você teria a mesma lógica duplicada em dois arquivos para manter.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Arquivo <code>03-tunel-bia.sh</code> criado e executável</span></label></li>
+          <li><label><input type="checkbox"><span>Se a colagem apareceu embaralhada no terminal, conferi o arquivo com <code>bash -n 03-tunel-bia.sh</code> (sem resposta = sintaxe ok)</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-7-2">
+        <div class="step-top"><a class="step-id" href="#passo-7-2">7.2</a><h3>Abrir o segundo túnel</h3><span class="where w-wsl">WSL · T3</span></div>
+        <p>Abra uma <b>terceira</b> aba (a T1 segura o túnel do banco), rode o <code>source</code> e chame o script.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/desafio4.sh
+<span class="p">$ </span>echo "$BIA_HOST:$BIA_PORT"
+<span class="p">$ </span>./03-tunel-bia.sh "$PORTEIRO_NOME" "$BIA_HOST" "$BIA_PORT" "$PORTA_BIA_LOCAL"</pre></div>
+        <div class="note n-warn"><b>Confira o <code>echo</code> antes de seguir</b><p>Ele tem que mostrar o IP privado <b>real</b> da EC2 do cluster, como <code>172.31.92.239:80</code>. Se aparecer <code>172.31.x.x</code>, o script responde <code>Host da BIA invalido</code> e não abre o túnel — é a proteção funcionando. Preencha o IP com o comando 3 do <a href="#passo-1-4">passo 1.4</a>, rode o <code>source</code> e tente de novo.</p></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Porteiro: i-xxxxxxxxxxxxxxxxx
+Tunel: localhost:3002 --&gt; 172.31.92.239:80   (o IP privado da SUA EC2 do cluster)
+Teste em: http://localhost:3002/api/versao
+
+Starting session with SessionId: usuario-xxxx-xxxxxxxxxxxxxxxxx
+Port 3002 opened for sessionId usuario-xxxx-xxxxxxxxxxxxxxxxx.
+Waiting for connections...</pre></div>
+        <div class="note n-warn"><b><code>lookup 172.31.x.x on 172.31.0.2:53: no such host</code></b><p>O túnel abriu, mas o destino é o <b>exemplo do guia</b>, não um IP real: o <code>BIA_HOST</code> do <code>desafio4.sh</code> nunca foi preenchido. O porteiro tenta resolver <code>172.31.x.x</code> como nome no DNS da VPC e desiste. Na linha <code>Tunel:</code> tem que aparecer um IP completo, como <code>172.31.92.239:80</code>.</p><p>Refaça o comando 3 do <a href="#passo-1-4">passo 1.4</a> (ele preenche o IP sozinho), rode o <code>source</code> e chame o script de novo.</p></div>
+        <div class="note n-tip"><b>Dois túneis, uma máquina</b><p>Neste momento existem duas sessões SSM simultâneas na mesma EC2 — uma levando à porta 5432 do RDS, outra à porta da API. O porteiro aguenta quantas você abrir; o limite prático é o de sessões simultâneas da sua conta, não da instância.</p></div>
+        <div class="note n-warn"><b>Se o script disser que o porteiro não está rodando</b><p>Ou você não rodou o script 02, ou o <code>$PORTEIRO_NOME</code> está vazio nesta aba (faltou o <code>source</code>). Confira com <code>echo "$PORTEIRO_NOME"</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>Port 3002 opened for sessionId ...</code></span></label></li>
+          <li><label><input type="checkbox"><span>O destino impresso é o IP privado da EC2 do cluster</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-7-3">
+        <div class="step-top"><a class="step-id" href="#passo-7-3">7.3</a><h3>Ver o registro pela aplicação</h3><span class="where w-wsl">WSL · T2</span></div>
+        <p>Volte para a aba T2 (a que ficou livre depois do <code>\q</code>) e bata na API <b>pelo túnel</b>. Nenhum IP público aparece nestes comandos — é essa a diferença em relação ao passo 1.5.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>curl -s http://localhost:3002/api/versao ; echo
+<span class="p">$ </span>curl -s http://localhost:3002/api/tarefas ; echo</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Bia 4.3.0
+[{"uuid":"xxxxxxxx-...","titulo":"Teste do S3",...},
+ {"uuid":"xxxxxxxx-...","titulo":"Registro manual pelo tunel SSM - Desafio 4",...}]</pre></div>
+        <p><b>O registro da Fase 6 está na lista.</b> É a volta completa: você gravou no banco por um túnel e leu pela aplicação por outro, sem que nenhum dos dois recursos tenha ficado exposto na internet.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>/api/versao</code> responde <code>Bia 4.3.0</code> pela porta 3002</span></label></li>
+          <li><label><input type="checkbox"><span><code>/api/tarefas</code> traz o registro inserido na Fase 6</span></label></li>
+          <li><label><input type="checkbox"><span>A lista tem um item a mais do que no passo 1.5</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-7-4">
+        <div class="step-top"><a class="step-id" href="#passo-7-4">7.4</a><h3>Abrir no navegador — o print da entrega</h3><span class="where w-web">NAVEGADOR</span></div>
+        <p>Abra no navegador do Windows, sem mudar nada:</p>
+        <div class="out"><span class="out-label">Endereço</span><pre>http://localhost:3002/api/tarefas</pre></div>
+        <div class="note n-tip"><b>Por que o navegador do Windows enxerga uma porta aberta no WSL</b><p>O WSL2 encaminha automaticamente as portas que um processo Linux abre em <code>localhost</code> para o <code>localhost</code> do Windows. Por isso o túnel aberto no Ubuntu aparece no Chrome ou no Edge sem nenhuma configuração.</p><p>Se por algum motivo não aparecer, use <code>http://127.0.0.1:3002/api/tarefas</code>, ou tire o IP do WSL com <code>hostname -I</code> e acesse por ele.</p></div>
+        <p>O JSON com o seu registro na tela do navegador, ao lado da aba com <code>Waiting for connections</code>, é o print que fecha o desafio.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O navegador mostra o JSON com o registro da Fase 6</span></label></li>
+          <li><label><input type="checkbox"><span>Guardei o print para o post e o repositório</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p8" data-title="Entrega 4: parar">
+      <div class="phase-head">
+        <span class="phase-n">FASE 8</span>
+        <div>
+          <h2>Entrega 4 — o script que para o porteiro</h2>
+          <p>Última das quatro entregas, e a que justifica a ideia toda: uma máquina que só fica ligada durante o expediente. Parada, ela não custa nada além do disco.</p>
+        </div>
+        <span class="phase-count" data-count-for="p8"></span>
+      </div>
+
+      <div class="step" id="passo-8-1">
+        <div class="step-top"><a class="step-id" href="#passo-8-1">8.1</a><h3>Fechar os dois túneis</h3><span class="where w-wsl">WSL · T1 e T3</span></div>
+        <p>Vá até cada aba de túnel e tecle <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+        <div class="out good"><span class="out-label">Resposta esperada em cada aba</span><pre>^CTerminate signal received, exiting.
+
+Exiting session with sessionId: usuario-xxxx-xxxxxxxxxxxxxxxxx.</pre></div>
+        <p>A sessão é encerrada dos dois lados: a porta local é liberada e o registro da sessão fecha no Session Manager. Fechar a janela do terminal na marra também funciona, mas aí a sessão fica pendurada uns minutos do lado da AWS antes de expirar.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Os dois túneis foram encerrados com <code>Exiting session</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-8-2">
+        <div class="step-top"><a class="step-id" href="#passo-8-2">8.2</a><h3>Criar o arquivo</h3><span class="where w-wsl">WSL · T2</span></div>
+        <div class="note n-tip"><b>De onde vem: o <code>06-2-parar-porteiro.sh</code> da aula</b><p>A lógica é a mesma — achar a máquina pelo nome e parar se estiver ligada. O que muda:</p><ul><li>Filtra os estados <code>pending,running,stopping,stopped</code> no servidor, em vez de pegar tudo e passar por <code>grep running</code>.</li><li>Não manda o <code>stop-instances</code> para segundo plano com <code>&amp;</code> e <code>&amp;&gt; /dev/null</code>: na aula, um erro de permissão sumiria em silêncio e o script diria "já está sendo parado" mesmo assim.</li><li>Não usa <code>--profile</code>: herda o <code>AWS_PROFILE</code>.</li></ul></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cat &gt; 04-parar-porteiro.sh &lt;&lt;'FIM'
+#!/usr/bin/env bash
+# Para a EC2 do porteiro, se ela estiver ligada.
+# Uso: ./04-parar-porteiro.sh &lt;nome-do-porteiro&gt;
+
+NOME=$1
+
+if [ -z "$NOME" ]; then
+    echo "Uso: $0 &lt;nome-do-porteiro&gt;"
+    exit 1
+fi
+
+# achar em qualquer estado: parar uma maquina ja parada nao pode ser um erro
+INSTANCE_ID=$(aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=$NOME" \
+              "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+    --query "Reservations[].Instances[].InstanceId[]" \
+    --output text)
+
+if [ -z "$INSTANCE_ID" ]; then
+    echo "Porteiro '$NOME' nao encontrado"
+    exit 1
+fi
+
+ESTADO=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+    --query "Reservations[].Instances[].State.Name" --output text)
+
+if [ "$ESTADO" != "running" ]; then
+    echo "Porteiro $INSTANCE_ID ja esta '$ESTADO' - nada a fazer"
+    exit 0
+fi
+
+echo "Parando o porteiro $INSTANCE_ID"
+aws ec2 stop-instances --instance-ids "$INSTANCE_ID" &gt; /dev/null
+aws ec2 wait instance-stopped --instance-ids "$INSTANCE_ID"
+echo "Porteiro $NOME parado"
+FIM
+<span class="p">$ </span>chmod +x 04-parar-porteiro.sh</pre></div>
+        <div class="note n-tip"><b>Duas diferenças em relação ao <code>06-2-parar-porteiro.sh</code> da aula</b><p><b>1.</b> A aula usa <code>grep running</code> na saída e compara com <code>==</code>, que não é sintaxe de <code>[ ]</code> em shell POSIX — funciona no Bash e quebra em <code>sh</code>. Aqui a comparação é <code>!=</code> com um único <code>=</code>, e o estado vem direto do <code>--query</code>, sem <code>grep</code>.</p><p><b>2.</b> A aula manda o <code>stop-instances</code> para segundo plano com <code>&amp;</code> e imprime "já está sendo parado". Aqui o <code>wait instance-stopped</code> segura até a máquina realmente parar — assim o script só termina quando a cobrança de fato acabou, e você pode encadeá-lo com outros comandos.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Arquivo <code>04-parar-porteiro.sh</code> criado e executável</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-8-3">
+        <div class="step-top"><a class="step-id" href="#passo-8-3">8.3</a><h3>Parar e conferir</h3><span class="where w-wsl">WSL · T2</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>./04-parar-porteiro.sh "$PORTEIRO_NOME"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — leva de 30 a 90 segundos</span><pre>Parando o porteiro i-xxxxxxxxxxxxxxxxx
+Porteiro porteiro-bia parado</pre></div>
+        <div class="cmd"><span class="cmd-label">Confirmar o estado</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=$PORTEIRO_NOME" \
+  --query 'Reservations[].Instances[].{Id:InstanceId,Estado:State.Name,Zona:Placement.AvailabilityZone}' \
+  --output table
+<span class="p">$ </span>./04-parar-porteiro.sh "$PORTEIRO_NOME"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>------------------------------------------------------------
+|                     DescribeInstances                    |
++-----------+------------------------+---------------------+
+|  Estado   |          Id            |        Zona         |
++-----------+------------------------+---------------------+
+|  stopped  |  i-xxxxxxxxxxxxxxxxx   |     us-east-1b      |
++-----------+------------------------+---------------------+
+
+Porteiro i-xxxxxxxxxxxxxxxxx ja esta 'stopped' - nada a fazer</pre></div>
+        <p>A segunda chamada é de propósito: ela mostra o script sendo idempotente. Rodar de novo não dá erro, não tenta parar nada, e diz por quê. Um script de rotina precisa ser assim — ele vai acabar em um agendamento, chamado sem ninguém olhando.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O porteiro está <code>stopped</code></span></label></li>
+          <li><label><input type="checkbox"><span>Rodar o script duas vezes não deu erro</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p9" data-title="Entrega e custo">
+      <div class="phase-head">
+        <span class="phase-n">FASE 9</span>
+        <div>
+          <h2>Entrega, evidências e desligar tudo</h2>
+          <p>O desafio termina quando os quatro itens estão provados e a conta parou de subir.</p>
+        </div>
+        <span class="phase-count" data-count-for="p9"></span>
+      </div>
+
+      <div class="step" id="passo-9-1">
+        <div class="step-top"><a class="step-id" href="#passo-9-1">9.1</a><h3>Checklist do enunciado</h3></div>
+        <div class="check"><div class="check-label">As quatro entregas</div><ul>
+          <li><label><input type="checkbox"><span>Script que <b>lança o porteiro na zona b</b>, na subnet default — <code>01-lancar-porteiro-zona-b.sh</code>, provado pela coluna <code>Zona</code> do passo 3.3</span></label></li>
+          <li><label><input type="checkbox"><span>Script que <b>inicia o porteiro com túnel para o RDS na porta local 5433</b> — <code>02-iniciar-porteiro-tunel-rds.sh</code>, provado pelo <code>Port 5433 opened</code> do passo 5.3</span></label></li>
+          <li><label><input type="checkbox"><span><b>Comunicação estabelecida e 1 registro inserido manualmente</b> — <code>INSERT 0 1</code> do passo 6.3</span></label></li>
+          <li><label><input type="checkbox"><span><b>Túnel para a bia na porta 3002</b> mostrando o registro — JSON do passo 7.3</span></label></li>
+          <li><label><input type="checkbox"><span>Script que <b>para a máquina do porteiro</b> — <code>04-parar-porteiro.sh</code>, provado pelo <code>stopped</code> do passo 8.3</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-9-2">
+        <div class="step-top"><a class="step-id" href="#passo-9-2">9.2</a><h3>Reunir as evidências</h3><span class="where w-wsl">WSL · T2</span></div>
+        <p>Um bloco só que imprime, em sequência, o que serve de prova para cada item. Rode com o porteiro <b>ligado</b> se quiser a saída completa; com ele parado, o estado aparece como <code>stopped</code>, o que também é evidência da quarta entrega.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>echo "== o porteiro e a zona ==" &amp;&amp; aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=$PORTEIRO_NOME" \
+  --query 'Reservations[].Instances[].{Id:InstanceId,Estado:State.Name,Zona:Placement.AvailabilityZone,Subnet:SubnetId}' \
+  --output table
+<span class="p">$ </span>echo "== os quatro scripts ==" &amp;&amp; ls -l 0*.sh
+<span class="p">$ </span>echo "== o registro, pela API ==" &amp;&amp; curl -s http://localhost:3002/api/tarefas ; echo</pre></div>
+        <div class="note n-tip"><b>O que vale a pena virar print</b><p>Três telas contam a história inteira: (1) a aba do túnel com <code>Port 5433 opened</code> e <code>Connection accepted</code>; (2) o <code>psql</code> com o <code>INSERT 0 1</code> e o <code>SELECT</code> depois; (3) o navegador em <code>localhost:3002/api/tarefas</code> com o registro na lista.</p><p>Cuide para que o endpoint do RDS, o ID da conta e a senha não apareçam legíveis nos prints — o repositório é público.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Os quatro <code>.sh</code> estão na pasta do repositório</span></label></li>
+          <li><label><input type="checkbox"><span>Prints guardados</span></label></li>
+          <li><label><input type="checkbox"><span>Nenhuma senha ou endpoint legível nas evidências</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-9-3">
+        <div class="step-top"><a class="step-id" href="#passo-9-3">9.3</a><h3>Desligar o resto do laboratório</h3><span class="where w-wsl">WSL · T2</span></div>
+        <div class="note n-warn"><b>Só depois de guardar as evidências</b><p>Derrubar a EC2 do cluster mata a API, e o túnel da 3002 passa a não responder nada.</p></div>
+        <p>O porteiro já está parado (Fase 8). Faltam três coisas cobrando por hora: a <b>EC2 do cluster</b>, a <b>task do ECS</b> e o <b>RDS</b> — mais qualquer outra EC2 que tenha ficado ligada de desafios anteriores, como a <code>bia-dev</code>.</p>
+        <div class="cmd"><span class="cmd-label">1. Zerar o serviço e a capacidade do cluster</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+  --desired-count 0 --query 'service.desiredCount'
+<span class="p">$ </span>ASG=$(aws autoscaling describe-auto-scaling-groups \
+  --query "AutoScalingGroups[?contains(AutoScalingGroupName, 'cluster-bia')].AutoScalingGroupName" \
+  --output text)
+<span class="p">$ </span>aws autoscaling update-auto-scaling-group \
+  --auto-scaling-group-name "$ASG" --min-size 0 --desired-capacity 0</pre></div>
+        <div class="cmd"><span class="cmd-label">Conferir o ASG — repita até Instancias = 0</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$ASG" \
+  --query 'AutoScalingGroups[0].{Min:MinSize,Desejado:DesiredCapacity,Instancias:length(Instances)}' --output table</pre></div>
+        <p>O ASG leva de 1 a 3 minutos para encerrar a EC2 do cluster. Enquanto isso, ela aparece como <code>running</code> e depois <code>shutting-down</code> — é normal. Não mexa no <code>--max-size</code>: ele fica em <code>1</code>, e o passo 1.3 volta a usá-lo quando você religar.</p>
+        <div class="note n-warn"><b>Não adianta dar <code>stop-instances</code> na EC2 do cluster</b><p>Ela pertence a um Auto Scaling Group. Se você a parar ou encerrar, o ASG entende que faltou capacidade e sobe outra no lugar — e a cobrança continua. Quem manda é a capacidade desejada.</p></div>
+        <div class="note n-tip"><b>O cluster continua <code>ACTIVE</code> — e está tudo bem</b><p>Um cluster do ECS com EC2 é só um agrupamento lógico e <b>não tem custo próprio</b>. <code>ACTIVE</code> quer dizer "o cluster existe", não "tem algo ligado". Quem cobra são as EC2 do Auto Scaling, que o comando acima zerou, e os discos delas. Para conferir que não sobrou nada rodando dentro dele:</p><pre>aws ecs describe-clusters --clusters "$ECS_CLUSTER" \
+  --query 'clusters[0].{Status:status,Instancias:registeredContainerInstancesCount,Tasks:runningTasksCount}' --output table</pre><p>O esperado é <code>ACTIVE</code>, <code>0</code> instâncias e <code>0</code> tasks. Podem sobrar centavos em serviços ao redor: métricas do Container Insights (se estiver habilitado), logs da task no CloudWatch Logs e a imagem no ECR. <b>Não apague o cluster:</b> não economiza nada e você teria que recriá-lo para usar a BIA de novo.</p></div>
+        <div class="out"><span class="out-label">2. Parar o RDS — pelo Console</span><pre>RDS  &gt;  Databases  &gt;  bia  &gt;  Actions  &gt;  Stop temporarily</pre></div>
+        <div class="cmd"><span class="cmd-label">Ou pelo CLI</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws rds stop-db-instance --db-instance-identifier "$RDS_ID" \
+  --query 'DBInstance.DBInstanceStatus' --output text</pre></div>
+        <div class="cmd"><span class="cmd-label">3. Parar outras EC2 avulsas — ex.: a bia-dev dos desafios anteriores</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>BIA_DEV=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=bia-dev" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[].Instances[].InstanceId' --output text)
+<span class="p">$ </span>aws autoscaling describe-auto-scaling-instances --instance-ids $BIA_DEV \
+  --query 'AutoScalingInstances[].AutoScalingGroupName' --output text
+<span class="p">$ </span>aws ec2 stop-instances --instance-ids $BIA_DEV \
+  --query 'StoppingInstances[].[InstanceId,CurrentState.Name]' --output text</pre></div>
+        <p>O segundo comando tem que voltar <b>vazio</b>: significa que a <code>bia-dev</code> é uma EC2 avulsa, fora de Auto Scaling, e o <code>stop-instances</code> resolve. Se ele imprimir o nome de um grupo, não pare a máquina — zere a capacidade desse grupo, como no comando 1. Se o <code>$BIA_DEV</code> vier vazio, a máquina já não está ligada.</p>
+        <div class="note n-warn"><b>O RDS parado religa sozinho em 7 dias</b><p>É regra da AWS. Se o laboratório for ficar parado mais que isso, o certo é apagar a instância — com snapshot, se quiser poder recriar depois.</p></div>
+        <div class="cmd"><span class="cmd-label">4. Conferir se sobrou algo ligado</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-instances \
+  --filters "Name=instance-state-name,Values=running" \
+  --query 'Reservations[].Instances[].[InstanceId,Tags[?Key==`Name`]|[0].Value]' --output text
+<span class="p">$ </span>aws rds describe-db-instances \
+  --query 'DBInstances[].[DBInstanceIdentifier,DBInstanceStatus]' --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>bia     stopped</pre></div>
+        <p>Nenhuma linha de EC2 e o RDS em <code>stopped</code>: a cobrança por hora acabou.</p>
+        <div class="note n-tip"><b>Ainda aparece alguma coisa?</b><p><code>bia stopping</code> é o caminho para <code>stopped</code> — o RDS leva alguns minutos. Repita o comando.</p><p>Uma linha <code>ECS Instance - cluster-bia</code> significa que o comando 1 não rodou ou o ASG ainda está encerrando a máquina: confira com o <code>describe-auto-scaling-groups</code> acima. Uma linha <code>bia-dev</code> (ou outro nome) é EC2 avulsa ligada: use o comando 3.</p></div>
+        <div class="note n-tip"><b>O que continua custando com tudo parado</b><p>Os <b>discos EBS</b> das máquinas e o <b>armazenamento do RDS</b> continuam sendo cobrados enquanto existirem — parar uma EC2 não apaga o disco dela. O disco do porteiro é pequeno (8 GB), mas ele existe. Se o porteiro não for mais usado, apague de vez: <code>aws ec2 terminate-instances --instance-ids i-xxxx</code>, e o disco vai junto.</p></div>
+        <div class="note n-tip"><b>O passo seguinte natural, fora do enunciado</b><p>Com os dois túneis funcionando, dá para fechar o <code>0.0.0.0/0</code> da porta da API no <code>bia-web</code>: o seu acesso passa a ser só pelo porteiro. É a última peça da ideia — a aplicação deixa de ter qualquer porta aberta para a internet, e ainda assim você trabalha nela normalmente.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Porteiro <code>stopped</code></span></label></li>
+          <li><label><input type="checkbox"><span>Serviço do ECS em <code>desired 0</code> e ASG em <code>0</code></span></label></li>
+          <li><label><input type="checkbox"><span>RDS <code>bia</code> em <code>stopped</code></span></label></li>
+          <li><label><input type="checkbox"><span>Nenhuma outra EC2 <code>running</code> (a <code>bia-dev</code> inclusive)</span></label></li>
+          <li><label><input type="checkbox"><span>Sei que EBS e storage continuam custando enquanto existirem</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p-anexo-a" data-title="Exercícios da aula">
+      <div class="phase-head">
+        <span class="phase-n">ANEXO A</span>
+        <div>
+          <h2>Os exercícios da aula que não entram no enunciado</h2>
+          <p>O Dia 4 tem quatro exercícios de shell que não são cobrados na entrega, mas explicam as peças usadas nos scripts do desafio. Eles já estão no repositório — ficam aqui explicados, para o arquivo não virar código sem contexto.</p>
+        </div>
+      </div>
+
+      <div class="step" id="anexo-zip">
+        <div class="step-top"><a class="step-id" href="#anexo-zip">A.1</a><h3><code>01-zip.sh</code> e <code>02-unzip.sh</code> — empacotar para o Beanstalk</h3></div>
+        <p>O Elastic Beanstalk recebe a aplicação como um <code>.zip</code>, e exige que os arquivos estejam na <b>raiz</b> do pacote — não dentro de uma pasta. É por isso que o script entra na pasta antes de compactar.</p>
+        <div class="cmd"><span class="cmd-label">01-zip.sh</span><button class="copy" type="button">copiar</button><pre>cd bia
+zip -r ../bia.zip docker-compose.yml</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Parte</th><th>O que significa</th></tr></thead>
+            <tbody>
+              <tr><td><code>zip</code></td><td>O compactador</td></tr>
+              <tr><td><code>-r</code></td><td>Recursivo: inclui subpastas. Com um arquivo só não muda nada, mas é o hábito que evita surpresa quando a lista cresce</td></tr>
+              <tr><td><code>../bia.zip</code></td><td>O destino. O <code>../</code> salva na pasta de cima — fora da pasta que está sendo compactada, senão o zip tentaria incluir a si mesmo</td></tr>
+              <tr><td><code>docker-compose.yml</code></td><td>A origem: o que entra no pacote</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cmd"><span class="cmd-label">02-unzip.sh — a conferência</span><button class="copy" type="button">copiar</button><pre>unzip -o bia.zip -d bia2</pre></div>
+        <p><code>-o</code> sobrescreve sem perguntar; <code>-d bia2</code> extrai para uma pasta nova, criada na hora se não existir. Descompactar em outro lugar é o jeito barato de conferir se o pacote saiu com a estrutura certa — se aparecer <code>bia2/bia/docker-compose.yml</code> em vez de <code>bia2/docker-compose.yml</code>, o <code>cd</code> foi esquecido e o Beanstalk recusaria o pacote.</p>
+      </div>
+
+      <div class="step" id="anexo-tail">
+        <div class="step-top"><a class="step-id" href="#anexo-tail">A.2</a><h3><code>tail -f</code> — acompanhar log em tempo real</h3></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>tail -f /var/log/messages</pre></div>
+        <p><code>tail</code> mostra o fim de um arquivo; o <code>-f</code> (<i>follow</i>) mantém o comando aberto imprimindo cada linha nova à medida que ela é gravada. Sai com <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+        <p>Onde isso encosta no desafio: um túnel SSM aberto se comporta como um <code>tail -f</code> — o terminal fica preso e vira um monitor. As linhas <code>Connection accepted for session</code> que aparecem quando o <code>psql</code> conecta são exatamente isso.</p>
+        <div class="cmd"><span class="cmd-label">Variação útil</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>tail -n 50 -f arquivo.log</pre></div>
+        <p><code>-n 50</code> mostra as 50 últimas linhas antes de começar a seguir — dá contexto em vez de começar do vazio.</p>
+      </div>
+
+      <div class="step" id="anexo-substitution">
+        <div class="step-top"><a class="step-id" href="#anexo-substitution">A.3</a><h3><code>04-command_substitution.sh</code> — o exercício que vira tudo</h3></div>
+        <p>Este é o exercício mais importante do dia: os quatro scripts do desafio são variações dele.</p>
+        <div class="cmd"><span class="cmd-label">Como está no repositório</span><button class="copy" type="button">copiar</button><pre>NOME=$1
+INSTANCE_ID=$(aws ec2 describe-instances \
+               --filter "Name=tag:Name,Values=$NOME" \
+               --query "Reservations[].Instances[?State.Name == 'running'].InstanceId[]" \
+               --output text --profile desafios-fundamentais)
+#check if my instance_id is empty
+if [ -z "$INSTANCE_ID" ]; then
+    echo "Instancia nao encontrada"
+    exit 1
+fi
+echo "Instancia encontrada: $INSTANCE_ID"</pre></div>
+        <p>Três ideias em onze linhas: o argumento (<code>$1</code>) deixa o script genérico; o <code>$( )</code> captura a saída de um comando em vez de imprimi-la; e o <code>if [ -z ]</code> transforma "não achei nada" em uma mensagem que se entende, em vez de um erro obscuro dez linhas depois.</p>
+        <div class="note n-warn"><b>Para rodar este arquivo na sua conta</b><p>Tire o <code>--profile desafios-fundamentais</code> do fim — esse profile é o do instrutor. Com o <code>export AWS_PROFILE=formacao_aws</code> do passo 0.4 no ambiente, o CLI acha o profile certo sozinho:</p></div>
+        <div class="cmd"><span class="cmd-label">Ajustar todos os scripts da aula de uma vez</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>sed -i 's/ --profile desafios-fundamentais//g' 0*.sh
+<span class="p">$ </span>grep -c "desafios-fundamentais" 0*.sh</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>01-zip.sh:0
+02-unzip.sh:0
+04-command_substitution.sh:0
+...</pre></div>
+        <div class="note n-tip"><b>O filtro por <code>State.Name</code> dentro do <code>--query</code></b><p><code>Instances[?State.Name == 'running']</code> filtra do lado do JMESPath, depois da resposta chegar. O filtro equivalente do lado do servidor é <code>--filters "Name=instance-state-name,Values=running"</code> — que é o usado nos scripts deste guia, porque a AWS já devolve menos dados e o critério fica todo no mesmo lugar.</p></div>
+      </div>
+
+      <div class="step" id="anexo-aula-tuneis">
+        <div class="step-top"><a class="step-id" href="#anexo-aula-tuneis">A.4</a><h3>Os scripts de túnel da aula, e o que muda nos deste guia</h3></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Arquivo da aula</th><th>O que faz</th><th>Equivalente aqui</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>05-1-criar-tunel-propria-ec2.sh</code></td>
+                <td>Túnel <code>3002 → 3001</code> na própria EC2, com <code>AWS-StartPortForwardingSession</code></td>
+                <td>Não usado: a BIA deste ambiente roda na EC2 do cluster, não no porteiro. Vira o <code>03-tunel-bia.sh</code>, com <code>ToRemoteHost</code></td>
+              </tr>
+              <tr>
+                <td><code>05-2-criar-tunel-rds.sh</code></td>
+                <td>Túnel <code>5433 → 5432</code> do RDS, com <code>ToRemoteHost</code></td>
+                <td><code>02-iniciar-porteiro-tunel-rds.sh</code> — mesma ideia, mais o "ligar se estiver parado" e a espera do agente</td>
+              </tr>
+              <tr>
+                <td><code>06-1-ligar-porteiro.sh</code></td>
+                <td>Liga a EC2, dorme 30 segundos e abre o túnel</td>
+                <td>Fundido no <code>02</code>: em vez do <code>sleep 30</code>, o <code>wait instance-running</code> mais o laço que observa o <code>PingStatus</code></td>
+              </tr>
+              <tr>
+                <td><code>06-2-parar-porteiro.sh</code></td>
+                <td>Para a EC2</td>
+                <td><code>04-parar-porteiro.sh</code> — sem o <code>grep running</code> e sem o <code>&amp;</code> de segundo plano</td>
+              </tr>
+              <tr>
+                <td><code>05-policy-criar-tunel</code></td>
+                <td>Policy IAM que permite abrir sessões e túneis</td>
+                <td>Serve como está para os dois túneis deste guia. Falta nela o documento <code>AWS-StartPortForwardingSession</code> — se você for usar o <code>05-1</code> ou o <code>06-1</code> da aula, acrescente <code>arn:aws:ssm:*:*:document/AWS-StartPortForwardingSession</code> à lista de <code>Resource</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="phase" id="p-erros" data-title="Quando der errado">
+      <div class="phase-head">
+        <span class="phase-n">ANEXO B</span>
+        <div>
+          <h2>Quando der errado</h2>
+          <p>As mensagens que aparecem neste desafio, o que cada uma está de fato dizendo, e onde resolver.</p>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Mensagem</th><th>O que está acontecendo</th><th>Onde resolver</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Your session has expired</code></td>
+              <td>As credenciais temporárias do <code>aws login</code> venceram</td>
+              <td>Passo 0.4</td>
+            </tr>
+            <tr>
+              <td><code>is not authorized to perform: ec2:DescribeInstances</code></td>
+              <td>O CLI está usando o profile <code>default</code>, que autentica como outro usuário</td>
+              <td>Passo 0.5 — <code>export AWS_PROFILE=formacao_aws</code></td>
+            </tr>
+            <tr>
+              <td><code>SessionManagerPlugin is not found</code></td>
+              <td>O CLI está instalado, mas o plugin que segura o túnel não</td>
+              <td>Passo 0.2, bloco de instalação</td>
+            </tr>
+            <tr>
+              <td><code>UnauthorizedOperation</code> em <code>RunInstances</code></td>
+              <td>Falta permissão de lançar EC2 — e, se a mensagem citar <code>iam:PassRole</code>, o que falta é a autorização para entregar a role à máquina</td>
+              <td>Passo 2.4, ou lance pelo Console</td>
+            </tr>
+            <tr>
+              <td><code>DryRunOperation ... would have succeeded</code></td>
+              <td>É a <b>resposta de sucesso</b> do dry-run: você tem a permissão e nada foi executado</td>
+              <td>Não é erro: passo 2.4</td>
+            </tr>
+            <tr>
+              <td><code>InvalidParameterValue: subnet ... is in availability zone us-east-1a</code></td>
+              <td>A subnet passada não é a da zona pedida — normalmente o filtro de <code>availability-zone</code> ficou de fora</td>
+              <td>Passo 2.1</td>
+            </tr>
+            <tr>
+              <td><code>InvalidGroup.NotFound</code> ou SG vindo como <code>None</code></td>
+              <td>O nome do Security Group é diferente nesta conta, ou ele está em outra VPC</td>
+              <td>Passo 4.1 — liste todos e confira os nomes</td>
+            </tr>
+            <tr>
+              <td><code>InvalidPermission.Duplicate</code></td>
+              <td>A regra de Security Group já existe</td>
+              <td>Não é erro: passos 4.2 e 4.3</td>
+            </tr>
+            <tr>
+              <td><code>InstanceInformationList</code> vazia</td>
+              <td>O agente do SSM não se registrou: instância sem instance profile, role sem <code>AmazonSSMManagedInstanceCore</code>, ou subnet sem saída para a internet</td>
+              <td>Passo 3.4 — confira nessa ordem</td>
+            </tr>
+            <tr>
+              <td><code>TargetNotConnected</code> no <code>start-session</code></td>
+              <td>A máquina está <code>running</code>, mas o agente ainda não respondeu</td>
+              <td>Passo 3.4 — espere o <code>PingStatus Online</code></td>
+            </tr>
+            <tr>
+              <td><code>AccessDeniedException ... ssm:StartSession ... document/AWS-StartPortForwardingSession</code></td>
+              <td>A policy do repositório não lista esse documento — só o <code>...ToRemoteHost</code> e o <code>AWS-StartSSHSession</code></td>
+              <td>Anexo A.4 — acrescente o ARN do documento, ou use os scripts deste guia</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p style="margin-top:26px"><b>Do túnel para frente — banco, aplicação e shell:</b></p>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Mensagem</th><th>O que está acontecendo</th><th>Onde resolver</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Address already in use</code> ao abrir o túnel</td>
+              <td>A porta local já está ocupada — um túnel antigo aberto, ou um PostgreSQL instalado na máquina</td>
+              <td>Passo 5.3 — <code>ss -ltnp | grep 5433</code>, ou chame o script com outra porta</td>
+            </tr>
+            <tr>
+              <td>O <code>psql</code> trava e termina em timeout</td>
+              <td>O túnel está de pé, mas o Security Group do banco não aceita a origem do porteiro</td>
+              <td>Passo 4.2 — o diagrama do topo da Fase 4 mostra onde a conexão morre</td>
+            </tr>
+            <tr>
+              <td><code>Connection refused</code> na hora, sem espera</td>
+              <td>Problema do lado de cá: o túnel caiu, ou a porta chamada não é a que ele abriu</td>
+              <td>Confira a aba T1 e o número da porta</td>
+            </tr>
+            <tr>
+              <td><code>password authentication failed for user "postgres"</code></td>
+              <td>A senha digitada não é a <code>DB_PWD</code> da task definition</td>
+              <td>Passo 4.4</td>
+            </tr>
+            <tr>
+              <td><code>database "bia" does not exist</code></td>
+              <td>O RDS responde, mas o database não foi criado neste ambiente</td>
+              <td>Fase 4 do Desafio 3 — <code>db:create</code> e <code>db:migrate</code></td>
+            </tr>
+            <tr>
+              <td><code>relation "tarefas" does not exist</code></td>
+              <td>Faltaram as aspas duplas: a tabela chama-se <code>"Tarefas"</code>, com T maiúsculo</td>
+              <td>Passos 6.2 e 6.3</td>
+            </tr>
+            <tr>
+              <td><code>null value in column ... violates not-null constraint</code></td>
+              <td>A tabela tem uma coluna obrigatória a mais do que as do exemplo</td>
+              <td>Passo 6.2 — rode o <code>\d "Tarefas"</code> e inclua a coluna no <code>INSERT</code></td>
+            </tr>
+            <tr>
+              <td><code>column "Registro manual..." does not exist</code></td>
+              <td>Aspas duplas em volta do <b>texto</b>: em SQL isso vira nome de coluna. Valor de texto usa aspas simples</td>
+              <td>Passo 6.3</td>
+            </tr>
+            <tr>
+              <td><code>curl: (7) Failed to connect to localhost port 3002</code></td>
+              <td>O túnel da BIA não está aberto, ou foi encerrado com <kbd>Ctrl</kbd>+<kbd>C</kbd></td>
+              <td>Passo 7.2</td>
+            </tr>
+            <tr>
+              <td>O túnel da 3002 abre, mas o <code>curl</code> fica pendurado</td>
+              <td>O porteiro não alcança a EC2 do cluster: falta a regra do passo 4.3, ou o <code>BIA_PORT</code> é o <code>containerPort</code> em vez do <code>hostPort</code></td>
+              <td>Passos 1.4 e 4.3</td>
+            </tr>
+            <tr>
+              <td><code>Porteiro '...' nao encontrado</code></td>
+              <td>A variável <code>$PORTEIRO_NOME</code> está vazia nesta aba, ou a tag <code>Name</code> não bate</td>
+              <td>Rode o <code>source</code> do passo 0.7 e confira com <code>echo</code></td>
+            </tr>
+            <tr>
+              <td><code>$'\r': command not found</code></td>
+              <td>O script foi salvo com quebra de linha do Windows (CRLF)</td>
+              <td>Na pasta do repositório: <code>sed -i 's/\r$//' *.sh</code>, e salve como LF no editor</td>
+            </tr>
+            <tr>
+              <td><code>Permission denied</code> ao chamar <code>./script.sh</code></td>
+              <td>Faltou o <code>chmod +x</code></td>
+              <td>Todo passo de criação de script traz o <code>chmod</code> junto</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <p>Desafio 4 da mentoria <b>Desafios Fundamentais</b> — Formação AWS, por Henrylle Maia. Projeto BIA v4.3.0 (<span class="mono">github.com/henrylle/bia</span>).</p>
+  <p>Roteiro escrito a partir do enunciado do Dia 4 e dos scripts da aula (<span class="mono">01-zip.sh</span> a <span class="mono">06-2-parar-porteiro.sh</span>), adaptado ao ambiente montado nos Desafios 2 e 3: API da BIA no ECS, RDS PostgreSQL privado e a role <span class="mono">role-acesso-ssm</span> já existente.</p>
+  <p>Os identificadores estão mascarados como <span class="mono">xxxx</span> — conta, instâncias, security groups, IPs e endpoint do banco são os do <b>seu</b> ambiente. IPs e portas mudam a cada religamento do cluster: confira o passo 1.4 antes de reutilizar este guia.</p>
+</footer>
+
+<script>
+(function () {
+  var STORE = "desafio4-guia-v1";
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.phase"));
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORE) || "{}"); }
+    catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
+  }
+
+  var state = load();
+  var boxes = [];
+
+  sections.forEach(function (sec) {
+    var list = Array.prototype.slice.call(sec.querySelectorAll('input[type="checkbox"]'));
+    list.forEach(function (box, i) {
+      box.dataset.k = sec.id + ":" + i;
+      if (state[box.dataset.k]) { box.checked = true; }
+      box.addEventListener("change", function () {
+        state[box.dataset.k] = box.checked;
+        save(state);
+        render();
+      });
+      boxes.push(box);
+    });
+  });
+
+  /* ---- sumario ---- */
+  var toc = document.getElementById("toc");
+  var links = {};
+  sections.forEach(function (sec) {
+    var badge = sec.querySelector(".phase-n");
+    var raw = badge ? badge.textContent.trim() : "";
+    var short = /^FASE/i.test(raw) ? "F" + raw.replace(/\D/g, "") : raw.slice(0, 4);
+    var a = document.createElement("a");
+    a.href = "#" + sec.id;
+    a.innerHTML = "<b>" + short + "</b><span>" + (sec.dataset.title || "") + "</span>";
+    toc.appendChild(a);
+    links[sec.id] = a;
+  });
+
+  /* ---- progresso ---- */
+  var fill = document.getElementById("progFill");
+  var num = document.getElementById("progNum");
+
+  function render() {
+    var done = boxes.filter(function (b) { return b.checked; }).length;
+    var pct = boxes.length ? Math.round((done / boxes.length) * 100) : 0;
+    fill.style.width = pct + "%";
+    num.textContent = done + " / " + boxes.length;
+
+    sections.forEach(function (sec) {
+      var list = Array.prototype.slice.call(sec.querySelectorAll('input[type="checkbox"]'));
+      var ok = list.filter(function (b) { return b.checked; }).length;
+      var counter = sec.querySelector("[data-count-for]");
+      if (counter && list.length) {
+        counter.textContent = ok + "/" + list.length;
+        counter.classList.toggle("full", ok === list.length);
+      }
+      var link = links[sec.id];
+      if (link) { link.classList.toggle("done", list.length > 0 && ok === list.length); }
+    });
+  }
+
+  document.getElementById("reset").addEventListener("click", function () {
+    if (!window.confirm("Desmarcar todos os itens do checklist?")) { return; }
+    state = {};
+    save(state);
+    boxes.forEach(function (b) { b.checked = false; });
+    render();
+  });
+
+  /* ---- copiar comandos ---- */
+  Array.prototype.forEach.call(document.querySelectorAll(".copy"), function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = btn.parentNode.querySelector("pre");
+      if (!pre) { return; }
+      var text = Array.prototype.map.call(pre.childNodes, function (n) {
+        if (n.nodeType === 1 && n.classList.contains("p")) { return ""; }
+        return n.textContent;
+      }).join("");
+
+      var done = function () {
+        btn.textContent = "copiado";
+        btn.classList.add("ok");
+        setTimeout(function () { btn.textContent = "copiar"; btn.classList.remove("ok"); }, 1600);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text, done); });
+      } else {
+        fallback(text, done);
+      }
+    });
+  });
+
+  function fallback(text, done) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  /* ---- secao ativa ---- */
+  if ("IntersectionObserver" in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          Object.keys(links).forEach(function (id) { links[id].classList.remove("on"); });
+          if (links[en.target.id]) { links[en.target.id].classList.add("on"); }
+        }
+      });
+    }, { rootMargin: "-80px 0px -70% 0px" });
+    sections.forEach(function (s) { obs.observe(s); });
+  }
+
+  /* ---- tema: interruptor claro <-> escuro ----
+     Dois estados, e nao tres. Um estado "auto" renderiza igual ao tema que o
+     sistema ja usa, entao um dos cliques do ciclo nao mudaria nada na tela --
+     parece um botao quebrado. Aqui todo clique inverte. O sistema ainda e
+     respeitado: ele decide o estado inicial de quem nunca escolheu. */
+  var TEMA_STORE = "desafio4-guia-tema";   /* chave propria: "Limpar progresso" nao apaga o tema */
+  var btnTema = document.getElementById("tema");
+
+  function sistemaEscuro() {
+    try { return window.matchMedia("(prefers-color-scheme: dark)").matches; }
+    catch (e) { return false; }
+  }
+  function lerTema() {
+    try {
+      var t = localStorage.getItem(TEMA_STORE);
+      if (t === "light" || t === "dark") { return t; }
+    } catch (e) {}
+    return sistemaEscuro() ? "dark" : "light";
+  }
+  function aplicarTema(t, gravar) {
+    document.documentElement.setAttribute("data-theme", t);
+    if (btnTema) {
+      btnTema.textContent = (t === "dark") ? "Tema: escuro" : "Tema: claro";
+      btnTema.setAttribute("aria-label", (t === "dark")
+        ? "Tema escuro. Clique para mudar para o tema claro."
+        : "Tema claro. Clique para mudar para o tema escuro.");
+    }
+    if (gravar) {
+      try { localStorage.setItem(TEMA_STORE, t); } catch (e) {}
+    }
+  }
+  if (btnTema) {
+    aplicarTema(lerTema(), false);
+    btnTema.addEventListener("click", function () {
+      var atual = document.documentElement.getAttribute("data-theme");
+      aplicarTema(atual === "dark" ? "light" : "dark", true);
+    });
+  }
+
+  /* ---- impressao: abre os blocos recolhiveis e devolve o estado depois ---- */
+  var recolhidos = [];
+  window.addEventListener("beforeprint", function () {
+    recolhidos = Array.prototype.filter.call(
+      document.querySelectorAll("details"),
+      function (d) { return !d.open; }
+    );
+    recolhidos.forEach(function (d) { d.open = true; });
+  });
+  window.addEventListener("afterprint", function () {
+    recolhidos.forEach(function (d) { d.open = false; });
+    recolhidos = [];
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

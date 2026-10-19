@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Roteiro passo a passo do Desafio 1 da formação AWS: montar o ambiente local com WSL 2, Docker e PostgreSQL, e levar a mesma aplicação BIA para uma EC2 com RDS.">
+<meta name="color-scheme" content="light dark">
+<title>Desafio 1 — A BIA do WSL à AWS</title>
+<script>
+  /* Aplica o tema salvo antes da primeira pintura: no rodape, quem escolheu
+     escuro veria um lampejo branco a cada carregamento. */
+  (function () {
+    try {
+      var t = localStorage.getItem("desafio1-guia-tema");
+      if (t === "dark" || t === "light") {
+        document.documentElement.setAttribute("data-theme", t);
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+
+<style>
+  :root {
+    --bg:        #E9EDEF;
+    --surface:   #FFFFFF;
+    --surface-2: #F3F6F7;
+    --ink:       #0E1619;
+    --ink-2:     #44555C;
+    --ink-3:     #6F8188;
+    --line:      #D3DBDE;
+    --line-2:    #E4EAEC;
+    --accent:    #0A6A72;
+    --accent-2:  #08535A;
+    --accent-soft:#DBECED;
+    --warn:      #A05712;
+    --warn-soft: #FAEDDC;
+    --ok:        #1E6F45;
+    --ok-soft:   #DEF0E6;
+    --stop:      #A13327;
+    --stop-soft: #FAE3E0;
+    --term-bg:   #0D1619;
+    --term-line: #1E2E34;
+    --term-ink:  #D6E3E7;
+    --term-dim:  #7C949B;
+    --shadow:    0 1px 2px rgba(14,22,25,.05), 0 8px 24px -16px rgba(14,22,25,.28);
+    --radius: 10px;
+    --maxw: 1180px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #0B1214;
+      --surface:   #121B1E;
+      --surface-2: #162126;
+      --ink:       #E7EFF1;
+      --ink-2:     #A8BBC1;
+      --ink-3:     #7C9199;
+      --line:      #24343A;
+      --line-2:    #1C282D;
+      --accent:    #5AC6CE;
+      --accent-2:  #8BDBE1;
+      --accent-soft:#10333A;
+      --warn:      #E2A75E;
+      --warn-soft: #2C2216;
+      --ok:        #6FCB95;
+      --ok-soft:   #13291D;
+      --stop:      #EA8B7D;
+      --stop-soft: #2E1A17;
+      --term-bg:   #08100F;
+      --term-line: #1B2A2F;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg:        #0B1214;
+    --surface:   #121B1E;
+    --surface-2: #162126;
+    --ink:       #E7EFF1;
+    --ink-2:     #A8BBC1;
+    --ink-3:     #7C9199;
+    --line:      #24343A;
+    --line-2:    #1C282D;
+    --accent:    #5AC6CE;
+    --accent-2:  #8BDBE1;
+    --accent-soft:#10333A;
+    --warn:      #E2A75E;
+    --warn-soft: #2C2216;
+    --ok:        #6FCB95;
+    --ok-soft:   #13291D;
+    --stop:      #EA8B7D;
+    --stop-soft: #2E1A17;
+    --term-bg:   #08100F;
+    --term-line: #1B2A2F;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -0.015em;
+  }
+
+  code, kbd, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  }
+
+  /* ---------- barra superior ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-in {
+    max-width: var(--maxw); margin: 0 auto; padding: 10px 24px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  }
+  .topbar-id { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+  .topbar-id strong { font-family: "Archivo", sans-serif; font-size: 15px; font-weight: 700; }
+  .topbar-id span { font-size: 12px; color: var(--ink-3); font-family: "IBM Plex Mono", monospace; }
+
+  .prog { display: flex; align-items: center; gap: 10px; }
+  .prog-track { width: 190px; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .prog-fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .prog-num {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500;
+    color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 78px;
+  }
+  .btn-ghost {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-3); background: none;
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer;
+  }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--ink-3); }
+
+  /* ---------- estrutura ---------- */
+  .shell { max-width: var(--maxw); margin: 0 auto; padding: 0 24px 96px; display: grid; gap: 40px; grid-template-columns: 218px minmax(0,1fr); }
+  @media (max-width: 940px) { .shell { grid-template-columns: 1fr; gap: 0; } }
+
+  nav.toc { position: sticky; top: 72px; align-self: start; padding: 32px 0; max-height: calc(100vh - 90px); overflow-y: auto; }
+  @media (max-width: 940px) { nav.toc { display: none; } }
+  .toc-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+  .toc a {
+    display: flex; gap: 9px; align-items: baseline; padding: 5px 0;
+    color: var(--ink-2); text-decoration: none; font-size: 13.5px; line-height: 1.35;
+    border-left: 2px solid transparent; padding-left: 10px; margin-left: -12px;
+  }
+  .toc a b { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-3); font-weight: 500; }
+  .toc a:hover { color: var(--ink); }
+  .toc a.on { color: var(--accent); border-left-color: var(--accent); font-weight: 500; }
+  .toc a.on b { color: var(--accent); }
+  .toc a.done b::after { content: "✓"; margin-left: 4px; color: var(--ok); }
+
+  main { padding: 32px 0 0; min-width: 0; }
+
+  /* ---------- abertura ---------- */
+  .hero { padding: 26px 0 34px; border-bottom: 1px solid var(--line); margin-bottom: 40px; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+  }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); line-height: 1.08; font-weight: 700; }
+  .lede { font-size: 17px; color: var(--ink-2); max-width: 64ch; margin-top: 16px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .fact {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px;
+  }
+  .fact b { color: var(--ink-3); font-weight: 500; }
+
+  /* ---------- fases ---------- */
+  .phase { margin: 0 0 60px; scroll-margin-top: 76px; }
+  .phase-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
+  .phase-n {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--accent); background: var(--accent-soft); border-radius: 6px;
+    padding: 6px 9px; line-height: 1; margin-top: 5px; white-space: nowrap;
+  }
+  .phase-head h2 { font-size: clamp(21px, 2.6vw, 27px); font-weight: 600; }
+  .phase-head p { margin: 6px 0 0; color: var(--ink-2); font-size: 15px; max-width: 68ch; }
+  .phase-count {
+    margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--ink-3); white-space: nowrap; padding-top: 9px; font-variant-numeric: tabular-nums;
+  }
+  .phase-count.full { color: var(--ok); }
+
+  /* ---------- passo ---------- */
+  .step {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px 22px; margin-bottom: 14px; box-shadow: var(--shadow); scroll-margin-top: 76px;
+  }
+  .step-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .step-id {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--ink-3); font-variant-numeric: tabular-nums;
+    text-decoration: none; transition: color .12s;
+  }
+  a.step-id:hover, a.step-id:focus-visible { color: var(--accent); }
+  .step h3 { font-size: 17px; font-weight: 600; }
+  .where {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .07em;
+    text-transform: uppercase; padding: 3px 7px; border-radius: 4px; margin-left: auto; white-space: nowrap;
+  }
+  /* Etiquetas de contexto. Frias = a sua maquina; quentes = dentro da AWS,
+     onde o relogio da cobranca esta correndo. */
+  .w-win { background: var(--ok-soft);      color: var(--ok); }
+  .w-wsl { background: var(--accent-soft);  color: var(--accent); }
+  .w-app { background: var(--surface-2);    color: var(--ink-2); border: 1px dashed var(--line); }
+  .w-web { background: var(--surface-2);    color: var(--ink-2); border: 1px solid var(--line); }
+  .w-cs  { background: var(--warn-soft);    color: var(--warn); }
+  .w-ec2 { background: var(--stop-soft);    color: var(--stop); }
+
+  /* ---------- divisor das duas partes ---------- */
+  .partbar {
+    margin: 0 0 44px; padding: 20px 22px; border-radius: var(--radius);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    scroll-margin-top: 76px;
+  }
+  .partbar-n {
+    display: block; font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+  }
+  .partbar h2 { font-size: clamp(20px, 2.4vw, 25px); font-weight: 600; }
+  .partbar p { margin: 8px 0 0; color: var(--ink-2); font-size: 14.5px; max-width: 70ch; }
+
+  .toc-part {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3);
+    margin: 18px 0 6px; padding-top: 12px; border-top: 1px solid var(--line);
+  }
+  .step > p { color: var(--ink-2); font-size: 14.5px; margin: 8px 0 0; max-width: 72ch; }
+
+  /* ---------- comandos ---------- */
+  .cmd { position: relative; margin: 14px 0 0; }
+  .cmd-label, .out-label {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; display: block;
+  }
+  pre {
+    margin: 0; padding: 14px 16px; border-radius: 8px; overflow-x: auto;
+    font-size: 13px; line-height: 1.62; tab-size: 2;
+  }
+  .cmd pre { background: var(--term-bg); color: var(--term-ink); border: 1px solid var(--term-line); }
+  .cmd pre .p { color: #6FCB95; user-select: none; }
+  .cmd pre .c { color: var(--term-dim); }
+  .copy {
+    position: absolute; top: 22px; right: 8px; font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    background: rgba(255,255,255,.07); color: #9FB6BC; border: 1px solid rgba(255,255,255,.13);
+    border-radius: 5px; padding: 4px 8px; cursor: pointer; opacity: 0; transition: opacity .15s;
+  }
+  .cmd:hover .copy, .copy:focus-visible { opacity: 1; }
+  .copy.ok { color: #6FCB95; border-color: #6FCB95; opacity: 1; }
+  .out { margin-top: 14px; }
+  .out pre {
+    background: var(--surface-2); color: var(--ink-2);
+    border: 1px solid var(--line-2); border-left: 3px solid var(--ink-3);
+  }
+  .out.good pre { border-left-color: var(--ok); }
+  .out.bad pre { border-left-color: var(--stop); }
+  p code, li code, td code {
+    background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 4px;
+    padding: 1px 5px; font-size: .875em; color: var(--ink);
+  }
+
+  /* ---------- checklist ---------- */
+  .check { margin: 16px 0 0; padding: 14px 16px; background: var(--surface-2); border-radius: 8px; border: 1px solid var(--line-2); }
+  .check-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+  .check ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  .check li label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  .check input[type=checkbox] {
+    appearance: none; -webkit-appearance: none; flex: 0 0 auto;
+    width: 17px; height: 17px; margin: 3px 0 0; border: 1.5px solid var(--ink-3);
+    border-radius: 4px; background: var(--surface); cursor: pointer; position: relative; transition: .12s;
+  }
+  .check input[type=checkbox]:hover { border-color: var(--accent); }
+  .check input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .check input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5px; top: 1.5px; width: 4px; height: 9px;
+    border: solid var(--surface); border-width: 0 2px 2px 0; transform: rotate(43deg);
+  }
+  .check label span { font-size: 14.5px; color: var(--ink-2); line-height: 1.45; }
+  .check input:checked + span { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line); }
+
+  /* ---------- avisos ---------- */
+  .note { border-radius: 8px; padding: 13px 16px; margin: 14px 0 0; font-size: 14.5px; border: 1px solid; }
+  .note b { display: block; font-family: "Archivo", sans-serif; font-size: 13px; letter-spacing: .01em; margin-bottom: 3px; }
+  .note p { margin: 0; }
+  .note p + p { margin-top: 7px; }
+  .n-warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, transparent); color: var(--ink); }
+  .n-warn b { color: var(--warn); }
+  .n-tip  { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 32%, transparent); color: var(--ink); }
+  .n-tip b { color: var(--accent); }
+  .n-key  { background: var(--stop-soft); border-color: color-mix(in srgb, var(--stop) 32%, transparent); color: var(--ink); }
+  .n-key b { color: var(--stop); }
+
+  details.fallback { margin-top: 14px; border: 1px dashed var(--line); border-radius: 8px; padding: 0 14px; background: var(--surface-2); }
+  details.fallback summary { cursor: pointer; padding: 11px 0; font-size: 14px; font-weight: 500; color: var(--ink-2); }
+  details.fallback[open] summary { border-bottom: 1px solid var(--line-2); margin-bottom: 12px; }
+  details.fallback > *:last-child { margin-bottom: 14px; }
+
+  /* ---------- tabelas ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin-top: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 520px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-3); font-weight: 500; background: var(--surface-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .ascii { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-top: 16px; }
+  .ascii pre { background: none; color: var(--ink-2); font-size: 12px; line-height: 1.5; padding: 20px; }
+
+  footer { max-width: var(--maxw); margin: 0 auto; padding: 28px 24px 60px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+  footer p { margin: 0 0 6px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  @media (max-width: 620px) {
+    .shell, .topbar-in, footer { padding-left: 16px; padding-right: 16px; }
+    .step { padding: 16px; }
+    .where { margin-left: 0; }
+    .prog-track { width: 110px; }
+  }
+  /* ---------- impressao ---------- */
+  @media print {
+    /* Paleta clara forcada: quem le no escuro nao deve imprimir paginas pretas. */
+    :root, :root[data-theme="dark"], :root[data-theme="light"] {
+      --bg: #FFFFFF; --surface: #FFFFFF; --surface-2: #F5F7F8;
+      --ink: #000000; --ink-2: #263338; --ink-3: #55666C;
+      --line: #B9C4C8; --line-2: #DDE4E6;
+      --accent: #0A6A72; --accent-2: #08535A; --accent-soft: #EDF4F5;
+      --warn: #7A430E; --warn-soft: #FBF3E9; --ok: #165634; --ok-soft: #EDF6F1;
+      --stop: #7D2820; --stop-soft: #FBEEEC;
+      --term-bg: #F2F5F6; --term-line: #C8D2D5; --term-ink: #0E1619; --term-dim: #55666C;
+      --shadow: none;
+    }
+    .topbar, nav.toc, .copy, #tema, #reset { display: none !important; }
+    .shell { display: block; max-width: none; padding: 0; }
+    body { background: #fff; }
+    .step, .cmd, .out, .note, .check, .ascii, .tablewrap, .partbar, details {
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    h2, h3, .step-top, .phase-head { break-after: avoid; page-break-after: avoid; }
+    .phase { margin-bottom: 24px; }
+    .step { box-shadow: none; border-color: #B9C4C8; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="topbar-id">
+      <strong>Desafio 1</strong>
+      <span>BIA local e na AWS</span>
+    </div>
+    <div class="prog">
+      <span class="prog-num" id="progNum">0 / 0</span>
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+    <button class="btn-ghost" id="tema" type="button">Tema: claro</button>
+    <button class="btn-ghost" id="reset" type="button">Limpar progresso</button>
+  </div>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc" aria-label="Fases do desafio">
+    <div class="toc-label">Roteiro</div>
+  </nav>
+
+  <main>
+
+    <header class="hero">
+      <div class="eyebrow">Desafios Fundamentais · Formação AWS · Dia 1</div>
+      <h1>Do notebook zerado à BIA rodando na AWS</h1>
+      <p class="lede">
+        Roteiro de execução do Desafio 1 — as mesmas 22 etapas do <span class="mono">README.md</span>, em formato de
+        checklist. Cada passo traz <b>por que ele existe</b>, <b>onde executar</b>, o <b>comando</b>, a
+        <b>resposta esperada</b> e o que marcar antes de seguir. O progresso fica salvo neste navegador.
+      </p>
+      <div class="facts">
+        <span class="fact"><b>parte 1</b> etapas 1–12 · local</span>
+        <span class="fact"><b>parte 2</b> etapas 13–22 · AWS</span>
+        <span class="fact"><b>ambiente</b> WSL 2 · Ubuntu 24.04</span>
+        <span class="fact"><b>app</b> BIA 4.3.0</span>
+        <span class="fact"><b>local</b> localhost:3001</span>
+        <span class="fact"><b>banco local</b> 5433</span>
+        <span class="fact"><b>região</b> us-east-1</span>
+        <span class="fact"><b>nuvem</b> EC2 t3.micro + RDS db.t3.micro</span>
+      </div>
+    </header>
+
+    <section class="phase" id="p-mapa" data-title="O que o desafio pede" data-badge-short="MAPA">
+      <div class="phase-head">
+        <span class="phase-n">MAPA</span>
+        <div>
+          <h2>O que o desafio pede e como ler este guia</h2>
+          <p>
+            A ideia central: <b>a aplicação não muda</b>. O que muda é a infraestrutura embaixo dela. O contrato
+            <code>container → porta → banco</code> é idêntico no notebook e na nuvem — e é por isso que a Parte 2 é
+            curta: ela repete, com serviços gerenciados, o que a Parte 1 já provou funcionar.
+          </p>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>O que se prova ao final</th><th>Como fica evidente</th><th>Onde</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>A aplicação roda localmente</td>
+              <td><code>http://localhost:3001</code> responde no navegador do Windows</td>
+              <td><a href="#passo-9">Passo 9</a></td>
+            </tr>
+            <tr>
+              <td>Os dados persistem</td>
+              <td>A tarefa cadastrada sobrevive a um <code>docker compose down</code> seguido de <code>up</code></td>
+              <td><a href="#passo-12">Passo 12</a></td>
+            </tr>
+            <tr>
+              <td>O banco é acessível externamente</td>
+              <td>O DBeaver conecta na porta <code>5433</code> e enxerga a tabela <code>Tarefas</code></td>
+              <td><a href="#passo-11">Passo 11</a></td>
+            </tr>
+            <tr>
+              <td>A mesma stack roda na nuvem</td>
+              <td><code>http://&lt;IP-PÚBLICO-DA-EC2&gt;:3001</code> responde, gravando no RDS</td>
+              <td><a href="#passo-21">Passo 21</a></td>
+            </tr>
+            <tr>
+              <td>O acesso é seguro</td>
+              <td>Nenhuma porta 22 aberta, nenhuma chave <code>.pem</code> — só IAM e SSM</td>
+              <td><a href="#passo-19">Passo 19</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="ascii">
+<pre>
+      PARTE 1 - AMBIENTE LOCAL                       PARTE 2 - AWS (us-east-1)
+
+ Windows 11                                    Internet
+   |  localhost:3001   localhost:5433            |  http://&lt;IP-PUBLICO&gt;:3001
+   v                         v                   v
+ +-------------------------------------+   +------------------------------+
+ | WSL 2 - Ubuntu 24.04                |   | SG bia-dev    (libera 3001)  |
+ |  3 GB RAM / 2 vCPU  (.wslconfig)    |   +--------------+---------------+
+ |                                     |                  |
+ |  +--------------+ +--------------+  |                  v
+ |  | server  bia  | | database     |  |   +------------------------------+
+ |  | 3001 -&gt; 8080 | | 5433 -&gt; 5432 |  |   | EC2 bia-dev     t3.micro     |
+ |  |              |-| postgres:17.1|  |   |  docker run   3001 -&gt; 8080   |
+ |  +--------------+ +------+-------+  |   |  sem porta 22, sem .pem      |
+ |                          |          |   +--------------+---------------+
+ |  +--------------+   volume bia_db   |                  | 5432
+ |  | redis valkey |   (os dados)      |                  v
+ |  +--------------+                   |   +------------------------------+
+ +-------------------------------------+   | SG bia-db (so o SG bia-dev)  |
+                  ^                        |   RDS PostgreSQL "bia"       |
+                  |                        |   nao publico                |
+              DBeaver                      +------------------------------+
+        (5433, la no Windows)
+                                           Acesso administrativo:
+                                           SSM Session Manager + IAM role
+</pre>
+      </div>
+
+      <div class="note n-tip">
+        <b>A leitura que o diagrama entrega</b>
+        <p>Nos dois lados o container publica <code>3001</code> para fora e escuta <code>8080</code> por dentro. O que
+        troca de lugar é o banco: na Parte 1 ele é um container ao lado, com os dados num volume; na Parte 2 ele é o
+        RDS, fora da máquina — e é isso que torna a EC2 descartável.</p>
+        <p>Repare também que a porta <code>5433</code> só existe do lado esquerdo, e só para o DBeaver. A aplicação
+        nunca a usa.</p>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Instalar no Windows antes de começar</th><th>Para quê</th><th>Onde obter</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>Docker Desktop</b></td><td>Fornece o engine que roda os containers</td><td><span class="mono">docker.com/products/docker-desktop</span></td></tr>
+            <tr><td><b>VS Code</b></td><td>Editor, conectado ao Linux pela extensão WSL</td><td><span class="mono">code.visualstudio.com</span></td></tr>
+            <tr><td><b>DBeaver Community</b></td><td>Cliente para acessar o banco de dados</td><td><span class="mono">dbeaver.io/download</span></td></tr>
+            <tr><td><b>Conta na AWS</b></td><td>Necessária apenas a partir do passo 13</td><td><span class="mono">aws.amazon.com/free</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note n-tip">
+        <b>Ambiente de referência</b>
+        <p>O WSL 2, o Ubuntu e o Git são instalados durante o roteiro (passos 2 e 4). Este laboratório foi executado
+        num notebook modesto — Dell Inspiron 14 3000, Core i3-4005U de 2 núcleos, <b>8 GB de RAM</b>, Windows 11 Pro
+        24H2 — com WSL 2.7.11, Ubuntu 24.04.4 LTS, Git 2.43, Docker Desktop 4.86 e Compose v5.3.1. Se a sua máquina
+        for mais forte, tudo aqui continua valendo; você só terá mais folga.</p>
+      </div>
+
+      <div class="note n-tip">
+        <b>Por que WSL 2 e não uma máquina virtual</b>
+        <p>A instrução original do curso sugere montar uma VM. Com 8 GB de RAM e um i3 de 2 núcleos, isso significaria
+        manter dois sistemas operacionais disputando a mesma memória:</p>
+      </div>
+      <div class="ascii">
+<pre>
+ VirtualBox                            WSL 2
+ Windows                               Windows
+   +-- VM Ubuntu (SO completo)           +-- Ubuntu (kernel compartilhado)
+         +-- Docker Engine                     +-- Docker CLI
+                                                     +-- Docker Desktop (engine unico)
+</pre>
+      </div>
+      <div class="note n-tip">
+        <p>O caminho escolhido foi o WSL 2 com os recursos <b>limitados de propósito</b> (passo 3), deixando ~5 GB para
+        Windows, navegador, VS Code e Docker Desktop. O resultado é um Linux real, com Docker nativo, que não derruba a
+        máquina hospedeira.</p>
+        <p>O mesmo raciocínio vale para o Docker: <b>não</b> instale <code>docker.io</code> dentro do Ubuntu. O Docker
+        Desktop já fornece o engine, e a integração com o WSL apenas expõe a CLI dentro da distribuição — um daemon,
+        não dois.</p>
+      </div>
+
+      <div class="note n-tip">
+        <b>Como ler as etiquetas de cada passo</b>
+        <p><b>POWERSHELL</b> = terminal do Windows · <b>WSL</b> = Ubuntu dentro do Windows · <b>APP</b> = interface
+        gráfica (Docker Desktop, VS Code, DBeaver) · <b>CONSOLE</b> = navegador, no Console da AWS ·
+        <b>CLOUDSHELL</b> = terminal do CloudShell · <b>BIA-DEV</b> = dentro da EC2, pela sessão do SSM.</p>
+        <p>O prompt à esquerda do comando diz a mesma coisa, e é o sinal mais confiável de onde você está:</p>
+      </div>
+      <div class="ascii">
+<pre>
+  PS&gt;                   --&gt;  PowerShell, no Windows
+  $                     --&gt;  WSL, o Ubuntu dentro do seu Windows
+  [cloudshell]$         --&gt;  CloudShell, no navegador
+  [root@ip-... ~]#      --&gt;  dentro da EC2, pela sessao do SSM
+</pre>
+      </div>
+
+      <div class="note n-warn">
+        <b>Nunca pule a validação de um passo</b>
+        <p>Cada passo termina com uma resposta esperada e um checklist. Se a validação falha, o problema está
+        <i>nesse</i> passo — e não três passos à frente. Foi assim que este laboratório foi construído: uma camada de
+        cada vez.</p>
+      </div>
+
+      <div class="note n-tip">
+        <b>Este guia é o roteiro; o porquê profundo está no README</b>
+        <p>Aqui cada passo explica o que resolve e o que esperar de volta. Quem quiser entender <i>por baixo</i> — as
+        três áreas do Git, a anatomia de um <code>Dockerfile</code>, build × run, volumes, o fluxo mental completo —
+        tem o apêndice <b>A–P</b> do <span class="mono">README.md</span> deste mesmo repositório, escrito para ser
+        lido antes ou depois do laboratório.</p>
+      </div>
+    </section>
+
+    <div class="partbar" id="parte-1">
+      <span class="partbar-n">Parte 1 · etapas 1 a 12</span>
+      <h2>Ambiente local</h2>
+      <p>
+        Fazer a BIA rodar no notebook, com os dados persistidos e o banco acessível de fora. A ordem importa: cada
+        camada é validada antes de a próxima ser instalada. Termina quando a tarefa cadastrada sobrevive ao restart
+        dos containers.
+      </p>
+    </div>
+
+    <section class="phase" id="p1" data-title="Windows, WSL 2 e recursos" data-part="Parte 1 — Ambiente local">
+      <div class="phase-head">
+        <span class="phase-n">FASE 1</span>
+        <div>
+          <h2>A base: Windows, WSL 2 e o limite de recursos</h2>
+          <p>Antes de instalar qualquer coisa, descobrir o que já existe. Depois, um Linux de verdade dentro do Windows — com teto de memória, para ele não sufocar a máquina que o hospeda.</p>
+        </div>
+        <span class="phase-count" data-count-for="p1"></span>
+      </div>
+
+      <div class="step" id="passo-1">
+        <div class="step-top"><a class="step-id" href="#passo-1">1</a><h3>Validar o Windows e o estado atual</h3><span class="where w-win">POWERSHELL</span></div>
+        <p>Conferir se a sua máquina já tem o que precisamos, <b>antes</b> de instalar qualquer coisa. Reinstalar o que já funciona costuma criar mais problema do que resolve.</p>
+        <div class="cmd"><span class="cmd-label">Comando · PowerShell como usuário normal</span><button class="copy" type="button">copiar</button><pre><span class="p">PS&gt; </span>winver          <span class="c"># confirmar Windows 10/11 com suporte a WSL 2</span>
+<span class="p">PS&gt; </span>wsl --status    <span class="c"># versao padrao do WSL e distro default</span>
+<span class="p">PS&gt; </span>wsl --version   <span class="c"># versao do WSL, kernel e WSLg</span>
+<span class="p">PS&gt; </span>docker version  <span class="c"># verificar se o Docker Desktop ja esta instalado</span></pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>O winver mostra Windows 10 (2004+) ou Windows 11,
+e o wsl --version retorna uma versao do WSL.</pre></div>
+        <div class="note n-tip"><b>Erro de conexão no <code>docker version</code> não é instalação quebrada</b><p>Se ele reclamar da API do Docker, normalmente significa apenas que o <b>Docker Desktop não está em execução</b>. Abra o Docker Desktop pelo menu Iniciar e repita o comando.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Windows 10 (2004+) ou Windows 11 confirmado</span></label></li>
+          <li><label><input type="checkbox"><span><code>wsl --version</code> respondeu</span></label></li>
+          <li><label><input type="checkbox"><span>Sei se o Docker Desktop já está instalado nesta máquina</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2">
+        <div class="step-top"><a class="step-id" href="#passo-2">2</a><h3>Instalar o Ubuntu 24.04 no WSL 2</h3><span class="where w-win">POWERSHELL</span></div>
+        <p>Instalar uma distribuição Linux de uso geral. Se você já tem o Docker Desktop, vai existir uma distro chamada <code>docker-desktop</code> — ela é interna do Docker e <b>não</b> serve para trabalhar.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">PS&gt; </span>wsl --list --online     <span class="c"># distribuicoes disponiveis</span>
+<span class="p">PS&gt; </span>wsl --list --verbose    <span class="c"># o que ja esta instalado</span>
+<span class="p">PS&gt; </span>wsl --install Ubuntu-24.04</pre></div>
+        <p>Na primeira execução o Ubuntu pede um usuário e uma senha UNIX.</p>
+        <div class="note n-warn"><b>Ao digitar a senha no Linux, nada aparece na tela</b><p>Nem asteriscos. Isso é o comportamento esperado, não um teclado travado. Digite e pressione Enter.</p></div>
+        <div class="cmd"><span class="cmd-label">Validar dentro do Ubuntu</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>uname -a
+<span class="p">$ </span>cat /etc/os-release
+<span class="p">$ </span>free -h
+<span class="p">$ </span>nproc</pre></div>
+        <div class="cmd"><span class="cmd-label">E de volta no PowerShell</span><button class="copy" type="button">copiar</button><pre><span class="p">PS&gt; </span>wsl --list --verbose</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — a distro precisa estar em VERSION 2</span><pre>  NAME              STATE           VERSION
+* Ubuntu-24.04      Running         2
+  docker-desktop    Stopped         2</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Usuário e senha UNIX criados</span></label></li>
+          <li><label><input type="checkbox"><span><code>Ubuntu-24.04</code> aparece na lista</span></label></li>
+          <li><label><input type="checkbox"><span>A coluna <code>VERSION</code> mostra <code>2</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3">
+        <div class="step-top"><a class="step-id" href="#passo-3">3</a><h3>Limitar os recursos do WSL</h3><span class="where w-win">POWERSHELL</span></div>
+        <p>Dizer ao WSL quanta memória e CPU ele pode consumir. Por padrão ele toma bem mais do que um notebook de 8 GB pode ceder — este é o passo que torna o laboratório viável.</p>
+        <div class="cmd"><span class="cmd-label">Abrir o arquivo (vem vazio)</span><button class="copy" type="button">copiar</button><pre><span class="p">PS&gt; </span>notepad "$env:USERPROFILE\.wslconfig"</pre></div>
+        <div class="cmd"><span class="cmd-label">Colar exatamente isto e salvar</span><button class="copy" type="button">copiar</button><pre>[wsl2]
+memory=3GB
+processors=2
+swap=1GB
+localhostForwarding=true
+
+[experimental]
+autoMemoryReclaim=gradual</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Parâmetro</th><th>Efeito</th></tr></thead>
+            <tbody>
+              <tr><td><code>memory=3GB</code></td><td>Teto de RAM do WSL — impede que o Ubuntu sufoque o Windows</td></tr>
+              <tr><td><code>processors=2</code></td><td>2 das 4 threads para o WSL, mantendo o host responsivo</td></tr>
+              <tr><td><code>swap=1GB</code></td><td>Proteção contra estouro de memória (mais lento que RAM, mas evita travar)</td></tr>
+              <tr><td><code>localhostForwarding=true</code></td><td><b>Essencial aqui</b>: faz <code>localhost:3001</code> do Windows chegar no container dentro do WSL</td></tr>
+              <tr><td><code>autoMemoryReclaim=gradual</code></td><td>Devolve ao Windows a memória que o WSL deixou de usar</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-key"><b><code>localhostForwarding=true</code> é a linha que o desafio inteiro depende</b><p>Sem ela o container sobe normalmente <i>dentro</i> do WSL, mas <code>http://localhost:3001</code> não abre no navegador do Windows — e o passo 9 parece um problema de aplicação quando é de rede.</p></div>
+        <p>O arquivo só passa a valer depois de reiniciar o WSL por completo:</p>
+        <div class="cmd"><span class="cmd-label">Aplicar</span><button class="copy" type="button">copiar</button><pre><span class="p">PS&gt; </span>wsl --shutdown
+<span class="p">PS&gt; </span>wsl -d Ubuntu-24.04</pre></div>
+        <div class="cmd"><span class="cmd-label">Conferir dentro do Ubuntu</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>free -h    <span class="c"># esperado: ~3.0Gi em Mem e 1.0Gi em Swap</span>
+<span class="p">$ </span>nproc      <span class="c"># esperado: 2</span></pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Mem:  ~3.0Gi        Swap: 1.0Gi
+2</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>.wslconfig</code> salvo na pasta do usuário do Windows</span></label></li>
+          <li><label><input type="checkbox"><span><code>wsl --shutdown</code> executado depois de salvar</span></label></li>
+          <li><label><input type="checkbox"><span><code>free -h</code> mostra ~3 GB e <code>nproc</code> mostra 2</span></label></li>
+        </ul></div>
+        <details class="fallback">
+          <summary>Parando por aqui e voltando depois</summary>
+          <p><b>Pode desligar o notebook sem medo.</b> A distro, o usuário UNIX e o <code>.wslconfig</code> ficam gravados no disco — nada disso precisa ser refeito.</p>
+          <div class="cmd"><span class="cmd-label">Ao retomar</span><button class="copy" type="button">copiar</button><pre><span class="p">PS&gt; </span>wsl -d Ubuntu-24.04</pre></div>
+          <p>O progresso marcado neste guia também fica salvo — mesmo navegador, mesmo perfil, sem limpar os dados do site.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="phase" id="p2" data-title="Git, GitHub e VS Code" data-part="Parte 1 — Ambiente local">
+      <div class="phase-head">
+        <span class="phase-n">FASE 2</span>
+        <div>
+          <h2>As ferramentas de trabalho: Git, GitHub e VS Code</h2>
+          <p>Tudo instalado <b>dentro do Ubuntu</b>. O VS Code é a exceção: a interface roda no Windows, mas o código, o terminal e as ferramentas ficam do lado Linux.</p>
+        </div>
+        <span class="phase-count" data-count-for="p2"></span>
+      </div>
+
+      <div class="step" id="passo-4">
+        <div class="step-top"><a class="step-id" href="#passo-4">4</a><h3>Instalar e configurar o Git no Ubuntu</h3><span class="where w-wsl">WSL</span></div>
+        <p>Instalar o Git <b>dentro do Ubuntu</b>, não no Windows. É o Git do Linux que vai clonar os projetos e conversar com o Docker.</p>
+        <div class="cmd"><span class="cmd-label">Instalar</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>sudo apt update
+<span class="p">$ </span>sudo apt upgrade -y
+<span class="p">$ </span>sudo apt install git -y
+<span class="p">$ </span>git --version</pre></div>
+        <div class="cmd"><span class="cmd-label">Configurar a identidade dos commits</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>git config --global user.name "Seu Nome"
+<span class="p">$ </span>git config --global user.email "seu.email@exemplo.com"
+<span class="p">$ </span>git config --global --list</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>git version 2.43.0
+
+user.name=Seu Nome
+user.email=seu.email@exemplo.com</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>git --version</code> responde <code>2.x.x</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>user.name</code> e <code>user.email</code> aparecem no <code>--list</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-5">
+        <div class="step-top"><a class="step-id" href="#passo-5">5</a><h3>Autenticar no GitHub via SSH</h3><span class="where w-wsl">WSL</span></div>
+        <p>Criar um par de chaves e cadastrar a <b>pública</b> no GitHub, para clonar e enviar código sem digitar senha toda hora.</p>
+        <div class="cmd"><span class="cmd-label">Gerar a chave</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>ls -la ~/.ssh                                     <span class="c"># verificar se ja existe uma chave</span>
+<span class="p">$ </span>ssh-keygen -t ed25519 -C "seu.email@exemplo.com"  <span class="c"># Enter aceita o caminho padrao</span></pre></div>
+        <p>Recomendo definir uma <b>passphrase</b> para a chave. Em seguida, carregue-a no agente:</p>
+        <div class="cmd"><span class="cmd-label">Carregar no agente</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>eval "$(ssh-agent -s)"
+<span class="p">$ </span>ssh-add ~/.ssh/id_ed25519</pre></div>
+        <div class="cmd"><span class="cmd-label">Copiar apenas a chave pública</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cat ~/.ssh/id_ed25519.pub</pre></div>
+        <p>No GitHub: <b>Settings → SSH and GPG keys → New SSH key</b>, tipo <i>Authentication Key</i>. Cole o conteúdo e salve.</p>
+        <div class="cmd"><span class="cmd-label">Validar</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>ssh -T git@github.com</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Hi &lt;seu-usuario&gt;! You've successfully authenticated, but GitHub does not provide shell access.</pre></div>
+        <div class="note n-warn"><b><code>id_ed25519</code> é a chave privada</b><p>Ela nunca deve ser compartilhada, commitada ou colada em documentação. Só o arquivo terminado em <code>.pub</code> vai para o GitHub.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Par de chaves gerado</span></label></li>
+          <li><label><input type="checkbox"><span>Chave <b>pública</b> cadastrada no GitHub</span></label></li>
+          <li><label><input type="checkbox"><span><code>ssh -T git@github.com</code> me cumprimenta pelo nome de usuário</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-6">
+        <div class="step-top"><a class="step-id" href="#passo-6">6</a><h3>Conectar o VS Code ao WSL</h3><span class="where w-app">APP</span></div>
+        <p>Usar a interface gráfica do VS Code no Windows, mas com o código, o terminal e as ferramentas rodando dentro do Ubuntu.</p>
+        <div class="cmd"><span class="cmd-label">Pré-requisitos do VS Code Server, dentro do Ubuntu</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>sudo apt install wget ca-certificates -y
+<span class="p">$ </span>dpkg -l ca-certificates | grep '^ii'
+<span class="p">$ </span>wget -q --spider https://update.code.visualstudio.com &amp;&amp; echo $?   <span class="c"># esperado: 0</span></pre></div>
+        <p>No VS Code (Windows): <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> → instalar a extensão <b>WSL (Microsoft)</b> → <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> → <b>WSL: Connect to WSL</b>.</p>
+        <div class="cmd"><span class="cmd-label">Criar a estrutura de trabalho dentro do Linux</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>mkdir -p ~/projetos ~/repos ~/laboratorios-aws</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>O canto inferior esquerdo do VS Code exibe:  WSL: Ubuntu-24.04
+E o terminal integrado responde ao pwd:      /home/seu-usuario</pre></div>
+        <div class="note n-warn"><b>Projetos em <code>/home/usuario/...</code>, nunca em <code>/mnt/c/Users/...</code></b><p>Trabalhar no filesystem montado do Windows degrada bastante a performance de Git, Docker e ferramentas Linux — o WSL acessa o disco do Windows por uma camada de tradução. Numa pasta sincronizada na nuvem, o efeito é pior ainda.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Extensão WSL instalada no VS Code</span></label></li>
+          <li><label><input type="checkbox"><span>Canto inferior esquerdo mostra <code>WSL: Ubuntu-24.04</code></span></label></li>
+          <li><label><input type="checkbox"><span>As três pastas de trabalho existem no <code>/home</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p3" data-title="Docker dentro do WSL" data-part="Parte 1 — Ambiente local">
+      <div class="phase-head">
+        <span class="phase-n">FASE 3</span>
+        <div>
+          <h2>Docker dentro do WSL</h2>
+          <p>Um engine só, o do Docker Desktop, com a CLI exposta dentro do Ubuntu. E um teste mínimo do caminho Windows → WSL → Docker → container antes de subir a aplicação real.</p>
+        </div>
+        <span class="phase-count" data-count-for="p3"></span>
+      </div>
+
+      <div class="step" id="passo-7">
+        <div class="step-top"><a class="step-id" href="#passo-7">7</a><h3>Integrar o Docker Desktop ao WSL 2</h3><span class="where w-app">APP</span></div>
+        <p>Liberar o comando <code>docker</code> dentro do Ubuntu, aproveitando o engine que o Docker Desktop já roda no Windows.</p>
+        <div class="note n-key"><b>Não instale o Docker dentro do Ubuntu</b><p>Nada de <code>sudo apt install docker.io</code> nem <code>docker-ce</code>. Isso cria um <b>segundo daemon</b> Docker, concorrente com o do Docker Desktop e caro demais para 8 GB de RAM. O que se quer aqui é apenas a CLI apontando para o engine que já existe.</p></div>
+        <p>No Docker Desktop: <b>Settings → Resources → WSL Integration</b> → marcar <code>Enable integration with my default WSL distro</code> e a distro <b><code>Ubuntu-24.04</code></b> → <b>Apply &amp; Restart</b>.</p>
+        <div class="cmd"><span class="cmd-label">Reiniciar a distro para carregar a integração</span><button class="copy" type="button">copiar</button><pre><span class="p">PS&gt; </span>wsl --terminate Ubuntu-24.04
+<span class="p">PS&gt; </span>wsl -d Ubuntu-24.04</pre></div>
+        <div class="cmd"><span class="cmd-label">Validar dentro do Ubuntu</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>docker version
+<span class="p">$ </span>docker info
+<span class="p">$ </span>docker context ls
+<span class="p">$ </span>docker run hello-world</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Client: ...
+Server: Docker Desktop ...
+
+Hello from Docker!
+This message shows that your installation appears to be working correctly.</pre></div>
+        <div class="note n-warn"><b>O que importa é aparecerem <i>Client</i> e <i>Server</i></b><p>Se só aparecer o <code>Client</code>, a integração não foi aplicada — volte ao Docker Desktop e confirme que a distro está marcada, depois refaça o <code>wsl --terminate</code>.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>Ubuntu-24.04</code> marcado em WSL Integration</span></label></li>
+          <li><label><input type="checkbox"><span><code>docker version</code> mostra <b>Client e Server</b></span></label></li>
+          <li><label><input type="checkbox"><span><code>docker run hello-world</code> imprimiu a mensagem de boas-vindas</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-8">
+        <div class="step-top"><a class="step-id" href="#passo-8">8</a><h3>Smoke test do Docker Compose</h3><span class="where w-wsl">WSL</span></div>
+        <p>Um teste mínimo, com um container leve, para confirmar o mapeamento de portas de ponta a ponta <b>antes</b> de subir a aplicação real. Se falhar aqui, o problema é do ambiente — e não da BIA.</p>
+        <div class="cmd"><span class="cmd-label">Criar o arquivo</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>mkdir -p ~/laboratorios-aws/docker-hello &amp;&amp; cd ~/laboratorios-aws/docker-hello
+<span class="p">$ </span>nano compose.yaml</pre></div>
+        <div class="cmd"><span class="cmd-label">Conteúdo do compose.yaml</span><button class="copy" type="button">copiar</button><pre>services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"</pre></div>
+        <p>Salve com <kbd>Ctrl</kbd>+<kbd>O</kbd>, <kbd>Enter</kbd>, <kbd>Ctrl</kbd>+<kbd>X</kbd>. Depois:</p>
+        <div class="cmd"><span class="cmd-label">Subir, testar e derrubar</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>docker compose up -d
+<span class="p">$ </span>docker compose ps
+<span class="p">$ </span>curl http://localhost:8080
+<span class="p">$ </span>docker compose down</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — o HTML padrão do Nginx</span><pre>&lt;title&gt;Welcome to nginx!&lt;/title&gt;</pre></div>
+        <div class="note n-tip"><b>O que este teste realmente prova</b><p>Que o caminho <b>Windows → WSL → Docker → container</b> está inteiro. É o mesmo caminho que a BIA vai usar no passo 9, só que com uma imagem de 10 MB em vez de um build de vários minutos.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>docker compose ps</code> mostrou o container no ar</span></label></li>
+          <li><label><input type="checkbox"><span>O <code>curl</code> devolveu o HTML do Nginx</span></label></li>
+          <li><label><input type="checkbox"><span><code>docker compose down</code> executado — o teste não fica ocupando porta</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p4" data-title="A BIA no ar e persistindo" data-part="Parte 1 — Ambiente local">
+      <div class="phase-head">
+        <span class="phase-n">FASE 4</span>
+        <div>
+          <h2>A BIA no ar, com os dados persistidos</h2>
+          <p>O coração da Parte 1: três containers de pé, as tabelas criadas, o banco acessível de fora e — o teste que fecha o desafio — o dado sobrevivendo à destruição dos containers.</p>
+        </div>
+        <span class="phase-count" data-count-for="p4"></span>
+      </div>
+
+      <div class="step" id="passo-9">
+        <div class="step-top"><a class="step-id" href="#passo-9">9</a><h3>Subir o projeto BIA</h3><span class="where w-wsl">WSL</span></div>
+        <p>Clonar a aplicação e subir os três containers de uma vez: aplicação, banco e cache. É o <code>compose.yml</code> do projeto que descreve os três e a rede entre eles.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cd ~/laboratorios-aws
+<span class="p">$ </span>git clone https://github.com/henrylle/bia
+<span class="p">$ </span>cd bia
+<span class="p">$ </span>docker compose up -d</pre></div>
+        <div class="note n-tip"><b>Na primeira vez isso demora — e é normal</b><p>O serviço <code>server</code> é definido com <code>build: .</code>, então o Docker baixa a imagem do Node 24 e <b>compila o front-end</b> antes de subir. Em um i3 são vários minutos.</p><p>Acompanhe o progresso com <code>docker compose logs -f server</code> (saia com <kbd>Ctrl</kbd>+<kbd>C</kbd> — isso encerra o log, não o container).</p></div>
+        <div class="cmd"><span class="cmd-label">Validar</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>docker compose ps</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada (saída resumida)</span><pre>NAME       IMAGE                      SERVICE    STATUS          PORTS
+bia        bia-server                 server     Up 9 seconds    0.0.0.0:3001-&gt;8080/tcp
+database   postgres:17.1              database   Up 12 seconds   0.0.0.0:5433-&gt;5432/tcp
+redis      valkey/valkey:8.1-alpine   redis      Up 12 seconds   0.0.0.0:6379-&gt;6379/tcp</pre></div>
+        <p>O comando real também traz as colunas <code>COMMAND</code> e <code>CREATED</code>, e repete cada porta na forma IPv6 <code>[::]:3001-&gt;8080/tcp</code>. Para validar sem abrir o navegador, a API responde a versão:</p>
+        <div class="cmd"><span class="cmd-label">A API responde</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>curl http://localhost:3001/api/versao</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Bia 4.3.0</pre></div>
+        <p>Abra <b>http://localhost:3001</b> no navegador do Windows — graças ao <code>localhostForwarding=true</code> do passo 3, a porta publicada dentro do WSL responde direto no host.</p>
+
+        <div class="note n-tip">
+          <b>Entendendo o mapeamento de portas</b>
+          <p>Este é o conceito que separa "copiei o comando" de "entendi a rede". Em <code>3001:8080</code>, o número da <b>esquerda é o host</b> e o da <b>direita é o container</b>.</p>
+        </div>
+        <div class="ascii">
+<pre>
+  Windows            WSL / Docker                    dentro da rede do Docker
+
+  navegador  ---&gt;  0.0.0.0:3001  ---&gt;  server:8080  ---&gt;  database:5432
+                                                            ^
+  DBeaver    ---&gt;  0.0.0.0:5433  ------------------------- +
+                                        (a aplicacao NUNCA passa pela 5433)
+</pre>
+        </div>
+        <div class="note n-tip">
+          <p><b>A aplicação não usa a porta <code>5433</code>.</b> O container <code>server</code> fala com o <code>database</code> pela rede interna do Docker, na porta nativa <code>5432</code>, resolvendo o nome do serviço (<code>DB_HOST=database</code>).</p>
+          <p>A <code>5433</code> existe <b>apenas para o DBeaver</b> acessar o banco de fora — e foi escolhida justamente para não colidir com uma eventual instalação de PostgreSQL no Windows.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Os três containers aparecem <code>Up</code> no <code>docker compose ps</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>curl /api/versao</code> devolveu <code>Bia 4.3.0</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>http://localhost:3001</code> abre no navegador do Windows</span></label></li>
+          <li><label><input type="checkbox"><span>Sei dizer o que é host e o que é container em <code>3001:8080</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-10">
+        <div class="step-top"><a class="step-id" href="#passo-10">10</a><h3>Rodar as migrations do banco</h3><span class="where w-wsl">WSL</span></div>
+        <p>Criar as tabelas da aplicação. O container do PostgreSQL sobe com o banco <code>bia</code> <b>vazio</b> — as tabelas são criadas por um comando à parte.</p>
+        <div class="note n-key"><b>Esta etapa não é opcional</b><p>Sem ela a tabela <code>Tarefas</code> não existe e o cadastro na tela falha — justamente o teste que o desafio pede para comprovar a persistência. É um erro que <i>parece</i> de código, mas é de dados: container de banco no ar não significa schema criado.</p></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>docker compose exec server bash -c 'npx sequelize db:migrate'</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Sequelize CLI [Node: 24.18.0, CLI: 6.6.5, ORM: 6.37.0]
+
+Loaded configuration file "config/database.js".
+== 20210924000838-criar-tarefas: migrating =======
+== 20210924000838-criar-tarefas: migrated (0.130s)</pre></div>
+        <div class="note n-tip"><b>Rodou duas vezes?</b><p>A resposta vira <code>No migrations were executed, database schema was already up to date.</code> — sinal de que o banco já está no estado correto, e <b>não</b> de erro.</p></div>
+        <div class="cmd"><span class="cmd-label">Prova de execução — as tabelas passam a existir</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>docker compose exec database psql -U postgres -d bia -c '\dt'</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>             List of relations
+ Schema |     Name      | Type  |  Owner
+--------+---------------+-------+----------
+ public | SequelizeMeta | table | postgres
+ public | Tarefas       | table | postgres
+(2 rows)</pre></div>
+        <p><code>Tarefas</code> guarda os dados da aplicação; <code>SequelizeMeta</code> é o controle interno de quais migrations já rodaram — é ela que faz a segunda execução do comando não repetir nada.</p>
+        <p>Agora abra <b>http://localhost:3001</b> e <b>cadastre uma tarefa</b>. Ela deve aparecer na lista — e é ela que será usada como prova no passo 12.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A migration <code>criar-tarefas</code> foi aplicada</span></label></li>
+          <li><label><input type="checkbox"><span><code>\dt</code> lista <code>Tarefas</code> e <code>SequelizeMeta</code></span></label></li>
+          <li><label><input type="checkbox"><span>Uma tarefa cadastrada pela tela aparece na lista</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-11">
+        <div class="step-top"><a class="step-id" href="#passo-11">11</a><h3>Conectar o DBeaver ao banco</h3><span class="where w-app">APP</span></div>
+        <p>Acessar o banco de dados do container a partir do Windows, provando que ele está exposto para ferramentas externas. É uma das exigências explícitas do desafio.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo da conexão PostgreSQL</th><th>Valor</th></tr></thead>
+            <tbody>
+              <tr><td>Host</td><td><code>localhost</code></td></tr>
+              <tr><td>Porta</td><td><code>5433</code></td></tr>
+              <tr><td>Database</td><td><code>bia</code></td></tr>
+              <tr><td>Usuário</td><td><code>postgres</code></td></tr>
+              <tr><td>Senha</td><td><code>postgres</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-warn"><b>Credenciais de desenvolvimento local, e só</b><p>Esses valores vêm do <code>compose.yml</code> do projeto (<code>POSTGRES_USER</code>, <code>POSTGRES_PASSWORD</code>, <code>POSTGRES_DB</code>). Nunca use um par <code>postgres/postgres</code> em qualquer ambiente exposto à internet.</p></div>
+        <p>Use <b>Test Connection</b> antes de salvar. Navegando em <code>bia → Esquemas → public → Tabelas</code> (ou <code>Schemas → Tables</code>, se a interface estiver em inglês), a tabela <b><code>Tarefas</code></b> aparece com a tarefa do passo 10 dentro dela. Três coisas nessa tela fecham a exigência do desafio:</p>
+        <div class="out good"><span class="out-label">O que a tela precisa mostrar</span><pre>1. A conexao e "bia" em localhost:5433 - a porta publicada
+   pelo container, e nao a 5432 interna
+2. As tabelas "Tarefas" e "SequelizeMeta" existem, resultado
+   das migrations do passo 10
+3. A grade traz o registro real, com titulo, dia_atividade e
+   createdAt - o mesmo dado gravado em localhost:3001</pre></div>
+        <p>O DBeaver é uma interface gráfica para uma conexão TCP comum — e essa conexão dá para comprovar por linha de comando, o que também ajuda a diagnosticar quando o DBeaver falha.</p>
+        <div class="cmd"><span class="cmd-label">1. A porta 5433 está alcançável a partir do Windows</span><button class="copy" type="button">copiar</button><pre><span class="p">PS&gt; </span>Test-NetConnection -ComputerName localhost -Port 5433</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>ComputerName     : localhost
+RemotePort       : 5433
+TcpTestSucceeded : True</pre></div>
+        <p><code>TcpTestSucceeded : True</code> significa que o <code>localhostForwarding</code> do passo 3 está funcionando e o container está publicando a porta. Se der <code>False</code>, o problema é de rede/container — <b>não</b> do DBeaver.</p>
+        <div class="cmd"><span class="cmd-label">2. O banco responde e tem os dados</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>docker compose exec database psql -U postgres -d bia -c 'SELECT titulo, dia_atividade FROM "Tarefas";'</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — o mesmo registro da grade do DBeaver</span><pre>           titulo           | dia_atividade
+----------------------------+---------------
+ Testando o acesso ao banco | 12/08/2026
+(1 row)</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><b>Test Connection</b> do DBeaver passou em <code>localhost:5433</code></span></label></li>
+          <li><label><input type="checkbox"><span>A tabela <code>Tarefas</code> aparece na árvore do banco <code>bia</code></span></label></li>
+          <li><label><input type="checkbox"><span>O registro cadastrado na tela está na grade de dados</span></label></li>
+          <li><label><input type="checkbox"><span><code>TcpTestSucceeded : True</code> no PowerShell</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-12">
+        <div class="step-top"><a class="step-id" href="#passo-12">12</a><h3>Provar a persistência dos dados</h3><span class="where w-wsl">WSL</span></div>
+        <p>O teste central do desafio: derrubar todo o ambiente e comprovar que os dados continuam existindo. Isso funciona porque o PostgreSQL grava em um <b>volume nomeado</b>, que tem vida independente do container.</p>
+        <div class="cmd"><span class="cmd-label">Onde os dados realmente moram</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>docker volume ls | grep bia</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>local     bia_db</pre></div>
+        <div class="cmd"><span class="cmd-label">O teste, em quatro passos</span><button class="copy" type="button">copiar</button><pre><span class="c"># 1. Confirme que existe uma tarefa cadastrada em http://localhost:3001</span>
+
+<span class="c"># 2. Derrube os containers (o volume permanece)</span>
+<span class="p">$ </span>docker compose down
+
+<span class="c"># 3. Suba tudo de novo</span>
+<span class="p">$ </span>docker compose up -d
+
+<span class="c"># 4. Abra http://localhost:3001 novamente</span></pre></div>
+        <div class="out good"><span class="out-label">O que o down remove — containers e rede, nenhum volume</span><pre> Container bia Removed
+ Container redis Removed
+ Container database Removed
+ Network bia_default Removing
+ Network bia_default Removed</pre></div>
+        <p>A tarefa cadastrada antes do <code>down</code> continua na tela — e você <b>não</b> precisou rodar as migrations de novo. Para conferir direto no banco, sem abrir o navegador:</p>
+        <div class="cmd"><span class="cmd-label">Conferir no banco</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>docker compose exec database psql -U postgres -d bia -c 'SELECT titulo, dia_atividade FROM "Tarefas";'</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — o mesmo registro de antes do down</span><pre>           titulo           | dia_atividade
+----------------------------+---------------
+ Testando o acesso ao banco | 12/08/2026
+(1 row)</pre></div>
+        <p>Mesmo <code>uuid</code>, mesma data de criação. O container foi destruído e recriado; o dado não.</p>
+        <div class="note n-tip"><b>As aspas duplas em <code>"Tarefas"</code> são obrigatórias</b><p>O Sequelize cria a tabela com T maiúsculo, e o PostgreSQL só preserva maiúsculas em identificadores entre aspas. Sem elas o comando falha com <code>relation "tarefas" does not exist</code> — que parece tabela inexistente e é só maiúscula perdida.</p></div>
+        <div class="note n-key">
+          <b>A diferença que importa</b>
+          <p><code>docker compose down</code> → remove containers e rede. <b>Os volumes — e os dados — permanecem.</b></p>
+          <p><code>docker compose down -v</code> → remove <b>também os volumes</b>. Apaga o banco inteiro, e depois disso é preciso repetir o passo 10 (migrations) do zero.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O volume <code>bia_db</code> existe</span></label></li>
+          <li><label><input type="checkbox"><span><code>down</code> seguido de <code>up -d</code> executado</span></label></li>
+          <li><label><input type="checkbox"><span>A tarefa continua na tela, <b>sem</b> repetir as migrations</span></label></li>
+          <li><label><input type="checkbox"><span>Sei a diferença entre <code>down</code> e <code>down -v</code></span></label></li>
+        </ul></div>
+        <details class="fallback">
+          <summary>Parte 1 concluída — parando aqui e voltando depois</summary>
+          <p><b>Pode desligar o notebook.</b> É exatamente o que o passo 12 acabou de provar: os dados estão no volume <code>bia_db</code>, que não depende dos containers nem da máquina estar ligada.</p>
+          <div class="cmd"><span class="cmd-label">Ao retomar</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>cd ~/laboratorios-aws/bia
+<span class="p">$ </span>docker compose up -d
+<span class="p">$ </span>curl http://localhost:3001/api/versao</pre></div>
+          <p><b>Não</b> rode as migrations de novo: elas já estão registradas na <code>SequelizeMeta</code>. E lembre de abrir o Docker Desktop antes — sem o engine no ar, o <code>docker</code> do Ubuntu não tem com quem falar.</p>
+          <div class="note n-tip"><b>Até aqui, custo zero</b><p>Toda a Parte 1 roda na sua máquina. A partir do passo 13 existe uma conta na AWS envolvida — e é por isso que o primeiro passo da Parte 2 é o orçamento, e não um recurso.</p></div>
+        </details>
+      </div>
+    </section>
+
+    <div class="partbar" id="parte-2">
+      <span class="partbar-n">Parte 2 · etapas 13 a 22</span>
+      <h2>Levando para a AWS</h2>
+      <p>
+        Publicar a mesma stack na nuvem, com segurança e custo controlado. A ordem também importa aqui, e é
+        deliberada: <b>orçamento → firewall → identidade → banco → máquina → deploy → destruição</b>. Cada recurso só
+        nasce depois que o anterior está validado — e o laboratório termina destruído.
+      </p>
+    </div>
+
+    <section class="phase" id="p5" data-title="Custo e acesso à AWS" data-part="Parte 2 — Levando para a AWS">
+      <div class="phase-head">
+        <span class="phase-n">FASE 5</span>
+        <div>
+          <h2>Custo primeiro, terminal depois</h2>
+          <p>Nenhum recurso é criado nesta fase. Ela existe para proteger o cartão e para abrir um terminal já autenticado — as duas coisas que evitam o susto na fatura e a credencial vazada.</p>
+        </div>
+        <span class="phase-count" data-count-for="p5"></span>
+      </div>
+
+      <div class="step" id="passo-13">
+        <div class="step-top"><a class="step-id" href="#passo-13">13</a><h3>Conta, Free Tier e Budget</h3><span class="where w-web">CONSOLE</span></div>
+        <p>Proteger o cartão <b>antes</b> de criar qualquer coisa. Esta é a primeira etapa da nuvem por um motivo: recurso esquecido ligado é a forma mais comum de tomar um susto na fatura.</p>
+        <div class="out"><span class="out-label">No Console</span><pre>1. Criar a conta em aws.amazon.com/free  (o Free Tier cobre este laboratorio)
+2. Billing and Cost Management -&gt; Budgets -&gt; Create budget
+3. Monthly cost budget, com um valor baixo (ex.: US$ 5,00)
+4. Cadastrar o seu e-mail para receber o alerta</pre></div>
+        <div class="note n-warn"><b>Defina também a região agora: <code>us-east-1</code> (N. Virginia)</b><p>No canto superior direito do Console. Todos os recursos deste roteiro vivem nela. Recurso criado na região errada simplesmente "some" da tela — e continua sendo cobrado.</p></div>
+        <details class="fallback">
+          <summary>Como confirmar pelo CloudShell (depois do passo 14)</summary>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>aws budgets describe-budgets \
+  --account-id "$(aws sts get-caller-identity --query Account --output text)" \
+  --query 'Budgets[*].[BudgetName,BudgetLimit.Amount,TimeUnit]' --output table</pre></div>
+          <p>O budget criado aparece na tabela com o valor-limite que você definiu.</p>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Conta na AWS criada</span></label></li>
+          <li><label><input type="checkbox"><span>Budget mensal aparece na lista com status <i>OK</i> e alerta por e-mail</span></label></li>
+          <li><label><input type="checkbox"><span>Região do Console está em <code>us-east-1</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-14">
+        <div class="step-top"><a class="step-id" href="#passo-14">14</a><h3>CloudShell e definição da região</h3><span class="where w-cs">CLOUDSHELL</span></div>
+        <p>Abrir um terminal Linux dentro do próprio navegador, já autenticado na sua conta. É por ele que rodam os comandos da AWS CLI, sem instalar nada no notebook.</p>
+        <p>Clique no ícone do <b>CloudShell</b> (<code>&gt;_</code>) na barra superior do Console, ao lado do seletor de região.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Característica</th><th>Valor</th></tr></thead>
+            <tbody>
+              <tr><td>Armazenamento</td><td>1 GB por região</td></tr>
+              <tr><td>Memória</td><td>2 GB</td></tr>
+              <tr><td>Já vem instalado</td><td><code>aws cli</code>, <code>git</code>, <code>python</code>, <code>node</code></td></tr>
+              <tr><td>Custo</td><td>Gratuito</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cmd"><span class="cmd-label">Validar</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>aws sts get-caller-identity
+<span class="p">[cloudshell]$ </span>aws configure get region</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>{
+    "UserId": "AIDAxxxxxxxxxxxxxxxxx",
+    "Account": "xxxxxxxxxxxx",
+    "Arn": "arn:aws:iam::xxxxxxxxxxxx:user/seu-usuario"
+}
+us-east-1</pre></div>
+        <div class="note n-tip"><b>Por que o CloudShell em vez da AWS CLI no notebook</b><p>Ele já vem autenticado. Você não precisa gerar chaves de acesso (<code>AKIA...</code>) e guardá-las na sua máquina — que é exatamente o tipo de credencial que mais vaza em repositórios públicos.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>CloudShell abriu e devolveu um prompt</span></label></li>
+          <li><label><input type="checkbox"><span><code>get-caller-identity</code> mostra a sua conta</span></label></li>
+          <li><label><input type="checkbox"><span><code>aws configure get region</code> devolve <code>us-east-1</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p6" data-title="Segurança antes dos recursos" data-part="Parte 2 — Levando para a AWS">
+      <div class="phase-head">
+        <span class="phase-n">FASE 6</span>
+        <div>
+          <h2>Segurança antes dos recursos</h2>
+          <p>O firewall e o crachá são criados <b>antes</b> da máquina existir. Um Security Group é a barreira de rede; a IAM Role é a identidade. Recurso nasce já protegido, e não protegido depois.</p>
+        </div>
+        <span class="phase-count" data-count-for="p6"></span>
+      </div>
+
+      <div class="step" id="passo-15">
+        <div class="step-top"><a class="step-id" href="#passo-15">15</a><h3>Criar os Security Groups</h3><span class="where w-web">CONSOLE</span></div>
+        <p>Criar as regras de firewall antes da máquina existir. Um Security Group é uma lista do que <b>pode</b> entrar; tudo que não está liberado é bloqueado.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Security Group</th><th>Libera</th><th>Para quem</th><th>Protege</th></tr></thead>
+            <tbody>
+              <tr><td><code>bia-dev</code></td><td>TCP <code>3001</code></td><td><code>0.0.0.0/0</code> (internet)</td><td>A aplicação na EC2</td></tr>
+              <tr><td><code>bia-db</code></td><td>TCP <code>5432</code></td><td>Apenas o SG <code>bia-dev</code></td><td>O banco no RDS</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="out"><span class="out-label">No Console</span><pre>1. EC2 -&gt; Security Groups -&gt; Create security group
+2. Name: bia-dev | Description: Acesso a aplicacao BIA na porta 3001 | VPC: a default
+3. Inbound rules -&gt; Add rule: Type "Custom TCP", Port 3001, Source "Anywhere-IPv4"
+4. Create security group
+5. Repita para o bia-db: Type "PostgreSQL", Port 5432, e em Source escolha
+   "Custom" e selecione o Security Group bia-dev na lista</pre></div>
+        <details class="fallback">
+          <summary>Mesmo passo pelo CloudShell (AWS CLI)</summary>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="c"># Descobrir a VPC padrao</span>
+<span class="p">[cloudshell]$ </span>VPC_ID=$(aws ec2 describe-vpcs --filters Name=isDefault,Values=true \
+  --query 'Vpcs[0].VpcId' --output text)
+
+<span class="c"># Security Group da aplicacao</span>
+<span class="p">[cloudshell]$ </span>SG_APP=$(aws ec2 create-security-group \
+  --group-name bia-dev \
+  --description "Acesso a aplicacao BIA na porta 3001" \
+  --vpc-id "$VPC_ID" --query 'GroupId' --output text)
+
+<span class="p">[cloudshell]$ </span>aws ec2 authorize-security-group-ingress \
+  --group-id "$SG_APP" --protocol tcp --port 3001 --cidr 0.0.0.0/0
+
+<span class="c"># Security Group do banco - a origem e o SG da aplicacao, nao a internet</span>
+<span class="p">[cloudshell]$ </span>SG_DB=$(aws ec2 create-security-group \
+  --group-name bia-db \
+  --description "Acesso ao RDS somente a partir da EC2" \
+  --vpc-id "$VPC_ID" --query 'GroupId' --output text)
+
+<span class="p">[cloudshell]$ </span>aws ec2 authorize-security-group-ingress \
+  --group-id "$SG_DB" --protocol tcp --port 5432 --source-group "$SG_APP"
+
+<span class="p">[cloudshell]$ </span>echo "SG_APP=$SG_APP"
+<span class="p">[cloudshell]$ </span>echo "SG_DB=$SG_DB"</pre></div>
+        </details>
+        <div class="cmd"><span class="cmd-label">Validar as duas portas</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>aws ec2 describe-security-groups --group-names bia-dev bia-db \
+  --query 'SecurityGroups[*].[GroupName,IpPermissions[0].FromPort]' --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>bia-dev   3001
+bia-db    5432</pre></div>
+        <div class="cmd"><span class="cmd-label">Validar que a origem do banco é o outro grupo</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>aws ec2 describe-security-groups --group-names bia-db \
+  --query 'SecurityGroups[0].IpPermissions[0].UserIdGroupPairs[*].GroupId' --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — o ID do grupo bia-dev</span><pre>sg-xxxxxxxxxxxxxxxxx</pre></div>
+        <div class="note n-warn"><b>Se aparecer <code>0.0.0.0/0</code> em <code>IpRanges</code>, a regra está errada</b><p>Significa que o banco foi aberto para a internet e precisa ser corrigido. A entrada do <code>bia-db</code> tem que mostrar o <b>ID do grupo</b> <code>bia-dev</code> como origem, e não um bloco de IPs.</p></div>
+        <div class="note n-tip"><b>Por que o banco não fica aberto para a internet</b><p>Porque ele não precisa. Só a aplicação conversa com ele. Apontar a origem para outro Security Group significa "qualquer máquina que pertença ao grupo <code>bia-dev</code> pode entrar" — mesmo que o IP dela mude.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>bia-dev</code> criado, liberando <code>3001</code> para a internet</span></label></li>
+          <li><label><input type="checkbox"><span><code>bia-db</code> criado, liberando <code>5432</code></span></label></li>
+          <li><label><input type="checkbox"><span>A origem do <code>bia-db</code> é o <b>ID do SG</b> <code>bia-dev</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-16">
+        <div class="step-top"><a class="step-id" href="#passo-16">16</a><h3>Criar a IAM Role de acesso ao SSM</h3><span class="where w-web">CONSOLE</span></div>
+        <p>Criar o "crachá" que a instância vai vestir. Sem ele o Systems Manager nem enxerga a máquina — e você fica sem forma de entrar nela, já que não haverá porta 22.</p>
+        <div class="out"><span class="out-label">No Console</span><pre>1. IAM -&gt; Roles -&gt; Create role
+2. Trusted entity type: AWS service | Use case: EC2 -&gt; Next
+3. Em Permissions, buscar e marcar a policy AmazonSSMManagedInstanceCore -&gt; Next
+4. Role name: role-acesso-ssm -&gt; Create role</pre></div>
+        <details class="fallback">
+          <summary>Mesmo passo pelo CloudShell (AWS CLI)</summary>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="c"># Politica de confianca: quem pode assumir esta role</span>
+<span class="p">[cloudshell]$ </span>cat &gt; trust-policy.json &lt;&lt;'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "Service": "ec2.amazonaws.com" },
+    "Action": "sts:AssumeRole"
+  }]
+}
+EOF
+
+<span class="p">[cloudshell]$ </span>aws iam create-role \
+  --role-name role-acesso-ssm \
+  --assume-role-policy-document file://trust-policy.json
+
+<span class="p">[cloudshell]$ </span>aws iam attach-role-policy \
+  --role-name role-acesso-ssm \
+  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+<span class="c"># O instance profile e o "involucro" que a EC2 realmente anexa</span>
+<span class="p">[cloudshell]$ </span>aws iam create-instance-profile --instance-profile-name role-acesso-ssm
+<span class="p">[cloudshell]$ </span>aws iam add-role-to-instance-profile \
+  --instance-profile-name role-acesso-ssm \
+  --role-name role-acesso-ssm</pre></div>
+        </details>
+        <div class="cmd"><span class="cmd-label">Validar</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>aws iam list-attached-role-policies --role-name role-acesso-ssm</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>AmazonSSMManagedInstanceCore aparece na lista.</pre></div>
+        <div class="note n-tip"><b>Permissão vem antes de conectividade</b><p>Se a instância não aparecer no Session Manager depois de criada, o problema quase nunca é rede — é esta role não ter sido anexada. Guarde essa frase para o passo 19.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Role <code>role-acesso-ssm</code> criada com trust para o serviço EC2</span></label></li>
+          <li><label><input type="checkbox"><span><code>AmazonSSMManagedInstanceCore</code> anexada</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p7" data-title="O banco e a máquina" data-part="Parte 2 — Levando para a AWS">
+      <div class="phase-head">
+        <span class="phase-n">FASE 7</span>
+        <div>
+          <h2>O banco e a máquina</h2>
+          <p>Agora sim, os recursos que custam. O RDS substitui o container de PostgreSQL da Parte 1; a EC2 nasce sem chave <code>.pem</code>, já vestindo o crachá do passo 16.</p>
+        </div>
+        <span class="phase-count" data-count-for="p7"></span>
+      </div>
+
+      <div class="step" id="passo-17">
+        <div class="step-top"><a class="step-id" href="#passo-17">17</a><h3>Provisionar o RDS PostgreSQL</h3><span class="where w-web">CONSOLE</span></div>
+        <p>Criar o banco gerenciado que substitui o container de PostgreSQL do ambiente local. A partir daqui a aplicação passa a ser <b>descartável</b> — os dados moram fora dela.</p>
+        <div class="out"><span class="out-label">No Console</span><pre>1. RDS -&gt; Databases -&gt; Create database
+2. Method: Standard create | Engine: PostgreSQL
+3. Templates: Free tier
+4. DB instance identifier: bia-db
+5. Master username: postgres | Master password: defina uma senha e GUARDE
+6. Instance configuration: db.t3.micro
+7. Connectivity: Public access = No, e em VPC security group escolha bia-db
+8. Additional configuration -&gt; Initial database name: bia
+9. Create database  (leva alguns minutos)</pre></div>
+        <div class="note n-key"><b>O item 8 é obrigatório</b><p>A aplicação BIA tem o nome do banco fixo no código como <code>bia</code> (em <code>config/database.js</code>). Se você deixar o <i>initial database name</i> em branco, o RDS sobe <b>sem nenhum banco criado</b> e a aplicação não conecta — com um erro que parece de rede.</p></div>
+        <details class="fallback">
+          <summary>Mesmo passo pelo CloudShell (AWS CLI)</summary>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>SG_DB=$(aws ec2 describe-security-groups --group-names bia-db \
+  --query 'SecurityGroups[0].GroupId' --output text)
+
+<span class="p">[cloudshell]$ </span>aws rds create-db-instance \
+  --db-instance-identifier bia-db \
+  --db-instance-class db.t3.micro \
+  --engine postgres \
+  --master-username postgres \
+  --master-user-password 'TROQUE_ESTA_SENHA' \
+  --allocated-storage 20 \
+  --db-name bia \
+  --vpc-security-group-ids "$SG_DB" \
+  --no-publicly-accessible \
+  --backup-retention-period 0
+
+<span class="c"># Acompanhar ate ficar "available"</span>
+<span class="p">[cloudshell]$ </span>aws rds wait db-instance-available --db-instance-identifier bia-db</pre></div>
+        </details>
+        <div class="cmd"><span class="cmd-label">Validar — status, nome do banco e endpoint de uma vez</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>aws rds describe-db-instances --db-instance-identifier bia-db \
+  --query 'DBInstances[0].[DBInstanceStatus,DBName,Endpoint.Address,PubliclyAccessible]' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — nesta ordem</span><pre>available
+bia
+bia-db.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com
+False</pre></div>
+        <div class="note n-warn"><b>Se <code>DBName</code> vier vazio</b><p>O <i>initial database name</i> não foi preenchido, e a aplicação não vai conectar. Volte ao item 8 — num RDS já criado, o caminho é criar o database à mão depois de conectar nele.</p></div>
+        <div class="note n-key"><b>Guarde o endpoint</b><p>Aquele endereço <code>bia-db.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com</code> é o <code>DB_HOST</code> do passo 20. A senha do master também — ela não é recuperável depois.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Status <code>available</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>DBName</code> = <code>bia</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>PubliclyAccessible</code> = <code>False</code></span></label></li>
+          <li><label><input type="checkbox"><span>Endpoint e senha anotados em lugar seguro</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-18">
+        <div class="step-top"><a class="step-id" href="#passo-18">18</a><h3>Lançar a instância EC2</h3><span class="where w-web">CONSOLE</span></div>
+        <p>Criar a máquina virtual que vai rodar o container da aplicação — <b>sem gerar nenhuma chave <code>.pem</code></b>. O acesso virá do SSM, no passo 19.</p>
+        <div class="out"><span class="out-label">No Console</span><pre>1. EC2 -&gt; Instances -&gt; Launch instances
+2. Name: bia-dev
+3. AMI: Amazon Linux 2023   (ja vem com o SSM Agent instalado)
+4. Instance type: t3.micro
+5. Key pair: "Proceed without a key pair"   &lt;- e isso mesmo
+6. Network settings -&gt; Select existing security group -&gt; bia-dev
+7. Advanced details -&gt; IAM instance profile -&gt; role-acesso-ssm
+8. Launch instance</pre></div>
+        <details class="fallback">
+          <summary>Mesmo passo pelo CloudShell (AWS CLI)</summary>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>SG_APP=$(aws ec2 describe-security-groups --group-names bia-dev \
+  --query 'SecurityGroups[0].GroupId' --output text)
+
+<span class="p">[cloudshell]$ </span>AMI_ID=$(aws ssm get-parameters \
+  --names /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+  --query 'Parameters[0].Value' --output text)
+
+<span class="p">[cloudshell]$ </span>aws ec2 run-instances \
+  --image-id "$AMI_ID" \
+  --instance-type t3.micro \
+  --security-group-ids "$SG_APP" \
+  --iam-instance-profile Name=role-acesso-ssm \
+  --placement AvailabilityZone=us-east-1a \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=bia-dev}]'</pre></div>
+        </details>
+        <div class="cmd"><span class="cmd-label">Validar</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>aws ec2 describe-instances --filters Name=tag:Name,Values=bia-dev \
+  --query 'Reservations[*].Instances[*].[InstanceId,State.Name,InstanceType,Placement.AvailabilityZone]' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>i-xxxxxxxxxxxxxxxxx   running   t3.micro   us-east-1a</pre></div>
+        <p>No Console, a instância aparece como <b>Running</b> com <b>3/3 checks passed</b>.</p>
+        <div class="note n-tip"><b>Por que Amazon Linux 2023</b><p>Ele já traz o SSM Agent ativo. Se preferir Ubuntu, saiba que o agente <b>não</b> vem ativo por padrão em todas as AMIs — seria preciso instalá-lo com <code>snap install amazon-ssm-agent</code>. O Amazon Linux remove uma fonte de erro logo no começo.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Instância <code>bia-dev</code> <code>running</code>, <code>t3.micro</code></span></label></li>
+          <li><label><input type="checkbox"><span>Lançada <b>sem</b> key pair</span></label></li>
+          <li><label><input type="checkbox"><span>Security group <code>bia-dev</code> e instance profile <code>role-acesso-ssm</code> anexados</span></label></li>
+          <li><label><input type="checkbox"><span>3/3 status checks passaram</span></label></li>
+        </ul></div>
+        <details class="fallback">
+          <summary>Parando aqui e voltando depois</summary>
+          <div class="note n-warn"><b>Desligar o notebook não pausa a AWS</b><p>A EC2 e o RDS acabaram de nascer e seguem <b>de pé e cobrando</b>, mesmo com a sua máquina desligada e o navegador fechado. Não existe "pausa automática".</p><p>Se a intenção é parar por mais de algumas horas, as opções honestas são duas: parar a instância e o RDS pelo Console, ou ir direto ao <a href="#passo-22">passo 22</a> e destruir o laboratório — refazer a Parte 2 do zero leva menos de uma hora, com este guia aberto.</p></div>
+          <p>Se parar a instância, ao religar ela volta com <b>outro IP público</b> — o que obriga a refazer o <code>sed</code> do <code>VITE_API_URL</code> e reconstruir a imagem (passo 20). É exatamente o problema que um Load Balancer resolve em produção: o endereço deixa de depender da máquina.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="phase" id="p8" data-title="Entrar sem SSH e publicar" data-part="Parte 2 — Levando para a AWS">
+      <div class="phase-head">
+        <span class="phase-n">FASE 8</span>
+        <div>
+          <h2>Entrar sem SSH e publicar a aplicação</h2>
+          <p>O acesso administrativo passa por IAM, não por chave privada. E o deploy repete a Parte 1 com uma diferença que quebra o laboratório se for esquecida: a URL da API é compilada dentro da imagem.</p>
+        </div>
+        <span class="phase-count" data-count-for="p8"></span>
+      </div>
+
+      <div class="step" id="passo-19">
+        <div class="step-top"><a class="step-id" href="#passo-19">19</a><h3>Conectar na EC2 via SSM Session Manager</h3><span class="where w-web">CONSOLE</span></div>
+        <p>Abrir um terminal na instância pelo navegador: sem SSH, sem porta 22 e sem chave privada. Todo o acesso é autorizado por IAM — auditável e revogável.</p>
+        <div class="ascii">
+<pre>
+  Voce  ---&gt;  Console / CloudShell  ---&gt;  SSM Systems Manager
+                                                |
+                                                | canal de saida iniciado
+                                                | pelo agente da instancia
+                                                v
+                                          EC2 bia-dev  (dentro da VPC)
+
+  Nenhuma porta 22 aberta. Nenhum arquivo .pem. Quem autoriza e o IAM.
+</pre>
+        </div>
+        <p><b>Pelo Console:</b> selecione a instância <code>bia-dev</code> → <b>Connect</b> → aba <b>Session Manager</b> → <b>Connect</b>.</p>
+        <details class="fallback">
+          <summary>Mesmo passo pelo CloudShell (AWS CLI)</summary>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>INSTANCE_ID=$(aws ec2 describe-instances \
+  --filters Name=tag:Name,Values=bia-dev Name=instance-state-name,Values=running \
+  --query 'Reservations[0].Instances[0].InstanceId' --output text)
+
+<span class="p">[cloudshell]$ </span>aws ssm start-session --target "$INSTANCE_ID"</pre></div>
+        </details>
+        <div class="cmd"><span class="cmd-label">A verificação mais útil da Parte 2 — ela prova que a role do passo 16 funcionou</span><button class="copy" type="button">copiar</button><pre><span class="p">[cloudshell]$ </span>aws ssm describe-instance-information \
+  --query 'InstanceInformationList[*].[InstanceId,PingStatus,PlatformName]' --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>i-xxxxxxxxxxxxxxxxx   Online   Amazon Linux</pre></div>
+        <div class="note n-warn"><b>Lista vazia é o sintoma clássico de role ausente ou errada</b><p>Não é problema de rede. Primeiro espere 2 a 3 minutos após o boot — o agente leva um tempo para se registrar. Se continuar ausente, confira em <b>EC2 → Instance → Security → IAM Role</b> se a <code>role-acesso-ssm</code> do passo 16 está anexada.</p></div>
+        <div class="cmd"><span class="cmd-label">Dentro da sessão</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>whoami        <span class="c"># ssm-user</span>
+<span class="p">$ </span>sudo -i       <span class="c"># virar root para os proximos comandos</span></pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>describe-instance-information</code> mostra <code>PingStatus = Online</code></span></label></li>
+          <li><label><input type="checkbox"><span>A sessão abriu e o <code>whoami</code> respondeu <code>ssm-user</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>sudo -i</code> executado — o prompt virou <code>#</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-20">
+        <div class="step-top"><a class="step-id" href="#passo-20">20</a><h3>Fazer o deploy da BIA na EC2</h3><span class="where w-ec2">BIA-DEV</span></div>
+        <p>Instalar o Docker na instância, construir a imagem e subir o container apontando para o RDS. Aqui sobe <b>apenas a aplicação</b> — o banco agora é o RDS, e o container de PostgreSQL não é mais necessário.</p>
+        <div class="cmd"><span class="cmd-label">1 e 2 · Instalar Docker e Git, clonar a aplicação</span><button class="copy" type="button">copiar</button><pre><span class="p">[root@ip ~]# </span>dnf update -y
+<span class="p">[root@ip ~]# </span>dnf install -y docker git
+<span class="p">[root@ip ~]# </span>systemctl enable --now docker
+
+<span class="p">[root@ip ~]# </span>cd /opt
+<span class="p">[root@ip ~]# </span>git clone https://github.com/henrylle/bia
+<span class="p">[root@ip ~]# </span>cd bia</pre></div>
+        <div class="note n-key"><b>O ajuste obrigatório antes de construir a imagem</b><p>Este é o erro mais comum de quem chega até aqui: a página abre normalmente, mas o formulário <b>não salva nada</b>.</p><p>O motivo é que o <code>Dockerfile</code> da BIA compila o React com <code>VITE_API_URL=http://localhost:3001</code> — e <code>localhost</code>, no navegador de quem acessa, é o computador <i>dele</i>, não a EC2.</p></div>
+        <div class="cmd"><span class="cmd-label">3 · Trocar a URL da API pelo IP público da instância</span><button class="copy" type="button">copiar</button><pre><span class="p">[root@ip ~]# </span>IP_PUBLICO=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+<span class="p">[root@ip ~]# </span>echo "IP publico da instancia: $IP_PUBLICO"
+
+<span class="p">[root@ip ~]# </span>sed -i "s|VITE_API_URL=http://localhost:3001|VITE_API_URL=http://$IP_PUBLICO:3001|" Dockerfile
+<span class="p">[root@ip ~]# </span>grep VITE_API_URL Dockerfile    <span class="c"># conferir que o IP entrou</span></pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — o IP no lugar de localhost</span><pre>ENV VITE_API_URL=http://xx.xx.xx.xx:3001</pre></div>
+        <div class="cmd"><span class="cmd-label">4, 5 e 6 · Construir, subir apontando para o RDS e criar as tabelas</span><button class="copy" type="button">copiar</button><pre><span class="c"># 4. Construir a imagem</span>
+<span class="p">[root@ip ~]# </span>docker build -t bia:latest .
+
+<span class="c"># 5. Subir o container com as variaveis do RDS</span>
+<span class="p">[root@ip ~]# </span>docker run -d --name bia --restart unless-stopped -p 3001:8080 \
+  -e DB_HOST='&lt;ENDPOINT-DO-RDS&gt;' \
+  -e DB_PORT=5432 \
+  -e DB_USER=postgres \
+  -e DB_PWD='&lt;SENHA-DO-RDS&gt;' \
+  bia:latest
+
+<span class="c"># 6. Criar as tabelas no RDS (o mesmo passo 10, agora na nuvem)</span>
+<span class="p">[root@ip ~]# </span>docker exec bia bash -c 'npx sequelize db:migrate'</pre></div>
+        <div class="note n-key"><b><code>DB_PORT=5432</code> é obrigatório</b><p>Se a variável não for informada, a aplicação assume <code>5433</code> — o valor do ambiente local — e a conexão com o RDS falha por <b>timeout</b>, sem mensagem de erro útil.</p></div>
+        <div class="note n-tip"><b>Sobre SSL: não precisa configurar nada</b><p>A aplicação detecta que o <code>DB_HOST</code> não é <code>localhost</code> nem <code>database</code> e liga o SSL automaticamente — que é o que o RDS exige por padrão.</p></div>
+        <div class="cmd"><span class="cmd-label">Validar</span><button class="copy" type="button">copiar</button><pre><span class="p">[root@ip ~]# </span>docker ps
+<span class="p">[root@ip ~]# </span>docker logs bia --tail 30
+<span class="p">[root@ip ~]# </span>curl -s http://localhost:3001/api/versao</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Os logs mostram o servidor escutando na porta 8080,
+sem erros de conexao com o banco. E o curl devolve:
+
+Bia 4.3.0</pre></div>
+        <div class="note n-tip"><b>O <code>curl</code> responde dentro da instância mas o navegador não abre pelo IP público?</b><p>Então o problema é o Security Group do passo 15 — e não a aplicação. A aplicação já provou que está de pé.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Docker instalado e ativo na instância</span></label></li>
+          <li><label><input type="checkbox"><span><code>grep VITE_API_URL</code> mostra o <b>IP público</b>, não <code>localhost</code></span></label></li>
+          <li><label><input type="checkbox"><span>Imagem construída e container no ar com <code>DB_PORT=5432</code></span></label></li>
+          <li><label><input type="checkbox"><span>Migrations rodadas contra o RDS</span></label></li>
+          <li><label><input type="checkbox"><span><code>curl localhost:3001/api/versao</code> devolveu <code>Bia 4.3.0</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-21">
+        <div class="step-top"><a class="step-id" href="#passo-21">21</a><h3>Validar o resultado na nuvem</h3><span class="where w-web">NAVEGADOR</span></div>
+        <p>O teste final: usar a aplicação pelo IP público e confirmar que o dado foi parar no RDS — a mesma prova do passo 12, agora com o banco fora da máquina.</p>
+        <div class="out"><span class="out-label">O que fazer</span><pre>1. Pegue o IPv4 publico em EC2 -&gt; Instances -&gt; bia-dev
+2. Acesse http://&lt;IP-PUBLICO-DA-EC2&gt;:3001 no navegador
+3. Cadastre uma tarefa
+4. Recarregue a pagina (F5) - ela continua la</pre></div>
+        <p>A tarefa continua depois do <code>F5</code> porque foi gravada no RDS, e não na memória do container. Para uma prova adicional, reinicie o container:</p>
+        <div class="cmd"><span class="cmd-label">Prova adicional — o container morre, o dado não</span><button class="copy" type="button">copiar</button><pre><span class="p">[root@ip ~]# </span>docker restart bia</pre></div>
+        <div class="cmd"><span class="cmd-label">Confirmar de fora da AWS, do seu próprio terminal</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>curl -s http://&lt;IP-PÚBLICO-DA-EC2&gt;:3001/api/versao</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>Bia 4.3.0</pre></div>
+        <div class="note n-tip"><b>O que essa resposta fecha</b><p>O circuito completo: <b>internet → Security Group <code>bia-dev</code> → EC2 → container → porta 8080 → RDS</b>. Cada peça criada da fase 6 em diante aparece nesse caminho.</p></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>A aplicação abre em <code>http://&lt;IP-PÚBLICO&gt;:3001</code></span></label></li>
+          <li><label><input type="checkbox"><span>Uma tarefa cadastrada sobrevive ao <code>F5</code></span></label></li>
+          <li><label><input type="checkbox"><span>E sobrevive também ao <code>docker restart bia</code></span></label></li>
+          <li><label><input type="checkbox"><span>O <code>curl</code> externo respondeu <code>Bia 4.3.0</code></span></label></li>
+          <li><label><input type="checkbox"><span>Print da tela guardado como evidência antes de destruir tudo</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p9" data-title="Destruir o laboratório" data-part="Parte 2 — Levando para a AWS">
+      <div class="phase-head">
+        <span class="phase-n">FASE 9</span>
+        <div>
+          <h2>Destruir o laboratório</h2>
+          <p>Laboratório concluído é laboratório destruído. O custo na nuvem só para quando a infraestrutura deixa de existir — e isso faz parte do trabalho, não é um extra.</p>
+        </div>
+        <span class="phase-count" data-count-for="p9"></span>
+      </div>
+
+      <div class="step" id="passo-22">
+        <div class="step-top"><a class="step-id" href="#passo-22">22</a><h3>Apagar tudo, na ordem certa</h3><span class="where w-web">CONSOLE</span></div>
+        <p>A ordem é o inverso da criação: primeiro o que consome, depois o que protege. Security Group em uso não pode ser apagado — por isso ele vem depois da EC2 e do RDS.</p>
+        <div class="note n-warn"><b>Antes de apagar, guarde as evidências</b><p>Os prints do passo 18 (instância <i>Running</i>) e do passo 21 (aplicação respondendo pelo IP público) são a prova de que a Parte 2 aconteceu. Depois da destruição não há como refazê-los sem recriar tudo.</p></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>#</th><th>Recurso</th><th>Onde</th><th>Atenção</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Instância EC2 <code>bia-dev</code></td><td>EC2 → Instances → Instance state → <b>Terminate</b></td><td>—</td></tr>
+              <tr><td>2</td><td>Banco RDS <code>bia-db</code></td><td>RDS → Databases → Actions → <b>Delete</b></td><td><b>Desmarque "Create final snapshot"</b> — snapshots também são cobrados</td></tr>
+              <tr><td>3</td><td>Security Groups <code>bia-dev</code> e <code>bia-db</code></td><td>EC2 → Security Groups</td><td>Só depois que a EC2 e o RDS sumirem</td></tr>
+              <tr><td>4</td><td>IAM Role <code>role-acesso-ssm</code></td><td>IAM → Roles</td><td>Se não for reaproveitar em outro laboratório</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <details class="fallback">
+          <summary>Mesmo passo pelo CloudShell (AWS CLI)</summary>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="c"># 1. EC2</span>
+<span class="p">[cloudshell]$ </span>INSTANCE_ID=$(aws ec2 describe-instances \
+  --filters Name=tag:Name,Values=bia-dev Name=instance-state-name,Values=running \
+  --query 'Reservations[0].Instances[0].InstanceId' --output text)
+<span class="p">[cloudshell]$ </span>aws ec2 terminate-instances --instance-ids "$INSTANCE_ID"
+<span class="p">[cloudshell]$ </span>aws ec2 wait instance-terminated --instance-ids "$INSTANCE_ID"
+
+<span class="c"># 2. RDS - sem snapshot final</span>
+<span class="p">[cloudshell]$ </span>aws rds delete-db-instance --db-instance-identifier bia-db \
+  --skip-final-snapshot --delete-automated-backups
+<span class="p">[cloudshell]$ </span>aws rds wait db-instance-deleted --db-instance-identifier bia-db
+
+<span class="c"># 3. Security Groups</span>
+<span class="p">[cloudshell]$ </span>aws ec2 delete-security-group --group-name bia-db
+<span class="p">[cloudshell]$ </span>aws ec2 delete-security-group --group-name bia-dev
+
+<span class="c"># 4. IAM</span>
+<span class="p">[cloudshell]$ </span>aws iam remove-role-from-instance-profile \
+  --instance-profile-name role-acesso-ssm --role-name role-acesso-ssm
+<span class="p">[cloudshell]$ </span>aws iam delete-instance-profile --instance-profile-name role-acesso-ssm
+<span class="p">[cloudshell]$ </span>aws iam detach-role-policy --role-name role-acesso-ssm \
+  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+<span class="p">[cloudshell]$ </span>aws iam delete-role --role-name role-acesso-ssm</pre></div>
+        </details>
+        <div class="out good"><span class="out-label">Resposta esperada — no dia seguinte</span><pre>Budget e Cost Explorer com o custo do laboratorio zerado.</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Evidências (prints) guardadas antes de apagar</span></label></li>
+          <li><label><input type="checkbox"><span>EC2 <code>bia-dev</code> <i>terminated</i></span></label></li>
+          <li><label><input type="checkbox"><span>RDS <code>bia-db</code> apagado, <b>sem</b> snapshot final</span></label></li>
+          <li><label><input type="checkbox"><span>Security Groups removidos</span></label></li>
+          <li><label><input type="checkbox"><span>IAM Role e instance profile removidos</span></label></li>
+          <li><label><input type="checkbox"><span>Custo conferido no Budget / Cost Explorer no dia seguinte</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="phase" id="p-entrega" data-title="Checklist e provas" data-badge-short="PROVAS" data-part="Fechamento">
+      <div class="phase-head">
+        <span class="phase-n">ENTREGA</span>
+        <div>
+          <h2>Checklist de entrega e provas de execução</h2>
+          <p>O fechamento: os 22 itens do desafio numa lista só, e onde está a evidência de cada exigência.</p>
+        </div>
+        <span class="phase-count" data-count-for="p-entrega"></span>
+      </div>
+
+      <div class="step" id="entrega-checklist">
+        <div class="step-top"><a class="step-id" href="#entrega-checklist">✓</a><h3>Os 22 itens</h3></div>
+        <div class="check"><div class="check-label">Parte 1 — ambiente local</div><ul>
+          <li><label><input type="checkbox"><span><b>1.</b> WSL 2 instalado e validado <span class="mono">(passos 1–2)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>2.</b> Ubuntu 24.04 LTS como distro de trabalho <span class="mono">(passo 2)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>3.</b> <code>.wslconfig</code> limitando RAM, CPU e swap <span class="mono">(passo 3)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>4.</b> Git instalado e configurado no Ubuntu <span class="mono">(passo 4)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>5.</b> Autenticação SSH no GitHub funcionando <span class="mono">(passo 5)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>6.</b> VS Code conectado ao WSL <span class="mono">(passo 6)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>7.</b> Docker Desktop integrado ao WSL 2 <span class="mono">(passo 7)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>8.</b> Docker Compose validado <span class="mono">(passo 8)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>9.</b> Projeto BIA rodando em <code>localhost:3001</code> <span class="mono">(passo 9)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>10.</b> Migrations aplicadas e tabela <code>Tarefas</code> criada <span class="mono">(passo 10)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>11.</b> DBeaver conectado ao PostgreSQL em <code>5433</code> <span class="mono">(passo 11)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>12.</b> Persistência de dados comprovada <span class="mono">(passo 12)</span></span></label></li>
+        </ul></div>
+        <div class="check"><div class="check-label">Parte 2 — AWS</div><ul>
+          <li><label><input type="checkbox"><span><b>13.</b> AWS Budget configurado antes de tudo <span class="mono">(passo 13)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>14.</b> CloudShell operacional em <code>us-east-1</code> <span class="mono">(passo 14)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>15.</b> Security Groups <code>bia-dev</code> e <code>bia-db</code> <span class="mono">(passo 15)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>16.</b> IAM Role <code>role-acesso-ssm</code> <span class="mono">(passo 16)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>17.</b> RDS PostgreSQL provisionado <span class="mono">(passo 17)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>18.</b> EC2 <code>bia-dev</code> lançada sem key pair <span class="mono">(passo 18)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>19.</b> Acesso à instância via SSM Session Manager <span class="mono">(passo 19)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>20.</b> Aplicação publicada na EC2 conectada ao RDS <span class="mono">(passo 20)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>21.</b> Validação pelo IP público <span class="mono">(passo 21)</span></span></label></li>
+          <li><label><input type="checkbox"><span><b>22.</b> Laboratório destruído e custo conferido <span class="mono">(passo 22)</span></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="entrega-provas">
+        <div class="step-top"><a class="step-id" href="#entrega-provas">✓</a><h3>Onde está a evidência de cada exigência</h3></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Exigência do desafio</th><th>Evidência</th><th>Tipo</th><th>Onde</th></tr></thead>
+            <tbody>
+              <tr><td>Ambiente Linux com Docker funcionando</td><td><code>docker version</code> exibindo <b>Client e Server</b></td><td>comando</td><td><a href="#passo-7">7</a></td></tr>
+              <tr><td>Projeto BIA rodando localmente</td><td><code>docker compose ps</code> + <code>curl /api/versao</code> → <code>Bia 4.3.0</code></td><td>saída real</td><td><a href="#passo-9">9</a></td></tr>
+              <tr><td>Schema do banco criado</td><td><code>sequelize db:migrate</code> + <code>\dt</code> listando <code>Tarefas</code> e <code>SequelizeMeta</code></td><td>saída real</td><td><a href="#passo-10">10</a></td></tr>
+              <tr><td><b>Banco acessível externamente</b></td><td>DBeaver em <code>localhost:5433</code> com o registro + <code>TcpTestSucceeded : True</code></td><td>captura + saída</td><td><a href="#passo-11">11</a></td></tr>
+              <tr><td><b>Persistência dos dados</b></td><td>Volume <code>bia_db</code> intacto após o <code>down</code>; registro presente após o <code>up</code>, sem repetir migrations</td><td>saída real</td><td><a href="#passo-12">12</a></td></tr>
+              <tr><td>Controle de custo antes dos recursos</td><td><code>aws budgets describe-budgets</code></td><td>verificação</td><td><a href="#passo-13">13</a></td></tr>
+              <tr><td>Rede restrita por Security Group</td><td><code>describe-security-groups</code>: <code>3001</code> aberto e <code>5432</code> só para o SG da aplicação</td><td>verificação</td><td><a href="#passo-15">15</a></td></tr>
+              <tr><td>Banco gerenciado no RDS</td><td><code>describe-db-instances</code> → <code>available</code>, <code>DBName = bia</code>, <code>PubliclyAccessible = False</code></td><td>verificação</td><td><a href="#passo-17">17</a></td></tr>
+              <tr><td>Instância EC2 provisionada</td><td>Console (Running, 3/3 checks) + <code>describe-instances</code></td><td>captura + verificação</td><td><a href="#passo-18">18</a></td></tr>
+              <tr><td>Acesso sem SSH</td><td><code>describe-instance-information</code> → <code>PingStatus = Online</code></td><td>verificação</td><td><a href="#passo-19">19</a></td></tr>
+              <tr><td>Aplicação publicada na nuvem</td><td>Captura pelo IP público + <code>curl /api/versao</code> externo</td><td>captura + verificação</td><td><a href="#passo-21">21</a></td></tr>
+              <tr><td>Ambiente destruído ao final</td><td>Checklist de destruição e conferência no Cost Explorer</td><td>procedimento</td><td><a href="#passo-22">22</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-tip">
+          <b>Como ler a coluna "Tipo"</b>
+          <p><b>saída real</b> — texto efetivamente capturado com o ambiente no ar. · <b>captura</b> — screenshot tirado durante a execução. · <b>verificação</b> — comando para <b>você</b> rodar e validar o seu próprio ambiente.</p>
+          <p>Os recursos da AWS deste laboratório foram destruídos no passo 22 — por isso, na Parte 2, o guia entrega um comando que você pode executar em vez de um print que não comprova o <i>seu</i> setup.</p>
+        </div>
+      </div>
+
+      <div class="step" id="entrega-aprendizado">
+        <div class="step-top"><a class="step-id" href="#entrega-aprendizado">✓</a><h3>As oito lições que este desafio deixa</h3></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Lição</th><th>O que ela significa na prática</th></tr></thead>
+            <tbody>
+              <tr><td><b>Mapeamento de portas não é detalhe</b></td><td><code>3001:8080</code> é host:container, e a aplicação fala com o banco pela porta <i>interna</i> (<code>5432</code>), não pela publicada (<code>5433</code>)</td></tr>
+              <tr><td><b>Persistência mora no volume</b></td><td><code>down</code> e <code>down -v</code> parecem o mesmo comando até a primeira vez que os dados somem</td></tr>
+              <tr><td><b>O ambiente sobe, mas o schema não</b></td><td>Container de banco no ar não significa aplicação funcionando: as migrations são uma etapa própria</td></tr>
+              <tr><td><b>Dimensionar recursos é arquitetura</b></td><td>WSL 2 no lugar de uma VM e o teto de 3 GB foram o que tornaram o laboratório possível em 8 GB de RAM</td></tr>
+              <tr><td><b>Acesso sem SSH é mais seguro <i>e</i> mais simples</b></td><td>SSM Agent + IAM Role: sem porta 22, sem chave privada circulando, e todo acesso auditável</td></tr>
+              <tr><td><b>Permissão vem antes de conectividade</b></td><td>Uma EC2 sem a role correta não aparece no Session Manager — não é rede, é IAM</td></tr>
+              <tr><td><b>O que é build-time não se corrige em runtime</b></td><td>A URL da API do front-end é compilada dentro da imagem: mudar variável no <code>docker run</code> não resolve, é preciso reconstruir</td></tr>
+              <tr><td><b>Custo é responsabilidade técnica</b></td><td>Budget antes do primeiro recurso e destruição ao final fazem parte do trabalho</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="phase" id="p-erros" data-title="Quando der errado" data-badge-short="ERROS" data-part="Fechamento">
+      <div class="phase-head">
+        <span class="phase-n">ERROS</span>
+        <div>
+          <h2>Quando der errado</h2>
+          <p>Os sintomas que aparecem neste laboratório, o que cada um está realmente dizendo, e o passo onde se resolve.</p>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Sintoma</th><th>O que está acontecendo</th><th>Onde resolver</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>docker version</code> mostra só o <i>Client</i></td>
+              <td>A integração do Docker Desktop com o WSL não foi habilitada</td>
+              <td><a href="#passo-7">Passo 7</a> — marcar <code>Ubuntu-24.04</code> e reiniciar a distro</td>
+            </tr>
+            <tr>
+              <td>Erro de conexão com a API no <code>docker version</code></td>
+              <td>O Docker Desktop não está em execução — a instalação não está quebrada</td>
+              <td><a href="#passo-1">Passo 1</a> — abrir o Docker Desktop e repetir</td>
+            </tr>
+            <tr>
+              <td><code>docker: command not found</code> no Ubuntu</td>
+              <td>A distro foi iniciada antes do <i>Apply &amp; Restart</i> do Docker Desktop</td>
+              <td><code>wsl --terminate Ubuntu-24.04</code> e abrir de novo</td>
+            </tr>
+            <tr>
+              <td><code>localhost:3001</code> não abre no Windows</td>
+              <td><code>localhostForwarding</code> ausente no <code>.wslconfig</code></td>
+              <td><a href="#passo-3">Passo 3</a> — conferir o arquivo e rodar <code>wsl --shutdown</code></td>
+            </tr>
+            <tr>
+              <td><code>docker compose up -d</code> demora demais</td>
+              <td>Primeira build compilando o front-end — normal em máquinas modestas</td>
+              <td>Não é erro: acompanhe com <code>docker compose logs -f server</code></td>
+            </tr>
+            <tr>
+              <td>A página abre, mas cadastrar tarefa dá erro</td>
+              <td>As migrations não foram rodadas: a tabela <code>Tarefas</code> não existe</td>
+              <td><a href="#passo-10">Passo 10</a></td>
+            </tr>
+            <tr>
+              <td><code>No migrations were executed, database schema was already up to date</code></td>
+              <td><b>Não é erro</b>: o banco já está no estado correto e a <code>SequelizeMeta</code> registrou isso</td>
+              <td>Siga em frente</td>
+            </tr>
+            <tr>
+              <td>DBeaver: <i>connection refused</i> na <code>5433</code></td>
+              <td>O container <code>database</code> está fora do ar</td>
+              <td><a href="#passo-9">Passo 9</a> — a porta <code>5433-&gt;5432</code> precisa aparecer no <code>ps</code></td>
+            </tr>
+            <tr>
+              <td><code>relation "tarefas" does not exist</code></td>
+              <td>Faltaram as aspas duplas: a tabela chama-se <code>"Tarefas"</code>, com T maiúsculo</td>
+              <td><a href="#passo-12">Passo 12</a></td>
+            </tr>
+            <tr>
+              <td>Os dados sumiram depois de reiniciar</td>
+              <td>Foi usado <code>docker compose down -v</code> — o <code>-v</code> apaga os volumes</td>
+              <td><a href="#passo-10">Passo 10</a> — repetir as migrations do zero</td>
+            </tr>
+            <tr>
+              <td>A EC2 não aparece no Session Manager</td>
+              <td>IAM Role não anexada, ou boot recente demais</td>
+              <td><a href="#passo-16">Passo 16</a> — conferir a role; aguardar 2–3 min após o <i>Running</i></td>
+            </tr>
+            <tr>
+              <td>RDS <i>available</i>, mas a aplicação não conecta</td>
+              <td>O database <code>bia</code> não foi criado, ou o SG está errado</td>
+              <td><a href="#passo-17">Passo 17</a> — <i>initial database name</i> = <code>bia</code> e SG <code>bia-db</code></td>
+            </tr>
+            <tr>
+              <td>Na AWS a página abre mas não salva nada</td>
+              <td><code>VITE_API_URL</code> foi compilado apontando para <code>localhost</code></td>
+              <td><a href="#passo-20">Passo 20</a>, item 3 — refazer o <code>sed</code> e <b>reconstruir a imagem</b></td>
+            </tr>
+            <tr>
+              <td>Na AWS, timeout ao conectar no banco</td>
+              <td><code>DB_PORT</code> não informado: a aplicação assume <code>5433</code></td>
+              <td><a href="#passo-20">Passo 20</a> — incluir <code>-e DB_PORT=5432</code> no <code>docker run</code></td>
+            </tr>
+            <tr>
+              <td><code>Database bia already exists</code></td>
+              <td><b>Não é erro</b>: o database já tinha sido criado</td>
+              <td>O <code>db:migrate</code> na sequência segue normalmente</td>
+            </tr>
+            <tr>
+              <td>O <code>curl</code> responde dentro da EC2, mas o navegador não abre pelo IP público</td>
+              <td>A aplicação está de pé — quem bloqueia é o firewall</td>
+              <td><a href="#passo-15">Passo 15</a> — Security Group <code>bia-dev</code> liberando <code>3001</code></td>
+            </tr>
+            <tr>
+              <td>Não consigo apagar o Security Group</td>
+              <td>Ele ainda está em uso por um recurso vivo</td>
+              <td><a href="#passo-22">Passo 22</a> — apagar EC2 e RDS primeiro</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <p>Desafio 1 da mentoria <b>Desafios Fundamentais</b> — Formação AWS 5.0, por Henrylle Maia. Projeto BIA v4.3.0 (<span class="mono">github.com/henrylle/bia</span>).</p>
+  <p>Roteiro de execução das 22 etapas descritas no <span class="mono">README.md</span> deste repositório, onde também está o apêndice <b>A–P</b> com os fundamentos de Git e Docker por trás de cada comando.</p>
+  <p>Os identificadores estão mascarados: <span class="mono">&lt;IP-PÚBLICO-DA-EC2&gt;</span>, <span class="mono">&lt;ENDPOINT-DO-RDS&gt;</span> e <span class="mono">&lt;SENHA-DO-RDS&gt;</span> são os do <b>seu</b> ambiente. O IP público muda a cada parada e religamento da instância — e, quando muda, o passo 20 precisa ser refeito, porque a URL da API é compilada dentro da imagem.</p>
+  <p>O progresso deste checklist fica salvo apenas neste navegador. <b>Nada aqui substitui o passo 22</b>: laboratório concluído é laboratório destruído.</p>
+</footer>
+<script>
+(function () {
+  var STORE = "desafio1-guia-v1";
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.phase"));
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORE) || "{}"); }
+    catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
+  }
+
+  var state = load();
+  var boxes = [];
+
+  sections.forEach(function (sec) {
+    var list = Array.prototype.slice.call(sec.querySelectorAll('input[type="checkbox"]'));
+    list.forEach(function (box, i) {
+      box.dataset.k = sec.id + ":" + i;
+      if (state[box.dataset.k]) { box.checked = true; }
+      box.addEventListener("change", function () {
+        state[box.dataset.k] = box.checked;
+        save(state);
+        render();
+      });
+      boxes.push(box);
+    });
+  });
+
+  /* ---- sumario ---- */
+  var toc = document.getElementById("toc");
+  var links = {};
+  var parteCorrente = null;
+
+  sections.forEach(function (sec) {
+    /* O rotulo da parte entra uma vez so, antes do primeiro link dela. E o que
+       deixa visivel no sumario a divisao entre o ambiente local e a AWS. */
+    var parte = sec.dataset.part || "";
+    if (parte && parte !== parteCorrente) {
+      var rotulo = document.createElement("div");
+      rotulo.className = "toc-part";
+      rotulo.textContent = parte;
+      toc.appendChild(rotulo);
+      parteCorrente = parte;
+    }
+
+    var badge = sec.querySelector(".phase-n");
+    var raw = badge ? badge.textContent.trim() : "";
+    /* data-badge-short manda; sem ele, "FASE 4" vira "F4" e o resto e cortado. */
+    var short = sec.dataset.badgeShort
+      || (/^FASE/i.test(raw) ? "F" + raw.replace(/\D/g, "") : raw.slice(0, 4));
+
+    var a = document.createElement("a");
+    a.href = "#" + sec.id;
+    a.innerHTML = "<b>" + short + "</b><span>" + (sec.dataset.title || "") + "</span>";
+    toc.appendChild(a);
+    links[sec.id] = a;
+  });
+
+  /* ---- progresso ---- */
+  var fill = document.getElementById("progFill");
+  var num = document.getElementById("progNum");
+
+  function render() {
+    var done = boxes.filter(function (b) { return b.checked; }).length;
+    var pct = boxes.length ? Math.round((done / boxes.length) * 100) : 0;
+    fill.style.width = pct + "%";
+    num.textContent = done + " / " + boxes.length;
+
+    sections.forEach(function (sec) {
+      var list = Array.prototype.slice.call(sec.querySelectorAll('input[type="checkbox"]'));
+      var ok = list.filter(function (b) { return b.checked; }).length;
+      var counter = sec.querySelector("[data-count-for]");
+      if (counter && list.length) {
+        counter.textContent = ok + "/" + list.length;
+        counter.classList.toggle("full", ok === list.length);
+      }
+      var link = links[sec.id];
+      if (link) { link.classList.toggle("done", list.length > 0 && ok === list.length); }
+    });
+  }
+
+  document.getElementById("reset").addEventListener("click", function () {
+    if (!window.confirm("Desmarcar todos os itens do checklist?")) { return; }
+    state = {};
+    save(state);
+    boxes.forEach(function (b) { b.checked = false; });
+    render();
+  });
+
+  /* ---- copiar comandos ---- */
+  Array.prototype.forEach.call(document.querySelectorAll(".copy"), function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = btn.parentNode.querySelector("pre");
+      if (!pre) { return; }
+      var text = Array.prototype.map.call(pre.childNodes, function (n) {
+        if (n.nodeType === 1 && n.classList.contains("p")) { return ""; }
+        return n.textContent;
+      }).join("");
+
+      var done = function () {
+        btn.textContent = "copiado";
+        btn.classList.add("ok");
+        setTimeout(function () { btn.textContent = "copiar"; btn.classList.remove("ok"); }, 1600);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text, done); });
+      } else {
+        fallback(text, done);
+      }
+    });
+  });
+
+  function fallback(text, done) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  /* ---- secao ativa ---- */
+  if ("IntersectionObserver" in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          Object.keys(links).forEach(function (id) { links[id].classList.remove("on"); });
+          if (links[en.target.id]) { links[en.target.id].classList.add("on"); }
+        }
+      });
+    }, { rootMargin: "-80px 0px -70% 0px" });
+    sections.forEach(function (s) { obs.observe(s); });
+  }
+
+  /* ---- tema: interruptor claro <-> escuro ----
+     Dois estados, e nao tres. Um estado "auto" renderiza igual ao tema que o
+     sistema ja usa, entao um dos cliques do ciclo nao mudaria nada na tela --
+     parece um botao quebrado. Aqui todo clique inverte. O sistema ainda e
+     respeitado: ele decide o estado inicial de quem nunca escolheu. */
+  var TEMA_STORE = "desafio1-guia-tema";   /* chave propria: "Limpar progresso" nao apaga o tema */
+  var btnTema = document.getElementById("tema");
+
+  function sistemaEscuro() {
+    try { return window.matchMedia("(prefers-color-scheme: dark)").matches; }
+    catch (e) { return false; }
+  }
+  function lerTema() {
+    try {
+      var t = localStorage.getItem(TEMA_STORE);
+      if (t === "light" || t === "dark") { return t; }
+    } catch (e) {}
+    return sistemaEscuro() ? "dark" : "light";
+  }
+  function aplicarTema(t, gravar) {
+    document.documentElement.setAttribute("data-theme", t);
+    if (btnTema) {
+      btnTema.textContent = (t === "dark") ? "Tema: escuro" : "Tema: claro";
+      btnTema.setAttribute("aria-label", (t === "dark")
+        ? "Tema escuro. Clique para mudar para o tema claro."
+        : "Tema claro. Clique para mudar para o tema escuro.");
+    }
+    if (gravar) {
+      try { localStorage.setItem(TEMA_STORE, t); } catch (e) {}
+    }
+  }
+  if (btnTema) {
+    aplicarTema(lerTema(), false);
+    btnTema.addEventListener("click", function () {
+      var atual = document.documentElement.getAttribute("data-theme");
+      aplicarTema(atual === "dark" ? "light" : "dark", true);
+    });
+  }
+
+  /* ---- impressao: abre os blocos recolhiveis e devolve o estado depois ---- */
+  var recolhidos = [];
+  window.addEventListener("beforeprint", function () {
+    recolhidos = Array.prototype.filter.call(
+      document.querySelectorAll("details"),
+      function (d) { return !d.open; }
+    );
+    recolhidos.forEach(function (d) { d.open = true; });
+  });
+  window.addEventListener("afterprint", function () {
+    recolhidos.forEach(function (d) { d.open = false; });
+    recolhidos = [];
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

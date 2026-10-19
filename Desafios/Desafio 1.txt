@@ -1,0 +1,137 @@
+Objetivo
+
+Construir sua VM para o treinamento, instalar dependências e colocar o projeto da BIA para rodar na sua máquina persistindo os dados localmente + conexão ao banco do DBeaver com o banco da BIA rodando com Docker. Com o setup concluído, baixei um projeto em Node.js com React e o coloquei para rodar localmente via Docker, tanto a parte web quanto o banco relacional PostgreSQL usando o RDS.
+
+Etapa extra: Criar uma instância EC2 na AWS com Linux e subir o projeto local para AWS.
+
++----------------------------------------------------------------------------------+
+|                   ARQUITETURA LOCAL DOCKER (WSL / AMBIENTE DEV)                  |
++----------------------------------------------------------------------------------+
+
+      [ USER ]                                           [ DBeaver / USER ]
+         │                                                      │
+         │ Acesso Web / API                                     │ Acesso ao Banco
+         ▼                                                      ▼
+    +---------+                                            +---------+
+    |  :3001  | (Host / Localhost via WSL)                 |  :5433  |
+    +----┬----+                                            +----┬----+
+         │                                                      │
+- - - - -│- - - - - - - - - - REDE DOCKER / WSL - - - - - - - - │- - - - - - - - - -
+         │                                                      │
+         ▼ (Mapeamento de Porta)                                ▼ (Mapeamento)
+    +----┴--------------------------+            +--------------┴-------------+
+    |           SERVER              |            |          DATABASE          |
+    |        (WEB + API)            |            |          (PGSQL)           |
+    |                               |            |                            |
+    |    Porta Interna: 8080        |            |    Porta Interna: 5432     |
+    |                               |            |                            |
+    +---------------+---------------+            +--------------+-------------+
+                    │                                           ▲
+                    │             Conexão Interna               │
+                    └───────────────────────────────┘
+
+
++----------------------------------------------------------------------------------+
+|                                LEGENDA DA ARQUITETURA                            |
++----------------------------------------------------------------------------------+
+| • USER      : Usuário/Desenvolvedor acessando a aplicação pelo navegador ou API. |
+| • :3001     : Porta externa (host/WSL) mapeada para acessar o Web Server.        |
+| • SERVER    : Container da aplicação (Front+API) rodando na porta interna 8080.  |
+| • :5433     : Porta externa (host/WSL) mapeada para acessar o banco de dados.    |
+| • DATABASE  : Container PostgreSQL rodando na porta nativa interna 5432.         |
+| • DBeaver   : Client de banco de dados conectando externamente pelo porto 5433.  |
+| • Conexão   : A seta entre Server e Database representa o Server acessando o     |
+|   Interna     DB internamente na rede Docker (na porta 5432).                    |
++----------------------------------------------------------------------------------+
+
+No console da AWS:
+
+CRIANDO CONTA + CAMADA FREE
+
+CONFIGURANDO BUDGETS + AJUSTE NO IDIOMA
+• Billing and Cost Management > Budgets > Monthly cost budget
+
+MONTANDO AMBIENTE NA NUVEM (Parte 1/2)
+• AWS CloudShell
+	o 1 GB Storage por regiáo
+	o 2 GB de RAM
+	o Vários serviços já instalados
+		• aws cli
+		• git
+		• python
+		• node
+• Região: Virginia
+• Console
+	o Criar Security Group
+• AWS CloudShell
+	o Criar role
+		• Validando recursos
+
+
+====================================================================================================
+               ARQUITETURA AWS: CLOUDSHELL, SSM, EC2 BIA-DEV, CONTAINER & AGENTE IA
+====================================================================================================
+
+                     +-------------------------------------------------------------------------------+
+                     | AWS CLOUD                                                      (O Retorno)    |
+                     |                                                                        ▲	     |
+                     |                 +-------+                      +-------+       +-------+--+   |
+                     |                 |  SSM  |                      |  ECS  |       |   ECR    |   |
+                     |                 +---+---+                      +---▲---+       +---▲-----+   |
+                     |                     │                              │           	   │         |
++-------------+      |      +──────────┴───────────+              │            	   │         |
+|   BROWSER   |      |      │                        	   │ (SSM Agent)  │            	   │         |
+| +---------+ |      |      ▼                         	   │              │            	   │         |
+| |  USER   | ┼────┼─►+---------------+       +---------┴──────────┴───────────┴─────+ |
+| +---------+ |      |   |  CLOUDSHELL   |       | SUA REDE NA AWS (VPC)                           | |
++-------------+      |   | +-----------+ |       |                                                 | |
+                     |   | | 1 GB STOR.| |       |   +-------------------------------+             | |
+                     |   | | 2 GB RAM  | |       |   | BIA-DEV (EC2)                 |             | |
+                     |   | +-----------+ |       |   |                               |             | |
+                     |   +-------+-------+       |   |  Porta: 3001                  |             | |
++-------------+      |          │             	 |   |     │                 	     |             | |
+|   GITHUB    |      |          │              	 |   |     ▼                   	     |             | |
+| +---------+ |      |          │              	 |   |  +---------------------+      |   +-------+ | |
+| | Repos.  | ┼────┼───────┘              	 |   |  | CONTAINER           |      |   |  SG   | | |
+| +---------+ |      |          │              	 |   |  |                     |      +─►| (Sec. | | |
++-------------+      |          ▼              	 |   |  | [3001:8080]         |      |   | Group)| | |
+                     |   [ AÇÕES CLOUDSHELL ]  	 |   |  |                     |      |   +-------+ | |
+                     |   ├─ VALIDAR RECURSO   	 |   |  | +-----------------+ |      |       ▲ 	   | |
+                     |   ├─ CRIAR ROLE        	 |   |  | |    AGENTE IA    | |      |       │ 	   | |
+                     |   └─ LANÇAR EC2        	 |   |  | +-----------------+ |      | SECURITY GROUP:|
+                     |                         	 |   |  +---------------------+      |    BIA-DEV    |
+                     |                         	 |   +---------------+---------------+               |
+                     |                         	 |                   ▲                        	     |
+                     |                         	 |                   │ (role-acesso-ssm)    	     |
+                     |                           +-------------------------------------------------+ |
+                     +-----------------------------------------------------------------------------+
+
++-----------------------+---------------------+----------------------------------------------------+
+| COMPONENTE / BLOCO    | LOCALIZAÇÃO         | FUNÇÃO / PAPEL NA ARQUITETURA                      |
++-----------------------+---------------------+----------------------------------------------------+
+| Browser / User        | Externo             | Acesso do desenvolvedor/usuário ao console da AWS  |
+|                       |                     | e terminal web interativo.                         |
++-----------------------+---------------------+----------------------------------------------------+
+| GitHub                | Externo             | Repositório com scripts/código clonados via        |
+|                       |                     | CloudShell para automação da infraestrutura.       |
++-----------------------+---------------------+----------------------------------------------------+
+| CloudShell            | AWS (Ambiente Base) | Shell Linux gerenciado (1GB Storage / 2GB RAM)     |
+|                       |                     | usado para: Validar recurso, Criar Role e Lançar   |
+|                       |                     | a instância EC2.                                   |
++-----------------------+---------------------+----------------------------------------------------+
+| SSM (Systems Manager) | AWS (Gerenciado)    | Gerenciamento seguro da EC2 via SSM Agent, sem a   |
+|                       |                     | necessidade de abrir portas SSH ou usar IP público.|
++-----------------------+---------------------+----------------------------------------------------+
+| BIA-DEV               | Rede AWS (VPC)      | Instância EC2 que roda o ambiente de dev, usando a |
+|                       |                     | IAM Role 'role-acesso-ssm' e o SG 'bia-dev'.       |
++-----------------------+---------------------+----------------------------------------------------+
+| Container & Agente IA | Dentro da EC2       | Container Docker mapeado na porta 3001:8080        |
+|                       | (BIA-DEV)           | hospedando a aplicação com o AGENTE IA.            |
++-----------------------+---------------------+----------------------------------------------------+
+| ECS / ECR             | AWS (Destino)       | Destinos para publicação de imagens (ECR) e        |
+|                       |                     | orquestração posterior dos serviços (ECS).         |
++-----------------------+---------------------+----------------------------------------------------+
+
+*Security group é usado para liberar a máquina (BIA-DEV) para está acessível na porta 3001 (são as regras de entrada), além dessas regras precisa associar uma autorização (role-acesso-ssm), onde vamos dizer o objetivo dessa role, no nosso caso é da autorização para a minha instância consiga se comunicar com outros serviços da AWS, para isso preciso associar uma role e nessa role vamos colocar as poles que são as autorizações que ela vai ter, sem isso ela não consegue conectar com os serviços da AWS.
+
+

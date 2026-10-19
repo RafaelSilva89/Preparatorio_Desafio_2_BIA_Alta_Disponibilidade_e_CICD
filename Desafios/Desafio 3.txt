@@ -1,0 +1,518 @@
+Aula Desafio 3
+
+Objetivo
+Colocar a BIA para rodar na máquina bia-web (Cluster ECS) com os assets sendo entregues no S3.
+
+=====================================================================================================
+
+Dia 3 - Parte1: Primeiros passos com Shell Script + Amazon Q + ChatGPT
+
+
+=====================================================================================================
+
+Dia 3 - Parte2: Shell Script
+
+Vamos avançar um pouquinho mais e falar agora de funções.
+
+
+O projeto BIA é uma aplicação em Node com React.
+A parte do React são arquivos estáticos (HTML, JavaScript, CSS).
+Imagina que eu quero construir um script Shell que vai gerar, fazer um build dos artefatos da BIA, do React, vai fazer o envio disso para o S3.
+
+Vou construir aqui um arquivo que passe primeiro essa ideia, segue as etapas que envolve esse processo:
+
+script: deploy.sh
+
++------------------------------------------------------------------------------+
+| >_ deploy.sh                                                                 |
++------------------------------------------------------------------------------+
+|  1   echo "Fazendo deploy..."                                                |
+|  2                                                                           |
+|  3   echo "Fazendo build do react..."                                        |
+|  4                                                                           |
+|  5   echo " Iniciando build..."                                              |
+|  6   echo " Build finalizado"                                                |
+|  7                                                                           |
+|  8   echo "Fazendo envio para o s3..."                                       |
+|  9                                                                           |
+| 10   echo " Iniciando envio..."                                              |
+| 11   echo " Envio finalizado"                                                |
+| 12                                                                           |
+| 13   echo "Finalizado"                                                       |
++------------------------------------------------------------------------------+
+
+Dessa forma podemos ver que arquivo que começa a ficar grande, para ajudar podemos usar funções:
+
++------------------------------------------------------------------------------+
+| >_ deploy.sh                                                                 |
++------------------------------------------------------------------------------+
+|  1   function build() {                                                      |
+|  2       echo " Iniciando build..."                                          |
+|  3       echo " Build finalizado"                                            |
+|  4   }                                                                       |
+|  5                                                                           |
+|  6   function envio_s3() {                                                   |
+|  7       echo "Fazendo envio para o s3..."                                   |
+|  8       echo " Iniciando envio..."                                          |
+|  9       echo " Envio finalizado"                                            |
+| 10   }                                                                       |
+| 11                                                                           |
+| 12   echo "Fazendo deploy..."                                                |
+| 13                                                                           |
+| 14   build                                                                   |
+| 15                                                                           |
+| 16   envio_s3                                                                |
+| 17                                                                           |
+| 18   echo "Finalizado"                                                       |
++------------------------------------------------------------------------------+
+
+
+Mas está tudo no mesmo arquivo, então podemos organizar criando novos arquivos:
+
++--------------------------+---------------------------------------------------+
+| v DESAFIOS-FUNDAMENTAIS  | >_ deploy.sh                                      |
+|   > [ ] bia              +---------------------------------------------------+
+|   >_ deploy.sh           |  1   . react.sh                                   |
+|   >_ react.sh            |  2                                                |
+|   >_ s3.sh               |  3   . s3.sh                                      |
+|                          |  4                                                |
+|                          |  5   echo "Fazendo deploy..."                     |
+|                          |  6                                                |
+|                          |  7   build                                        |
+|                          |  8                                                |
+|                          |  9   envio_s3                                     |
+|                          | 10   |                                            |
+|                          | 11   echo "Finalizado"                            |
+|                          | 12                                                |
+|                          | 13                                                |
++--------------------------+---------------------------------------------------+
+
+Agora podemos ver que ficou mais organizado para mostrar para alguém, ele olhando vai compreender que esse script faz:
+	- faz o deploy
+	- Primeiro o build
+	- depois o envio para o S3
+	- e depois encerra
+
+Essa é uma estrutura de construção de script.
+
+Detalhe em alguns scripts no lugar do "." podemos encontrar "source"
+
+comando no terminal: 
+	- chmod +x deploy.sh
+	- ./deploy.sh
+
+
+Agora vamos para mais um tipo de operador.
+
+Operador condicionais, vamos imaginar que esse script deploy.sh. Ele vai ser utilizado para o meu ambiente de homologação e produção. Para cada ambiente vai ter uma particularidade, terá alguma configuração especifica.
+
+Então aí, o que é que a gente precisaria fazer?
+
+A gente primeiro tem que conseguir receber uma atribuição de ambiente.
+
+
++------------------------------------------------------------------------------+
+| >_ deploy.sh                                                                 |
++------------------------------------------------------------------------------+
+|  1   AMBIENTE=$1                                                             |
+|  2                                                                           |
+|  3   echo "Vou iniciar deploy no ambiente:" $AMBIENTE                        |
+|  4   . react.sh                                                              |
+|  5                                                                           |
+|  6   . s3.sh                                                                 |
+|  7                                                                           |
+|  8   echo "Fazendo deploy..."                                                |
+|  9                                                                           |
+| 10   build                                                                   |
+| 11                                                                           |
+| 12   envio_s3                                                                |
+| 13                                                                           |
+| 14   echo "Finalizado"                                                       |
+| 15                                                                           |
+| 16                                                                           |
++------------------------------------------------------------------------------+
+
+comando no terminal: 
+	- ./deploy.sh hom
+
+Vamos usar o operador condicional (if/else), vamos supor que eu desenhei uma estrutura deploy, para o ambiente de homologação e produção.
+
++------------------------------------------------------------------------------+
+| >_ deploy.sh                                                                 |
++------------------------------------------------------------------------------+
+|  1   AMBIENTE=$1                                                             |
+|  2                                                                           |
+|  3   echo "Vou iniciar deploy no ambiente:" $AMBIENTE                        |
+|  4                                                                           |
+|  5   #check if my var AMBIENTE is equals to hom ou prd                       |
+|  6   if [ "$AMBIENTE" != "hom" ] && [ "$AMBIENTE" != "prd" ]; then           |
+|  7       echo "Ambiente inválido"                                            |
+|  8       exit 1                                                              |
+|  9   fi                                                                      |
+| 10   . react.sh                                                              |
+| 11                                                                           |
+| 12   . s3.sh                                                                 |
+| 13                                                                           |
+| 14   echo "Fazendo deploy..."                                                |
+| 15                                                                           |
+| 16   build                                                                   |
+| 17                                                                           |
+| 18   envio_s3                                                                |
++------------------------------------------------------------------------------+
+
+comando no terminal:
+	- ./deploy.sh dev
+
+=====================================================================================================
+
+Dia 3 - Parte3: Criando Site estático + Deploy para o S3
+
+Tela Preta + VS Code (Parte 5)
+
+Integrando com AWS
+	- Shell script para gerar um site estático e fazer deploy para o S3
+	
+
+O projeto BIA tem algumas camadas.
+A Bia, como vocês já sabem, ela é uma aplicação em Node com React.
+Antes nós empacotava tudo junto Node + React gerando uma imagem Docker. Quando a gente evolui os projetos da Bia podemos quebrar:
+	- O React, ele pode ser servido para uma estrutura de armazenamento de arquivo e não precisa nem gerar preocupação com escalabilidade.
+
+O Desafio anterior era para colocar a BIA para rodar no ECS, quando ela roda ali no ECS, vocês vão ter ali o endereço da API apontando para IP. Só que nesse modelo, a aplicação em React está junto.
+
+O que é que eu quero fazer hoje aqui com vocês?
+
+Agora que o nosso ambiente tem Node, tem NPM, eu já sei fazer algumas coisinhas com o Shell script. Então, como é que eu faria para rodar a Bia só o front-end dela, no S3? Fazer um build do React e rodar ele no S3. E subir tudo para lá com o Shell script, sem nenhuma operação manual.
+
++------------------------------------------------------------------------------+
+|                ARQUITETURA DESACOPLADA - PROJETO BIA (NOVA)                  |
++------------------------------------------------------------------------------+
+|                                      │                                       |
+|           BACKEND (API)              │            FRONTEND (UI)              |
+|                                      │                                       |
+|           +----------+               │            +-----------+              |
+|           |   NODE   |               │            |   REACT   |              |
+|           +----------+               │            +-----------+              |
+|                │                     │                  │                    |
++----------------│---------------------┴------------------│--------------------+
+                 │                                        │
+                 │                                        ├─► 1. Faz o Build
+                 │                                        ├─► 2. Deploy Script
+                 ▼                                        ▼
+   +--------------------------+             +--------------------------+
+   |   SERVIDOR SERVERLESS    |             |            S3            |
+   |        (LAMBDA)          |             | (Hospedagem de Arquivos) |
+   +--------------------------+             +--------------------------+
+
+
+Primeira coisa que se precisa fazer:
+	- nosso usuário com a AWS CLI (isso já foi feito no desafio anterior)
+	- Criar no S3 um bucket (será onde ficará os arquivos), mas precisa fazer uma configuração aqui para que esse bucket consiga funcionar como um host, para hospedar o nosso site.
+		- Amazon S3 > Buckets > Create bucket
+			- Bucket name: desafios-fundamentais-aws1-bia
+		- Eu vou servir uma aplicação estática, então, eu preciso ter acesso público para esse repositório, vamos desmarcar essa opção: Block all public access
+		- Clica em: Create bucket
+		- Tem um script que a gente precisa colocar no bucket.
+
+	- Agora precisamos Habilitar website host estático.
+		- Clica no bucket que foi criado: desafios-fundamentais-aws1-bia
+		- Depois clica em: Properties
+			- clica para editar essa opção: Static website hosting
+				- selecione: Enable
+				- Index document: index.html (Assim que eu bater aqui, ele vai carregar qual arquivo? Será o index.html)
+				- clica: Save changes
+
+	- Agora precisamos adicionar um bucket policy, ele dá acesso de leitura aos arquivos desse bucket, para quando alguém bater nele venha conseguir ler esses arquivos e a aplicação rodar.
+		- Clica em Permissions
+		- Clica em editar Bucket policy e cole:
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PublicReadGetObject",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::desafios-fundamentais-aws1-bia/*"
+            ]
+        }
+    ]
+}
+
+		- clica: Save changes
+
+
+Tutorial: https://docs.aws.amazon.com/AmazonS3/latest/userguide/HostingWebsiteOnS3Setup.html
+
+Se tudo estiver ok, meu bucket está preparado para receber o meu projeto.
+
+Agora vamos editar os arquivos .sh.
+
+O Dockerfile tem todas as Instruções que eu preciso para gerar a imagem da BIA, a linha 15, faz a geração dos artefatos do React, então vamos copiar essa linha:
+	NODE_OPTIONS=--openssl-legacy-provider REACT_APP_API_URL=http://34.239.240.133 SKIP_PREFLIGHT_CHECK=true npm run build --prefix cliente
+
++--------------------------+---------------------------------------------------+
+| v DESAFIOS-FUNDAMENTAIS  | >_ react.sh                                       |
+|   > [ ] bia              +---------------------------------------------------+
+|   >_ deploy.sh           |  1   function build() {                           |
+|   >_ react.sh            |  2       cd bia                                   |
+|   >_ s3.sh               |  3       npm install                              |
+|                          |  4       echo " Iniciando build..."               |
+|                          |  5       NODE_OPTIONS=--openssl-legacy-provider...|
+|                          |  6       echo " Build finalizado"                 |
+|                          |  7       cd ..                                    |
+|                          |  8   }                                            |
+|                          |  9                                                |
+|                          |  10                                               |
++--------------------------+---------------------------------------------------+
+
+Para testar:
+	
+comando no terminal (mas precisa executar o arquivo dentro da pasta "bia"): 
+	- chmod +x deploy.sh
+	- ./react.sh hom
+
+Então, isso aqui tem o que eu preciso para fazer a BIA rodar a parte dos assets dela, a parte do front-end dela.
+
+Proxímo passo S3:
+
+sync: ele sincroniza origem e destino, pode ser origem arquivo local e destino S3
+ponto de atenção: precisamos ver qual é o profile que está configurado na conta, no Desafio 2 foi mostrado como criar o profile.
+	- aws s3 sync ./client/build/ s3://desafios-fundamentais-bia --profile desafios-fundamentaisl
+
++------------------------+-------------------------------------------------------------------------+
+| v DESAFIOS-FUNDAMENTAIS| >_ s3.sh                                                                |
+|   > [ ] bia            +-------------------------------------------------------------------------+
+|   >_ deploy.sh         |  1   function envio_s3() {                                              |
+|   >_ react.sh          |  2       echo "Fazendo envio para o s3..."                              |
+|   >_ s3.sh             |  3       echo " Iniciando envio..."                                     |
+|                        |  4       aws s3 sync ./bia/client/build/ s3://desafios-fundamentais...  |
+|   	                 |  5       echo " Envio finalizado"                                       |
+|                        |  6   }                                                                  |
++------------------------+-------------------------------------------------------------------------+
+
+Quando inicia o processo de envio, terá Acesso Negado. Então, ele já tentou se comunicar com o S3, com o meu bucket, só que falou, olha, eu ia até enviar, mas você não tem permissão. Então, aqui, falta só dar permissão agora para o meu usuário.
+
+Vamos para o console da AWS:
+	- IAM > IAM users > fundamentos_aws > Add permissions > selecione: Attach policies directly
+		- AmazonS3FullAccess
+	> Next > Add permissions
+
+Agora é tentar novamente:
+
+comando no terminal:
+	- ./deploy.sh dev
+
+Agora é só conferir no S3 > bucket que foi criado.
+	- Clica em Properties 
+		- no final da página terá um link que vai carregar a aplicação 	 
+=====================================================================================================
+
+Dia 3 - Parte4: Deploy dos assets com ajuste na rota do react
+
+Para a nossa aplicação precisamos colocar um back-end para ela, precisamos colocar uma API para a aplicação rodar e apontar para poder carregar os dados, mas até agora nós só temos o S3, eu tenho só o front da minha aplicação.
+
+*No desafio vamos precisar colocar o Node no ar isso vai fornecer um endpoint ou IP.
+	- Se for só até a aula 2, vai fornecer um IP da aplicação rodando na EC2 do nosso cluster
+	- Se for com load balance, fornece um endpoint.
+	- Quando fizer o deploy da BIA, vamos ter que colocar o número do IP (endereço) no arquivo do Deploy. Para quando ele gerar os artefatos do React, ele está com esse apontamento aqui funcionando.
+
+Teste do Deploy trocando o endereço:
+
++------------------------------------------------------------------------------+
+| >_ deploy.sh                                                                 |
++------------------------------------------------------------------------------+
+|  1   AMBIENTE=$1                                                             |
+|  2   API_URL="http://32.18.123.12" (IP do servidor)                          |
+|  3   echo "Vou iniciar deploy no ambiente:" $AMBIENTE                        |
+|  4   echo "O endereço da API será:" $API_URL                                 |
+|  5   #check if my var AMBIENTE is equals to hom ou prd                       |
+|  6   if [ "$AMBIENTE" != "hom" ] && [ "$AMBIENTE" != "prd" ]; then           |
+|  7       echo "Ambiente inválido"                                            |
+|  8       exit 1                                                              |
+|  9   fi                                                                      |
+| 10   . react.sh                                                              |
+| 11                                                                           |
+| 12   . s3.sh                                                                 |
+| 13                                                                           |
+| 14   echo "Fazendo deploy..."                                                |
+| 15                                                                           |
+| 16   build $API_URL                                                          |
+| 17                                                                           |
+| 18   envio_s3                                                                |
++------------------------------------------------------------------------------+
+ 
++-----------------------+-------------------------------------------------------------------------------+
+|v DESAFIOS-FUNDAMENTAIS| >_ react.sh                                                              	|
+|  > [ ] bia            +-------------------------------------------------------------------------------+
+|  >_ deploy.sh         |  1   function build() {                                                  	|
+|  >_ react.sh          |  2       API_URL=$1 (vamos receber a build e o primeiro argumento será API)  	|
+|  >_ s3.sh             |  3       echo $API_URL                                                   	|
+|  >_ teste.sh          |  4       cd bia                                                          	|
+|  >_ variaveis.sh      |  5       npm install                                                     	|
+|                       |  6       echo " Iniciando build..."                                      	|
+|                       |  7       NODE_OPTIONS=--openssl-legacy-provider REACT_APP_API_URL=$API_URL ...|
+|                       |  8       echo " Build finalizado"                                        	|
+|                       |  9       cd ..                                                           	|
+|                       | 10   }                                                                   	|
++-----------------------+-------------------------------------------------------------------------------+
+
+Agora é tentar novamente:
+
+comando no terminal:
+	- ./deploy.sh hom
+
+Se tudo der certo, o endereço lá da BIA é para estar apontando para esse endereço da API agora (deploy.sh: API_URL="http://32.18.123.12").
+
+=====================================================================================================
+
+Dia 3 - Parte5: Desafio da aula 3
+
+Desafio 3
+
+- Criar um bucket para servir o site da bia de forma estática
+- Criar um script Shell para gerar os assets do react da BIA
+	- O endereço da api deve ser passado por argumento
+- Fazer um sync do seu diretório local com o bucket no s3
+- Rodar o desafio da BIA no dia 2 para servir como API para o projeto do S3
+- Salvar um registro em banco por esse site
+
++------------------------------------------------------------------------------+
+|                       ARQUITETURA DO PROJETO - BIA S3                        |
++------------------------------------------------------------------------------+
+
+                         +------------------------------------------------+
++------+      SSM        |                                                |
+|      | ─────────►  |  +-------------+                               |
+|      |                 |  |   bia-dev   | ─────┐               		  |
+|  VM  |                 |  +-------------+        │                 	  |
+|      |                 |                         │─► +--------------+  |
+|      |  ───────X───┼──────────────────│─► |  bia no RDS  |  |
++------+                 |                         │─► +--------------+  |
+                         |  +-------------+        │      		  		  |
+                         |  |   bia-web   | ─────┘        	    	  |
+           +----------+  |  +-------------+              	    	  |
+           |          | ◄─────────┘                       	     	  |
+           | ENDPOINT |  |                                    	     	  |
+           |          | ◄─────────┐                        	   		  |
+           +----------+  |  +-------------+                   	 	  |
+                         |  |     S3      |                   	    	  |
+                         |  | bia assets  |                   	    	  |
+                         |  +-------------+                   	  	  |
+                         |                                           	  |
+                         +------------------------------------------------+
+
+
+📌 Dinâmica da Arquitetura e do Desafio:
+Com base nas instruções e na imagem, aqui está como o seu Shell Script e a AWS vão se comportar dentro desse desenho:
+
+S3 (bia assets): O bucket que você vai criar assumirá o papel de hospedar e servir todo o front-end de forma estática. Note que ele expõe os assets para o ENDPOINT do usuário.
+
+O Script de Automação: Seu script Shell precisará receber a URL da API da BIA como argumento. Isso garantirá que, ao fazer o build, o React saiba exatamente para qual Endpoint (bia-web / bia-dev) enviar as requisições.
+
+Sync com a Nuvem: O comando aws s3 sync no seu script fará a ponte entre os assets gerados localmente/na WSL e a caixa do S3 bia assets.
+
+Isolamento do Banco (X no diagrama): Conectar do WSL para bia no RDS, não vai funcionar, porque ele não publicamente acessível, então ele não tem essa permissão de fazer isso aqui. Então devemos fazer se conectar por SSM no bia-dev, e no bia-dev, rodar a migrate para criar a estrutura relacionada no Bia RDS.
+
+
+Já tenho criado na AWS:
+ EC2: bia-dev
+	Instance ID: i-09ccd80c869613f04
+	Public IPv4 address: 32.195.65.24
+	Private IPv4 adresses: 172.31.15.58
+ Security Groups: 
+	bia-dev: Security group ID: sg-0ca2fb11646975aed
+		Regra 1 (Inbound rules)
+			Name: –		
+			Security group rule ID: sgr-0d0706ab706ae58f6
+			IP version: IPv4
+			Type: SSH
+			Protocol: TCP
+			Port range: 22
+			Source: 0.0.0.0/0
+			Description: –
+		Regra 2 (Inbound rules)
+			Name: –
+			Security group rule ID: sgr-03ea62fd0b4f1c9cf
+			IP version: IPv4
+			Type: Custom TCP
+			Protocol: TCP
+			Port range: 3001
+			Source: 0.0.0.0/0
+			Description: liberado geral
+		Regra 1 (Outbound rules)
+			Name: –
+			Security group rule ID: sgr-0fd09eccb0134f5d1
+			IP version: IPv4
+			Type: All traffic
+			Protocol: All
+			Port range: All
+			Destination: 0.0.0.0/0
+			Description: liberado geral
+		Regra 2 (Outbound rules)
+			Name: –
+			Security group rule ID: sgr-007b213ecafdb9401
+			IP version: IPv4
+			Type: Custom TCP
+			Protocol: TCP
+			Port range: 3001
+			Destination: 0.0.0.0/0
+			Description: liberado geral
+	bia-db Security group ID: sg-0f143a82190ee084a
+		Inbound rules:
+			Name: –
+			Security group rule ID: sgr-088d8d3cb44e9f6f9
+			IP version: –
+			Type: PostgreSQL
+			Protocol: TCP
+			Port range: 5432
+			Source: sg-0845f3c71feb0fbb7 / bia-web
+			Description: acesso vindo do bia-web
+	bia-web: Security group ID: sg-0845f3c71feb0fbb7
+		Inbound rules:
+			Name: –
+			Security group rule ID: sgr-01c9e21304908be3d
+			IP version: IPv4
+			Type: HTTP
+			Protocol: TCP
+			Port range: 80
+			Source: 0.0.0.0/0
+			Description: liberado geral
+		Outbound rules:
+			Name: –
+			Security group rule ID: sgr-0c8f1117ac3a669d1
+			IP version: IPv4
+			Type: All traffic
+			Protocol: All
+			Port range: All
+			Destination: 0.0.0.0/0
+			Description: –	
+ IAM:	
+	Users: fundamentos_aws
+		AmazonEC2ContainerRegistryFullAccess
+		AmazonEC2FullAccess
+		AmazonS3FullAccess
+		AmazonSSMFullAccess
+		PermissaoScriptsIAM
+		SignInLocalDevelopmentAccess
+	Roles:
+		AWSServiceRoleForRDS
+		AWSServiceRoleForResourceExplorer
+		AWSServiceRoleForSupport
+		AWSServiceRoleForTrustedAdvisor
+		role-acesso-ssm
+ Bando de dados RDS: 
+		Security group: bia-db (sg-0f143a82190ee084a)
+		Engine: PostgreSQL
+ S3: desafios-fundamentais-aws1-bia
+ ECR: 
+	Nome: Repository name
+	URI: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bia
+ ECS:
+	Criação do cluster: cluster-bia
+	Criação do serviço: service-bia
+
+O terminal da minha máquina WSL já foi configurado também.

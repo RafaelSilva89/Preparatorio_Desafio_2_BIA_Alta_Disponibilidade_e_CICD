@@ -1,0 +1,34 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:StartSession"
+            ],
+            "Resource": [
+                "arn:aws:ec2:us-east-1:*:instance/*",
+                "arn:aws:ssm:*:*:document/AWS-StartSSHSession",
+                "arn:aws:ssm:*:*:document/AWS-StartPortForwardingSessionToRemoteHost"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:DescribeSessions",
+                "ssm:GetConnectionStatus",
+                "ssm:DescribeInstanceProperties",
+                "ec2:DescribeInstances"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:TerminateSession",
+                "ssm:ResumeSession"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

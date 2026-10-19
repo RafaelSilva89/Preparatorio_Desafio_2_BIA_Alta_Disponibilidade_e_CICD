@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 670" width="960" height="670" font-family="Arial, Helvetica, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">SSH × SSM: entrar na máquina sem abrir porta</title>
+  <desc id="d">No SSH, o usuário entra na EC2 pela porta 22, que precisa estar aberta no Security Group. No SSM, o agente da EC2 liga para a AWS pela saída HTTPS 443, o IAM confere a permissão do usuário e o Systems Manager liga as duas pontas; nenhuma porta de entrada é aberta.</desc>
+  <defs>
+    <marker id="aRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B42318"/></marker>
+    <marker id="aGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2E7D32"/></marker>
+    <marker id="aPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#A21CAF"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="670" fill="#FFFFFF"/>
+  <text x="30" y="36" font-size="20" font-weight="bold" fill="#232F3E">SSH × SSM: entrar na máquina sem abrir porta</text>
+
+  <!-- ===== SSH ===== -->
+  <rect x="15" y="54" width="930" height="182" fill="#FFF7F6" stroke="#E3A29B" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <text x="30" y="80" font-size="16" font-weight="bold" fill="#B42318">SSH (jeito tradicional) · usado uma vez no Desafio 2, depois fechado</text>
+
+  <rect x="30" y="100" width="210" height="110" fill="#FFFFFF" stroke="#7D8998"/>
+  <text x="46" y="128" font-size="15" font-weight="bold" fill="#232F3E">Usuário</text>
+  <text x="46" y="154" font-size="14" fill="#232F3E">tem a chave formacao.pem</text>
+  <text x="46" y="176" font-size="13" fill="#3B4450">(quem tem a chave, entra)</text>
+
+  <path d="M240,155 L346,155" fill="none" stroke="#B42318" stroke-width="2.5" marker-end="url(#aRed)"/>
+  <text x="293" y="144" font-size="13" fill="#232F3E" text-anchor="middle">entrada</text>
+  <text x="293" y="176" font-size="13" fill="#232F3E" text-anchor="middle">TCP 22</text>
+
+  <rect x="350" y="100" width="230" height="110" fill="#FDECEA" stroke="#B42318" stroke-width="1.5"/>
+  <text x="366" y="128" font-size="15" font-weight="bold" fill="#232F3E">Security Group</text>
+  <text x="366" y="154" font-size="14" fill="#B42318">porta 22 ABERTA</text>
+  <text x="366" y="176" font-size="13" fill="#B42318">(só do seu IP, no teste)</text>
+
+  <path d="M580,155 L656,155" fill="none" stroke="#B42318" stroke-width="2.5" marker-end="url(#aRed)"/>
+
+  <rect x="660" y="100" width="270" height="110" fill="#FFFFFF" stroke="#7D8998"/>
+  <text x="676" y="128" font-size="15" font-weight="bold" fill="#232F3E">EC2 bia-dev</text>
+  <text x="676" y="154" font-size="14" fill="#232F3E">programa sshd esperando na 22</text>
+  <text x="676" y="176" font-size="13" fill="#3B4450">precisa de IP público</text>
+  <text x="676" y="196" font-size="13" fill="#3B4450">(uma "porta da frente" exposta)</text>
+
+  <!-- ===== SSM ===== -->
+  <rect x="15" y="250" width="930" height="228" fill="#F5FAF5" stroke="#9CC49E" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <text x="30" y="276" font-size="16" font-weight="bold" fill="#2E7D32">SSM Session Manager · usado no resto do projeto</text>
+
+  <rect x="30" y="340" width="210" height="100" fill="#FFFFFF" stroke="#7D8998"/>
+  <text x="46" y="366" font-size="15" font-weight="bold" fill="#232F3E">Usuário no WSL</text>
+  <text x="46" y="390" font-size="13" fill="#232F3E">aws ssm start-session</text>
+  <text x="46" y="412" font-size="13" fill="#3B4450">identidade: formacao_aws</text>
+
+  <rect x="330" y="290" width="250" height="40" fill="#FAF0FB" stroke="#A21CAF" stroke-width="1.5"/>
+  <text x="455" y="315" font-size="14" font-weight="bold" fill="#7A1683" text-anchor="middle">IAM confere: você pode entrar?</text>
+  <path d="M455,348 L455,334" fill="none" stroke="#A21CAF" stroke-width="2.5" marker-start="url(#aPurple)" marker-end="url(#aPurple)"/>
+
+  <rect x="330" y="352" width="250" height="88" fill="#FFFFFF" stroke="#7D8998"/>
+  <text x="346" y="378" font-size="15" font-weight="bold" fill="#232F3E">AWS Systems Manager</text>
+  <text x="346" y="402" font-size="13" fill="#3B4450">serviço da AWS que liga</text>
+  <text x="346" y="422" font-size="13" fill="#3B4450">as duas pontas da sessão</text>
+
+  <path d="M240,395 L326,395" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#aGreen)"/>
+  <text x="283" y="385" font-size="13" fill="#232F3E" text-anchor="middle">saída 443</text>
+
+  <rect x="612" y="330" width="26" height="120" fill="#E6F6F7" stroke="#00A4A6" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="625" y="466" font-size="13" font-weight="bold" fill="#005F61" text-anchor="middle">Security Group: 0 regras de entrada</text>
+
+  <rect x="660" y="330" width="270" height="120" fill="#FFFFFF" stroke="#7D8998"/>
+  <text x="676" y="356" font-size="15" font-weight="bold" fill="#232F3E">EC2 bia-dev</text>
+  <text x="676" y="380" font-size="13" fill="#232F3E">agente SSM instalado</text>
+  <text x="676" y="402" font-size="13" fill="#3B4450">autorizado pela role-acesso-ssm</text>
+  <text x="676" y="424" font-size="13" fill="#3B4450">o agente LIGA para a AWS</text>
+  <text x="676" y="442" font-size="13" fill="#3B4450">(saída HTTPS 443)</text>
+
+  <path d="M660,395 L584,395" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#aGreen)"/>
+  <text x="600" y="322" font-size="13" fill="#232F3E" text-anchor="middle">saída 443</text>
+
+  <!-- ===== Tabela-resumo ===== -->
+  <text x="30" y="506" font-size="15" font-weight="bold" fill="#232F3E">Resumo</text>
+  <rect x="30" y="516" width="900" height="30" fill="#EEF1F4" stroke="#C7CED6"/>
+  <text x="46" y="536" font-size="14" font-weight="bold" fill="#232F3E">Aspecto</text>
+  <text x="266" y="536" font-size="14" font-weight="bold" fill="#B42318">SSH</text>
+  <text x="606" y="536" font-size="14" font-weight="bold" fill="#2E7D32">SSM</text>
+  <rect x="30" y="546" width="900" height="30" fill="#FFFFFF" stroke="#C7CED6"/>
+  <text x="46" y="566" font-size="14" fill="#232F3E">Autenticação</text>
+  <text x="266" y="566" font-size="14" fill="#232F3E">arquivo de chave .pem</text>
+  <text x="606" y="566" font-size="14" fill="#232F3E">IAM (usuário ou role)</text>
+  <rect x="30" y="576" width="900" height="30" fill="#FFFFFF" stroke="#C7CED6"/>
+  <text x="46" y="596" font-size="14" fill="#232F3E">Portas de entrada</text>
+  <text x="266" y="596" font-size="14" fill="#232F3E">22 aberta no Security Group</text>
+  <text x="606" y="596" font-size="14" fill="#232F3E">nenhuma</text>
+  <rect x="30" y="606" width="900" height="30" fill="#FFFFFF" stroke="#C7CED6"/>
+  <text x="46" y="626" font-size="14" fill="#232F3E">Auditoria</text>
+  <text x="266" y="626" font-size="14" fill="#232F3E">logs locais da máquina</text>
+  <text x="606" y="626" font-size="14" fill="#232F3E">registrada na AWS (CloudTrail)</text>
+  <line x1="250" y1="516" x2="250" y2="636" stroke="#C7CED6"/>
+  <line x1="590" y1="516" x2="590" y2="636" stroke="#C7CED6"/>
+
+  <!-- Legenda -->
+  <path d="M30,655 L60,655" fill="none" stroke="#B42318" stroke-width="2.5" marker-end="url(#aRed)"/>
+  <text x="68" y="660" font-size="13" fill="#232F3E">entrada (alguém de fora bate na porta)</text>
+  <path d="M340,655 L370,655" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#aGreen)"/>
+  <text x="378" y="660" font-size="13" fill="#232F3E">saída (a máquina liga para a AWS)</text>
+  <path d="M640,655 L670,655" fill="none" stroke="#A21CAF" stroke-width="2.5" marker-start="url(#aPurple)" marker-end="url(#aPurple)"/>
+  <text x="678" y="660" font-size="13" fill="#232F3E">IAM confere a permissão</text>
+</svg>

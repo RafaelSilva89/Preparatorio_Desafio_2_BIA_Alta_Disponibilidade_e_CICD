@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" height="560" font-family="Arial, Helvetica, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">Security Group × IAM Role</title>
+  <desc id="d">O Security Group responde quem pode chegar até a máquina pela rede: bia-dev abre a 3001, bia-web abre a 80 e bia-db aceita a 5432 só de quem veste os SGs bia-web, bia-dev e bia-porteiro. A IAM Role responde o que a máquina pode fazer na AWS: a role-acesso-ssm dá acesso a SSM, ECR, ECS, RDS e EC2.</desc>
+  <defs>
+    <marker id="aTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00797B"/></marker>
+    <marker id="aPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#A21CAF"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="560" fill="#FFFFFF"/>
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#232F3E">Security Group × IAM Role: duas perguntas diferentes</text>
+
+  <!-- ===== SG ===== -->
+  <rect x="15" y="50" width="455" height="430" fill="#F0FAFA" stroke="#00A4A6" stroke-width="1.5"/>
+  <text x="30" y="78" font-size="17" font-weight="bold" fill="#005F61">Security Group (firewall de rede)</text>
+  <text x="30" y="100" font-size="15" fill="#005F61">"Quem pode chegar até mim pela rede?"</text>
+
+  <!-- row 1 -->
+  <rect x="30" y="122" width="140" height="56" fill="#FFFFFF" stroke="#7D8998"/>
+  <text x="100" y="146" font-size="13" fill="#232F3E" text-anchor="middle">qualquer lugar</text>
+  <text x="100" y="164" font-size="13" fill="#3B4450" text-anchor="middle">(navegador)</text>
+  <path d="M170,150 L256,150" fill="none" stroke="#00797B" stroke-width="2.5" marker-end="url(#aTeal)"/>
+  <text x="213" y="142" font-size="13" fill="#232F3E" text-anchor="middle">:3001</text>
+  <rect x="260" y="122" width="195" height="56" fill="#FFFFFF" stroke="#00A4A6" stroke-width="1.5"/>
+  <text x="274" y="146" font-size="14" font-weight="bold" fill="#232F3E">SG bia-dev</text>
+  <text x="274" y="166" font-size="13" fill="#3B4450">BIA de desenvolvimento</text>
+
+  <!-- row 2 -->
+  <rect x="30" y="198" width="140" height="56" fill="#FFFFFF" stroke="#7D8998"/>
+  <text x="100" y="222" font-size="13" fill="#232F3E" text-anchor="middle">qualquer lugar</text>
+  <text x="100" y="240" font-size="13" fill="#3B4450" text-anchor="middle">(navegador)</text>
+  <path d="M170,226 L256,226" fill="none" stroke="#00797B" stroke-width="2.5" marker-end="url(#aTeal)"/>
+  <text x="213" y="218" font-size="13" fill="#232F3E" text-anchor="middle">:80</text>
+  <rect x="260" y="198" width="195" height="56" fill="#FFFFFF" stroke="#00A4A6" stroke-width="1.5"/>
+  <text x="274" y="222" font-size="14" font-weight="bold" fill="#232F3E">SG bia-web</text>
+  <text x="274" y="242" font-size="13" fill="#3B4450">EC2 do cluster ECS</text>
+
+  <!-- row 3 -->
+  <rect x="30" y="274" width="140" height="92" fill="#FFFFFF" stroke="#7D8998"/>
+  <text x="100" y="296" font-size="13" fill="#232F3E" text-anchor="middle">só quem "veste"</text>
+  <text x="100" y="316" font-size="13" fill="#3B4450" text-anchor="middle">bia-web,</text>
+  <text x="100" y="334" font-size="13" fill="#3B4450" text-anchor="middle">bia-dev ou</text>
+  <text x="100" y="352" font-size="13" fill="#3B4450" text-anchor="middle">bia-porteiro</text>
+  <path d="M170,320 L256,320" fill="none" stroke="#00797B" stroke-width="2.5" marker-end="url(#aTeal)"/>
+  <text x="213" y="312" font-size="13" fill="#232F3E" text-anchor="middle">:5432</text>
+  <rect x="260" y="292" width="195" height="56" fill="#FFFFFF" stroke="#00A4A6" stroke-width="1.5"/>
+  <text x="274" y="316" font-size="14" font-weight="bold" fill="#232F3E">SG bia-db</text>
+  <text x="274" y="336" font-size="13" fill="#3B4450">banco RDS</text>
+
+  <!-- row 4 -->
+  <rect x="260" y="386" width="195" height="56" fill="#FFFFFF" stroke="#00A4A6" stroke-width="1.5"/>
+  <text x="274" y="410" font-size="14" font-weight="bold" fill="#232F3E">SG bia-porteiro</text>
+  <text x="274" y="430" font-size="13" fill="#3B4450">0 regras de entrada</text>
+  <text x="30" y="410" font-size="13" fill="#3B4450">A origem pode ser um IP</text>
+  <text x="30" y="428" font-size="13" fill="#3B4450">ou OUTRO Security Group.</text>
+  <text x="30" y="462" font-size="13" fill="#3B4450">Stateful: a resposta volta sozinha.</text>
+
+  <!-- ===== ROLE ===== -->
+  <rect x="490" y="50" width="455" height="430" fill="#FBF3FC" stroke="#A21CAF" stroke-width="1.5"/>
+  <text x="505" y="78" font-size="17" font-weight="bold" fill="#7A1683">IAM Role (permissões)</text>
+  <text x="505" y="100" font-size="15" fill="#7A1683">"O que eu posso fazer na AWS?"</text>
+
+  <rect x="505" y="200" width="160" height="110" fill="#FFFFFF" stroke="#ED7100" stroke-width="1.5"/>
+  <text x="585" y="228" font-size="14" font-weight="bold" fill="#232F3E" text-anchor="middle">EC2 bia-dev</text>
+  <text x="585" y="252" font-size="13" fill="#3B4450" text-anchor="middle">usa a role</text>
+  <text x="585" y="272" font-size="13" font-weight="bold" fill="#7A1683" text-anchor="middle">role-acesso-ssm</text>
+  <text x="585" y="292" font-size="13" fill="#3B4450" text-anchor="middle">(sem chave no disco)</text>
+
+  <path d="M665,230 L736,148" fill="none" stroke="#A21CAF" stroke-width="2" marker-end="url(#aPurple)"/>
+  <path d="M665,245 L736,208" fill="none" stroke="#A21CAF" stroke-width="2" marker-end="url(#aPurple)"/>
+  <path d="M665,255 L736,268" fill="none" stroke="#A21CAF" stroke-width="2" marker-end="url(#aPurple)"/>
+  <path d="M665,270 L736,328" fill="none" stroke="#A21CAF" stroke-width="2" marker-end="url(#aPurple)"/>
+  <path d="M665,285 L736,388" fill="none" stroke="#A21CAF" stroke-width="2" marker-end="url(#aPurple)"/>
+
+  <rect x="740" y="124" width="190" height="48" fill="#FFFFFF" stroke="#A21CAF"/>
+  <text x="752" y="144" font-size="14" font-weight="bold" fill="#232F3E">SSM</text>
+  <text x="752" y="162" font-size="12" fill="#3B4450">ser acessada sem porta</text>
+  <rect x="740" y="184" width="190" height="48" fill="#FFFFFF" stroke="#A21CAF"/>
+  <text x="752" y="204" font-size="14" font-weight="bold" fill="#232F3E">ECR</text>
+  <text x="752" y="222" font-size="12" fill="#3B4450">enviar/baixar imagens</text>
+  <rect x="740" y="244" width="190" height="48" fill="#FFFFFF" stroke="#A21CAF"/>
+  <text x="752" y="264" font-size="14" font-weight="bold" fill="#232F3E">ECS</text>
+  <text x="752" y="282" font-size="12" fill="#3B4450">deploy e leitura do cluster</text>
+  <rect x="740" y="304" width="190" height="48" fill="#FFFFFF" stroke="#A21CAF"/>
+  <text x="752" y="324" font-size="14" font-weight="bold" fill="#232F3E">RDS</text>
+  <text x="752" y="342" font-size="12" fill="#3B4450">Kiro consulta o banco</text>
+  <rect x="740" y="364" width="190" height="48" fill="#FFFFFF" stroke="#A21CAF"/>
+  <text x="752" y="384" font-size="14" font-weight="bold" fill="#232F3E">EC2</text>
+  <text x="752" y="402" font-size="12" fill="#3B4450">Kiro lê SGs e instâncias</text>
+
+  <text x="505" y="448" font-size="13" fill="#3B4450">Cada permissão vem de uma policy anexada à role.</text>
+  <text x="505" y="466" font-size="13" fill="#3B4450">Sem a policy: AccessDenied, mesmo com a rede aberta.</text>
+
+  <!-- Legend -->
+  <text x="30" y="508" font-size="14" font-weight="bold" fill="#232F3E">Analogia:</text>
+  <text x="104" y="508" font-size="14" fill="#232F3E">o Security Group é a portaria do prédio (quem entra, por qual porta);</text>
+  <text x="104" y="528" font-size="14" fill="#232F3E">a Role é o crachá de quem já está lá dentro (onde pode ir, o que pode fazer).</text>
+  <path d="M30,546 L60,546" fill="none" stroke="#00797B" stroke-width="2.5" marker-end="url(#aTeal)"/>
+  <text x="68" y="551" font-size="13" fill="#232F3E">tráfego de rede permitido (porta)</text>
+  <path d="M330,546 L360,546" fill="none" stroke="#A21CAF" stroke-width="2" marker-end="url(#aPurple)"/>
+  <text x="368" y="551" font-size="13" fill="#232F3E">ação permitida na AWS (policy da role)</text>
+</svg>

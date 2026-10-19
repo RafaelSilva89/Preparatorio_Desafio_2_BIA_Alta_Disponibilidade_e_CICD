@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 620" width="960" height="620" font-family="Arial, Helvetica, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">ECS: cluster, task definition, service e task</title>
+  <desc id="d">A imagem bia:latest fica no ECR. A task definition task-def-bia é a receita: imagem, 1 vCPU, 400 MB, porta 80 para 8080 e variáveis do banco. O service service-bia mantém 1 task rodando. A task roda como container na EC2 do cluster cluster-bia, criada por um Auto Scaling Group. O navegador entra pela porta 80 e o container fala com o RDS na 5432.</desc>
+  <defs>
+    <marker id="aDark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#232F3E"/></marker>
+    <marker id="aGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2E7D32"/></marker>
+    <marker id="aBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F5FA8"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="620" fill="#FFFFFF"/>
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#232F3E">ECS: quem guarda, quem descreve, quem vigia e quem roda</text>
+
+  <!-- ECR -->
+  <rect x="30" y="64" width="210" height="130" fill="#FFF4E8" stroke="#ED7100" stroke-width="1.5"/>
+  <text x="46" y="90" font-size="15" font-weight="bold" fill="#232F3E">ECR · repositório bia</text>
+  <text x="46" y="114" font-size="13" fill="#3B4450">o "depósito" de imagens</text>
+  <rect x="46" y="130" width="178" height="44" fill="#FFFFFF" stroke="#ED7100"/>
+  <text x="135" y="157" font-size="14" font-weight="bold" fill="#232F3E" text-anchor="middle">imagem bia:latest</text>
+
+  <!-- Task definition -->
+  <rect x="290" y="64" width="340" height="150" fill="#FFFFFF" stroke="#232F3E" stroke-width="1.5"/>
+  <text x="306" y="90" font-size="15" font-weight="bold" fill="#232F3E">Task definition · task-def-bia</text>
+  <text x="306" y="110" font-size="13" fill="#3B4450">a RECEITA (parecida com o compose.yml)</text>
+  <text x="306" y="136" font-size="13" fill="#232F3E">• imagem: bia:latest (do ECR)</text>
+  <text x="306" y="156" font-size="13" fill="#232F3E">• 1 vCPU · 400 MB de memória</text>
+  <text x="306" y="176" font-size="13" fill="#232F3E">• porta 80 da máquina → 8080 do container</text>
+  <text x="306" y="196" font-size="13" fill="#232F3E">• variáveis do banco (DB_HOST, DB_PWD…)</text>
+
+  <!-- Service -->
+  <rect x="680" y="64" width="250" height="150" fill="#FFFFFF" stroke="#232F3E" stroke-width="1.5"/>
+  <text x="696" y="90" font-size="15" font-weight="bold" fill="#232F3E">Service · service-bia</text>
+  <text x="696" y="110" font-size="13" fill="#3B4450">o VIGIA</text>
+  <text x="696" y="136" font-size="13" fill="#232F3E">• mantém 1 task rodando</text>
+  <text x="696" y="156" font-size="13" fill="#232F3E">• se a task cair, sobe outra</text>
+  <text x="696" y="176" font-size="13" fill="#232F3E">• faz o deploy (rolling update)</text>
+
+  <path d="M240,140 L286,140" fill="none" stroke="#232F3E" stroke-width="2" marker-end="url(#aDark)"/>
+  <path d="M630,140 L676,140" fill="none" stroke="#232F3E" stroke-width="2" marker-end="url(#aDark)"/>
+  <text x="653" y="130" font-size="12" fill="#232F3E" text-anchor="middle">usa</text>
+
+  <!-- Cluster -->
+  <rect x="220" y="244" width="500" height="300" fill="#F7F9FB" stroke="#3334B9" stroke-width="2"/>
+  <text x="236" y="268" font-size="15" font-weight="bold" fill="#3334B9">Cluster · cluster-bia (o poder computacional)</text>
+  <rect x="238" y="282" width="464" height="246" fill="none" stroke="#7D8998" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <text x="252" y="302" font-size="13" font-weight="bold" fill="#3B4450">Auto Scaling Group (mín 1 · máx 1): recria a EC2 se ela sumir</text>
+  <rect x="256" y="316" width="428" height="196" fill="#FFFFFF" stroke="#ED7100" stroke-width="1.5"/>
+  <text x="272" y="340" font-size="14" font-weight="bold" fill="#232F3E">EC2 do cluster · t3.micro · SG bia-web</text>
+  <text x="272" y="360" font-size="13" fill="#3B4450">subnet pública, IP público</text>
+
+  <rect x="256" y="408" width="70" height="34" fill="#E8F5E9" stroke="#2E7D32"/>
+  <text x="291" y="430" font-size="13" font-weight="bold" fill="#1B5E20" text-anchor="middle">:80</text>
+
+  <rect x="420" y="380" width="240" height="110" fill="#EEF1F4" stroke="#232F3E" stroke-width="1.5"/>
+  <text x="436" y="404" font-size="14" font-weight="bold" fill="#232F3E">Task = container em execução</text>
+  <text x="436" y="426" font-size="13" fill="#232F3E">container bia (API + tela)</text>
+  <text x="436" y="446" font-size="13" fill="#232F3E">escuta na porta 8080</text>
+  <text x="436" y="468" font-size="12" fill="#3B4450">a EC2 puxa a imagem do ECR</text>
+
+  <path d="M326,425 L416,425" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#aGreen)"/>
+  <text x="371" y="415" font-size="12" fill="#232F3E" text-anchor="middle">80 → 8080</text>
+
+  <!-- service -> task -->
+  <path d="M805,214 L805,360 L664,410" fill="none" stroke="#232F3E" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#aDark)"/>
+  <text x="815" y="300" font-size="12" fill="#232F3E">lança e vigia</text>
+  <!-- ECR -> task (pull) -->
+  <path d="M135,194 L135,236 L540,236 L540,376" fill="none" stroke="#ED7100" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#aDark)"/>
+  <text x="150" y="228" font-size="12" fill="#232F3E">pull da imagem</text>
+
+  <!-- Browser -->
+  <rect x="20" y="392" width="170" height="68" fill="#FFFFFF" stroke="#7D8998"/>
+  <text x="105" y="418" font-size="14" font-weight="bold" fill="#232F3E" text-anchor="middle">Navegador</text>
+  <text x="105" y="440" font-size="12" fill="#3B4450" text-anchor="middle">http://&lt;IP_PUBLICO_ECS&gt;</text>
+  <path d="M190,425 L252,425" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#aGreen)"/>
+
+  <!-- RDS -->
+  <rect x="770" y="392" width="170" height="90" fill="#EAF1FB" stroke="#1F5FA8" stroke-width="1.5"/>
+  <text x="855" y="418" font-size="14" font-weight="bold" fill="#232F3E" text-anchor="middle">RDS bia</text>
+  <text x="855" y="440" font-size="13" fill="#3B4450" text-anchor="middle">PostgreSQL :5432</text>
+  <text x="855" y="460" font-size="12" fill="#3B4450" text-anchor="middle">subnet privada</text>
+  <path d="M660,436 L766,436" fill="none" stroke="#1F5FA8" stroke-width="2.5" marker-end="url(#aBlue)"/>
+  <text x="714" y="454" font-size="12" fill="#232F3E" text-anchor="middle">:5432</text>
+
+  <!-- Legend -->
+  <text x="30" y="574" font-size="14" font-weight="bold" fill="#232F3E">Ordem de criação:</text>
+  <text x="160" y="574" font-size="14" fill="#232F3E">cluster → task definition → service (o service precisa dos outros dois).</text>
+  <path d="M30,600 L60,600" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#aGreen)"/>
+  <text x="68" y="605" font-size="13" fill="#232F3E">acesso do usuário</text>
+  <path d="M220,600 L250,600" fill="none" stroke="#1F5FA8" stroke-width="2.5" marker-end="url(#aBlue)"/>
+  <text x="258" y="605" font-size="13" fill="#232F3E">app → banco</text>
+  <path d="M380,600 L410,600" fill="none" stroke="#232F3E" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#aDark)"/>
+  <text x="418" y="605" font-size="13" fill="#232F3E">controle do ECS / download da imagem</text>
+</svg>

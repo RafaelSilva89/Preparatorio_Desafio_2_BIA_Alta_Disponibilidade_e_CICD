@@ -1,0 +1,570 @@
+Aula Desafio 4
+
+Objetivo
+- Criar um script em shell que vai lançar uma ec2 com a finalidade de porteiro, na zona b (subnet default). 
+- Criar um script que inicie o porteiro com túnel para o RDS na porta local 5433 + inserção de 1 registro manual na tabela.
+- Crie um túnel para a bia e conecte nele na porta 3002 para ver o registro adicionado.
+- Crie um script que para a máquina do porteiro.
+
+=====================================================================================================
+
+Dia 4 - Parte1: Tela Preta: zip/unzip, tail -f
+
+Tópicos: Tela Preta
+• Primeiros passos
+• Shell Script
+	- zip / unzip
+	- tail -f
+	- Trabalhando com command substitution
+	- Interpretar script da bia (lancar_ec2_zona_a)
+	- Criar túnel para máquina da bia
+		- Entendendo a comunicação
+	- Criar túnel para RDS
+		- Entendendo a comunicação
+	- Criar rotina para ligar/desligar porteiro automaticamente
+
+----------------------------------------------------------------------------
+• Shell Script
+	- zip / unzip
+
++-----------------------------------+                 +-----------------------------------+
+|           MÁQUINA LOCAL           |                 |             BEANSTALK             |
+|                                   |                 |                                   |
+|   +---------------------------+   |                 |   +---------------------------+   |
+|   | BIA                       |   |                 |   | AV                        |   |
+|   |                           |   |     [ ZIP ] ────────►                		  |   |
+|   |  - Dockerfile             |   |       ▲ 	      |   +---------------------------+   |
+|   |  - docker-compose.yml     ├────────┘		  |                                   |
+|   |  -                        |   |         	      |   +---------------------------+   |
+|   |  -                        |   |                 |   | ENV-PRD                   |   |
+|   |                           ├─────────────────────────► ENV-HOM  		  |   |
+|   +---------------------------+   |                 |   |                           |   |
+|                                   |                 |   +---------------------------+   |
++-----------------------------------+                 +-----------------------------------+
+
+💡 Explicação do Fluxo:
+
+MÁQUINA LOCAL (BIA): Representa o seu ambiente de desenvolvimento contendo os arquivos do projeto (como o Dockerfile e o docker-compose.yml).
+
+Ação ZIP ➔ AV: Os arquivos do projeto são compactados (processo de "ZIP") e enviados para o Elastic Beanstalk como uma AV (Application Version).
+
+Fluxo para ENV: A seta de baixo representa o processo de deploy dessa versão da aplicação para os ambientes reais de hospedagem (neste caso, ENV-PRD para Produção e ENV-HOM para Homologação).
+
+E um requisito para esse ZIP funcionar é que os arquivos precisam estar zipados na raiz do projeto.
+	- Vamos fazer através de linhas de comando.
+
+Fazemos customizações no Docker-compose para que ele consiga subir para o Beanstalk.
+Mas um dos pontos que precisa associar com o ZIP é entregar um ZIP apenas com esse arquivo e ele precisa estar na raiz.
+
++-------------------------------+-------------------------------------------------------------------+
+| v DESAFIOS-FUNDAMENTAIS      	| >_ 01-zip.sh                                                      |
+|   > [ ] aula_03              	+-------------------------------------------------------------------+
+|   > [ ] aula_04              	|  1  ## ZIP ###                                                    |
+|   > [ ] bia                  	|  2  cd bia                                                        |
+|   >_ 01-zip.sh               	|  3  zip -r ../bia.zip docker-compose.yml                          |
+|   [ ] bia.zip                	|                                                                   |
+|      ▲                      	+-------------------------------------------------------------------+
+|      │                       	| TERMINAL                                                          |
+|      │                       	+-------------------------------------------------------------------+
+|      │                       	| ~ % cd ..                                                         |
+|      │                       	| ~ % pwd                                                           |
+|      │                       	| /Users/henrylle/Projetos/formacaoaws/desafios-fundamentais        |
+|      │                       	| ~ % chmod +x 01-zip.sh                                            |
+|      │ (Execução gera o .zip)	| ~ % ./01-zip.sh ─────────────────────────────────┐ 	|
+|      └─────────────────┼─► adding: docker-compose.yml (deflated 51%)					│	|
+|                              	| ~ % _ 							│   |
++-------------------------------+-------------------------------------------------------------------+
+
+Aqui está a explicação detalhada de cada parte do comando zip -r ../bia.zip docker-compose.yml:
+
+• zip: É o comando principal, que chama o programa responsável por compactar arquivos.
+
+• -r: É uma "flag" (opção) que significa recursivo (recursive). Ela instrui o comando a incluir não apenas a pasta selecionada, mas também todos os arquivos e subpastas dentro dela
+	- Nota: No seu caso específico, como você está compactando apenas um arquivo único (docker-compose.yml), o -r acaba não tendo efeito prático, mas é um hábito comum deixá-lo no comando caso você queira adicionar pastas no futuro.
+
+• ../bia.zip: Este é o destino do arquivo que será criado.
+
+	- O ../ é um atalho de navegação que significa "volte um nível de diretório" (ou seja, salve na pasta pai).
+	- bia.zip é o nome que o arquivo final terá.
+
+• docker-compose.yml: Esta é a origem, ou seja, o nome do arquivo atual (que está dentro da pasta onde o comando foi executado) que será colocado dentro do .zip.
+
+Resumo do que acontece no seu script:
+Como o comando anterior no seu script era cd bia (entrar na pasta "bia"), este comando diz: "Pegue o arquivo docker-compose.yml que está aqui dentro da pasta bia, compacte-o, e salve o resultado com o nome bia.zip na pasta de fora (a pasta pai, desafios-fundamentais)."
+
+
+Como é que eu confiro para ver se está ok?
+	- Podemos fazer o inverso, pode agora trabalhar com o comando ANZIP.
+
++-------------------------------+-------------------------------------------------------------------+
+| v DESAFIOS-FUNDAMENTAIS      	| >_ 02-unzip.sh                                                    |
+|   > [ ] aula_03              	+-------------------------------------------------------------------+
+|   > [ ] aula_04              	|  1  unzip -o bia.zip -d bia2                                      |
+|   > [ ] bia                  	|                                                                   |
+|   v [ ] bia2                	|                                                                   |
+|       docker-compose.yml ◄──┼─┐                                                                	|
+|   >_ 01-zip.sh               	| │          							    |
+|   >_ 02-unzip.sh             	+-------------------------------------------------------------------+
+|   [ ] bia.zip                	| TERMINAL                                                          |
+|      │                       	+-------------------------------------------------------------------+
+|      │                       	| ~ % chmod +x 02-unzip.sh                                         	|
+|      │                       	| ~ % ./02-unzip.sh ─────────────────────────────────┐	|
+|      │ (Descompacta o .zip)  	| Archive:  bia.zip                                               │	|
+|      └─────────────────┼─► inflating: bia2/docker-compose.yml                           │	|
+|                              	| ~ % _                              				  │ |
++-------------------------------+-------------------------------------------------------------------+
+
+
+Este comando faz exatamente o processo inverso do que fizemos antes, descompactando o arquivo para verificarmos se tudo ocorreu bem. Aqui está a explicação detalhada de cada parte:
+
+• unzip: É o comando principal responsável por extrair arquivos compactados no formato .zip.
+
+• -o: É uma opção que significa overwrite (sobrescrever). Ela diz ao sistema para substituir arquivos existentes sem perguntar "Você tem certeza?". Se a pasta ou o arquivo já estiverem lá, eles serão atualizados silenciosamente.
+
+• bia.zip: É o arquivo de origem, ou seja, o arquivo compactado que criamos no passo anterior e que agora queremos abrir.
+
+• -d bia2: A opção -d significa directory (diretório/pasta) de destino. Ela diz ao comando: "Não extraia os arquivos soltos aqui onde estou; coloque todos eles dentro de uma pasta chamada bia2". Se a pasta bia2 não existir, o próprio comando a cria automaticamente.
+
+Resumo do que acontece no script:
+O comando diz: "Pegue o arquivo bia.zip, descompacte o seu conteúdo e coloque tudo dentro de uma nova pasta chamada bia2, sobrescrevendo os arquivos caso já existam." Como resultado, você pode ver no seu explorador de arquivos que a pasta bia2 apareceu contendo o docker-compose.yml intacto.
+
+----------------------------------------------------------------------------
+• Shell Script
+	- tail -f
+
+Esse comando será útil quem consiga ver os logs de um determinado arquivo em tempo real.
+
+----------------------------------------------------------------------------
+• Shell Script
+	- Trabalhando com command substitution
+
+Para descobrir o id através do nome da instancia
+
++------------------------------+-------------------------------------------------------------------+
+| v DESAFIOS-FUNDAMENTAIS      | >_ 04-command_substitution.sh                                     |
+|   > [ ] aula_03              +-------------------------------------------------------------------+
+|   v [ ] aula_04              |  1  NOME=$1                                                       |
+|     >_ 03-tail.sh            |  2  INSTANCE_ID=$(aws ec2 describe-instances \                    |
+|     >_ 05-1-criar-tunel...   |  3       --filter "Name=tag:Name,Values=$NOME" \                  |
+|     ...                      |  4       --query "Reservations[].Instances[?State.Name=='runn...  |
+|   > [ ] bia                  |  5       --output text --profile desafios-fundamentais)           |
+|   v [ ] bia2                 |  6                                                                |
+|       docker-compose.yml     |  7                                                                |
+|   >_ 01-zip.sh               |  8  echo $INSTANCE_ID                                             |
+|   >_ 02-unzip.sh             +-------------------------------------------------------------------+
+|   >_ 04-command_substitut... | TERMINAL                                                          |
+|   [ ] bia.zip                +-------------------------------------------------------------------+
+|                              | ~ % chmod +x 04-command_substitution.sh                           |
+|                              |                                                                   |
+|                              | ~ % ./04-command_substitution.sh bia-dev ────────────────┐  |
+|                              | i-04c0b663818ca4306 ◄──────────────────────────────┘  |
+|                              | ~ % ./04-command_substitution.sh bia-dev2   			   |
++------------------------------+-------------------------------------------------------------------+
+
+
+🔍 Entendendo o Script e o Command Substitution
+Este script demonstra um conceito poderosíssimo no shell script chamado Command Substitution (Substituição de Comando). Veja o passo a passo do que está acontecendo:
+
+NOME=$1 (Linha 1): O script pega o primeiro argumento que você digita no terminal ao executá-lo (neste caso, a palavra bia-dev) e o guarda na variável $NOME.
+
+$( ... ) (Linhas 2 a 5): Este é o Command Substitution. Em vez de executar o comando da AWS e jogar o resultado perdido na tela, a sintaxe $(comando) diz ao shell: "Execute tudo o que está aqui dentro, pegue a resposta final e salve na variável INSTANCE_ID".
+
+O Comando AWS (Linhas 2 a 5): Ele usa o aws ec2 describe-instances para buscar uma máquina. Ele filtra pela tag de nome (bia-dev), garante que a máquina está ligada ('running') e usa o --query para extrair da resposta JSON apenas o ID da instância em formato de texto simples.
+
+echo $INSTANCE_ID (Linha 8): Após a busca na AWS ter terminado e o ID ter sido guardado em silêncio, este comando imprime o valor salvo na tela.
+
+Resumo da Execução no Terminal:
+Quando você roda ./04-command_substitution.sh bia-dev, o script vai até a AWS de forma invisível, procura a EC2 chamada "bia-dev", captura o ID dela e o devolve limpo no seu terminal (i-04c0b663818ca4306). Quando você rodou com bia-dev2, provavelmente ele não retornou nada porque essa máquina não existia ou não estava rodando!
+
+Código completo:
+
++------------------------------+----------------------------------------------------------------------------------------+
+| v DESAFIOS-FUNDAMENTAIS      | >_ 04-command_substitution.sh                                     			|
+|   > [ ] aula_03              +----------------------------------------------------------------------------------------+
+|   v [ ] aula_04              |  1  NOME=$1                                                       			|
+|     >_ 03-tail.sh            |  2  INSTANCE_ID=$(aws ec2 describe-instances \                    			|
+|     >_ 05-1-criar-tunel...   |  3       --filter "Name=tag:Name,Values=$NOME" \                  			|
+|     >_ 05-2-criar-tunel...   |  4       --query "Reservations[].Instances[?State.Name == 'running'].InstanceId[]" \  	|
+|     ...                      |  5       --output text --profile desafios-fundamentais)           			|
+|   > [ ] bia                  |  6  #check if my instance_id is empty                             			|
+|   v [ ] bia2                 |  7  if [ -z "$INSTANCE_ID" ]; then                                			|
+|       docker-compose.yml     |  8      echo "Instancia nao encontrada"                           			|
+|   >_ 01-zip.sh               |  9      exit 1                                                    			|
+|   >_ 02-unzip.sh             | 10  fi                                                            			|
+|   >_ 04-command_substitut... | 11  echo "Instancia encontrada: $INSTANCE_ID"                     			|
+|   [ ] bia.zip                +----------------------------------------------------------------------------------------+
+|                              | TERMINAL                                                          			|
+|                              +----------------------------------------------------------------------------------------+
+|                              | ~ % ./04-command_substitution.sh bia-dev ──────────────────────┐ 				|
+|                              | i-04c0b663818ca4306 ◄────────────────────────────────────┘ 				|
+|                              | ~ % _                                                             			|
++------------------------------+----------------------------------------------------------------------------------------+
+
+=====================================================================================================
+
+Dia 4 - Parte2: Interpretando script shell para lançar ec2
+
+• Shell Script
+	- Interpretar script da bia (lancar_ec2_zona_a)
+
+Quando falamos sobre lançar EC2, nós temos as seguintes camadas:
+
++--------------------------------------------------------------------------------------------------+
+| VPC                                                                                              |
+|                                                                                                  |
+|         +----------------------------------------------------------------------+                 |
+|         | SUBNET                                                               |                 |
+|         |                                                                      |                 |
+|         |                   +----------------------+                           |                 |
+|         |                   |                      |                           |                 |
+|         |                   |         EC2          |                           |                 |
+|         |                   |                      |                           |                 |
+|         |                   +----------+-----------+                           |                 |
+|         |                              │                                       |                 |
+|         +------------------------------│---------------------------------------+                 |
+|                                        │                                                         |
++----------------------------------------│---------------------------------------------------------+
+                                         │
+  SECURITY GROUP ◄────────────────┘
+	E associado com essa EC2, nós vamos ter um security group.
+
+Então para lançar um EC2 temos três dependências.
+
+Este diagrama ilustra a hierarquia básica de rede na AWS:
+	- A VPC (Virtual Private Cloud) é a rede mais externa e abrangente.
+	- A SUBNET é uma subdivisão dentro da VPC.
+	- A EC2 é a máquina virtual que reside dentro dessa Subnet.
+	- O SECURITY GROUP atua como um firewall em nível de instância, por isso a seta o liga diretamente à EC2, controlando o tráfego que entra e sai dela.
+
+=====================================================================================================
+
+Dia 4 - Parte 3: Criando túnel SSM para EC2
+
+• Shell Script
+	- Criar túnel para máquina da bia
+		- Entendendo a comunicação
+
+O túnel pode ser iniciado por SSH ou SSM.
+
++----------------------+                                  +-----------------------+
+|          VM          |                                  |          EC2          |
+|    (Máquina Local)   |                                  |   (Instância AWS)     |
+|                      |            TÚNEL SSM             |                   	  |
+|                      | ──────────────────────► |                   	  |
+|     +-----------+    |                          	  |       +-----------+	  |
+|     | Porta 3002| ◄─┼────────────────────────┼───►  | bia-dev  |───┼──► bia rodando na porta 3001
+|     +-----------+    |  (O tráfego local na 3002 é      |       +-----------+   |
+|                      |   enviado pelo túnel até a EC2)  |          │       	  |
+|                      |                                  |          │    		  |
++----------------------+                                  +----------│------------+
+                                                                     ▼
+                                                            +--------------------+
+                                                            | SG: BIA-DEV        |
+                                                            | 3001: 0.0.0.0/0    |
+                                                            | (Será removido ou  |
+                                                            | não utilizado)     |
+                                                            +--------------------+
+
+Como funciona essa estratégia?
+O que você está implementando se chama Port Forwarding (Redirecionamento de Portas) utilizando o AWS Systems Manager (SSM).
+
+1. O Problema Inicial: Normalmente, para acessar a aplicação "bia" rodando na porta 3001 da sua EC2, você precisaria abrir essa porta no Security Group (3001: 0.0.0.0/0). O problema é que isso deixa a sua aplicação exposta para a internet inteira (qualquer pessoa pode tentar acessar).
+2. O Túnel SSM: O AWS SSM permite criar um "túnel" seguro entre a sua máquina local (a VM) e a instância EC2, sem precisar abrir portas para a internet no Security Group.
+3. O Redirecionamento (3002:3001): Você configura esse túnel para pegar uma porta da sua máquina local (ex: 3002) e conectá-la diretamente à porta onde a aplicação está rodando na EC2 (3001).
+4. O Acesso Final: Ao invés de acessar o IP público da EC2, você abre o navegador na sua própria máquina e acessa localhost:3002. O túnel pega esse acesso, envia de forma segura para a AWS e o entrega na porta 3001 da EC2. Para a EC2, parece que o acesso veio de dentro dela mesma.
+
+Vantagens:
+	- Segurança Elevada: É a maior vantagem. Você não precisa expor a porta da sua aplicação (3001) para a internet 0.0.0.0/0. Apenas quem tem acesso à sua conta AWS e permissões do SSM consegue criar esse túnel.
+	- Redução da Superfície de Ataque: Como a porta não está aberta no Security Group para a web, hackers e bots que escaneiam a internet não conseguirão sequer ver que a sua aplicação existe.
+	- Acesso Simplificado: Você não precisa se preocupar em gerenciar chaves SSH complexas, o SSM gerencia a autenticação através das suas credenciais (IAM) da AWS.
+
+Script para criar o Túnel.
+
++------------------------------+-------------------------------------------------------------------+
+| v DESAFIOS-FUNDAMENTAIS      | >_ 05-1-criar-tunel-propria-ec2.sh                                |
+|   > [ ] aula_03              +-------------------------------------------------------------------+
+|   v [ ] aula_04              |  1  NOME=$1                                                       |
+|     >_ 03-tail.sh            |  2  INSTANCE_ID=$(aws ec2 describe-instances \                    |
+|     >_ 05-2-criar-tunel...   |  3       --filter "Name=tag:Name,Values=$NOME" \                  |
+|     [ ] 05-3-dados-ac...     |  4       --query "Reservations[].Instances[?State.Name=='runn...  |
+|     [ ] 05-policy-criar-...  |  5       --output text --profile desafios-fundamentais)           |
+|     >_ 06-1-iniciar-tun...   |  6                                                                |
+|     >_ 06-2-parar-port...    |  7  #check if my instance_id is empty                             |
+|   > [ ] bia                  |  8  if [ -z "$INSTANCE_ID" ]; then                                |
+|   v [ ] bia2                 |  9      echo "Instancia nao encontrada"                           |
+|       docker-compos...       | 10      exit 1                                                    |
+|   >_ 01-zip.sh               | 11  fi                                                            |
+|   >_ 02-unzip.sh             | 12  echo "Instancia encontrada: $INSTANCE_ID"                     |
+|   >_ 04-command_su...        | 13                                                                |
+|   >_ 05-1-criar-tunel-...    | 14  #create the port forwarding tunnel                            |
+|   [ ] bia.zip                | 15  aws ssm start-session --target $INSTANCE_ID \                 |
+|                              | 16      --document-name AWS-StartPortForwardingSession \          |
+|                              | 17      --parameters '{"portNumber":["3001"],"localPortNumber...  |
+|                              +-------------------------------------------------------------------+
+|                              | TERMINAL                                                          |
+|                              +-------------------------------------------------------------------+
+|                              | ~ % chmod +x 05-1-criar-tunel-propria-ec2.sh bia-dev              |
+|                              | Instancia encontrada: i-04c0b663818ca4306                         |
+|                              | ~ % _                                                             |
++------------------------------+-------------------------------------------------------------------+
+
+O código:
+
+NOME=$1
+INSTANCE_ID=$(aws ec2 describe-instances \
+               --filter "Name=tag:Name,Values=$NOME" \
+               --query "Reservations[].Instances[?State.Name == 'running'].InstanceId[]" \
+               --output text --profile desafios-fundamentais)
+
+#check if my instance_id is empty
+if [ -z "$INSTANCE_ID" ]; then
+    echo "Instancia nao encontrada"
+    exit 1
+fi
+echo "Instancia encontrada: $INSTANCE_ID"
+
+#create the port forwarding tunnel
+aws ssm start-session --target $INSTANCE_ID \
+                       --document-name AWS-StartPortForwardingSession \
+                       --parameters '{"portNumber":["3001"],"localPortNumber":["3002"]}' --profile desafios-fundamentais
+
+
+Quando matar o túnel a conexão cai.
+Então, se um dia esse usuário sair da empresa, e o usuário fundamento foi demitido. Vou no usuário dele, e posso tirar, por exemplo, as permissões dele, tirar o SSM deleta a permissão e morreu o acesso dele.
+
+=====================================================================================================
+
+Dia 4 - Parte 4: Criando túnel SSM para RDS
+
+• Shell Script
+	- Criar túnel para RDS
+		- Entendendo a comunicação
+
++-----------------------+                                  +-----------------------+
+|          VM           |            TÚNEL SSM             |          EC2  	    |
+|    (Máquina Local)    | ──────────────────────► |    (Instância AWS)    	|
+|                       | ◄────────────────────── |                       	|
+|   +---------------+   |                                  |			    |
+|   |   3002:3001   | ◄┼────── (Túnel da App) ─────► |  [ 3001 ] ◄┐         	|
+|   +---------------+   |                                  |            │   		|
+|                       |                                  |      [ bia-dev ] ────┼─► bia rodando
+|   +---------------+   |                                  |       │    │  			|   na porta 3001
+|   |   5433:5432   | ◄┼───── (Túnel do Banco) ──────┼─┐     │    │          |
+|   +---------------+   |                                  | │     │    │          |
++-----------------------+                                  +-│-----│----│----------+
+                                                             │     │    │
+                                                             │     │    ▼
+                                                             │     │  SG: BIA-DEV
+                                                             │     │  3001: 0.0.0.0/0
+                                                             ▼     ▼
+                                                  +--------------------------+
+                                                  |           RDS            |
+                                                  |                          |
+                                                  |  [ bia-db ] (Porta 5432) |──► endpoint
+                                                  +--------------------------+
+
+
+🔍 Como funciona essa nova arquitetura (SSM + RDS)?
+
+Agora você não tem apenas um túnel, mas dois redirecionamentos passando pela conexão segura do AWS Systems Manager (SSM). A sua EC2 (bia-dev) está atuando como um "Bastion Host" (ou máquina de salto) para conectar sua máquina local aos recursos privados da AWS.
+
+• Túnel da Aplicação (3002:3001): Como vimos antes, sua máquina local na porta 3002 se conecta à porta 3001 da EC2, permitindo que você acesse a aplicação web pelo seu navegador sem abrir a porta no Security Group para a internet.
+
+• Túnel do Banco de Dados (5433:5432): Aqui está a novidade! Você está mapeando a porta local 5433 da sua máquina para se conectar à porta 5432 do RDS (via EC2).
+	- Por que 5433? É comum utilizarmos a 5433 na nossa máquina local porque a porta padrão do PostgreSQL (5432) já pode estar sendo usada por um banco instalado diretamente no seu computador.
+
+• Comunicação EC2 ➔ RDS: A sua aplicação rodando na EC2 continua se conectando normalmente ao banco de dados RDS através do endpoint gerado pela AWS, usando a rede interna rápida e segura da própria infraestrutura.
+
+💡 Vantagens dessa Estratégia
+
+1. Segurança Extrema para o Banco: O seu RDS não precisa ser público. Ele pode residir em uma sub-rede privada, invisível para a internet. A única forma de acessá-lo externamente é através desse túnel autenticado via SSM.
+
+2. Facilidade de Gestão Local: Com o túnel ativo, você pode abrir ferramentas de banco de dados na sua própria máquina (como o DBeaver, pgAdmin ou TablePlus), apontar para localhost:5433 e gerenciar o RDS que está lá na AWS como se ele estivesse rodando no seu próprio computador.
+
+3. Zero Portas Expostas: Assim como a regra do 0.0.0.0/0 na porta 3001 deixa de ser necessária, você também não precisa liberar o seu IP residencial (que costuma ser dinâmico e mudar com frequência) no Security Group do banco de dados.
+
+Tudo flui através do SSM de forma criptografada!
+
+Script:
+
++------------------------------+-------------------------------------------------------------------+
+| v DESAFIOS-FUNDAMENTAIS      | >_ 05-2-criar-tunel-rds.sh                                        |
+|   > [ ] aula_03              +-------------------------------------------------------------------+
+|   v [ ] aula_04              |  1  NOME=$1                                                       |
+|     >_ 03-tail.sh            |  2  NOME_RDS=$2                                                   |
+|     [ ] 05-3-dados-ac...     |  3  INSTANCE_ID=$(aws ec2 describe-instances \                    |
+|     [ ] 05-policy-criar...   |  4       --filter "Name=tag:Name,Values=$NOME" \                  |
+|     >_ 06-1-iniciar-tun...   |  5       --query "Reservations[].Instances[?State.Name=='ru...    |
+|     >_ 06-2-parar-port...    |  6       --output text --profile desafios-fundamentais)           |
+|   > [ ] bia                  | ...                                                               |
+|   v [ ] bia2                 | 13  DNS_PRIVADO_DO_RDS=$(aws rds describe-db-instances --db...    |
+|       docker-compose.yml     | ...                                                               |
+|   >_ 01-zip.sh               | 22  #create the port forwarding tunnel                            |
+|   >_ 02-unzip.sh             | 23  aws ssm start-session --target $INSTANCE_ID \                 |
+|   >_ 04-command_su...        | 24      --document-name AWS-StartPortForwardingSessionToRem...    |
+|   >_ 05-1-criar-tunel...     | 25      --parameters '{"host":["'$DNS_PRIVADO_DO_RDS'"],"po...    |
+|   >_ 05-2-criar-tunel...     +-------------------------------------------------------------------+
+|   [ ] bia.zip                | TERMINAL                                                          |
+|                              +-------------------------------------------------------------------+
+|                              | ~ % ./05-2-criar-tunel-rds.sh bia-dev bia                         |
+|                              | DNS Privado do RDS: bia.cduaawk82m83.us-east-1.rds.amazonaws.com  |
+|                              |                                                                   |
+|                              | Starting session with SessionId: fundamentos-2pchf5soeeqhl98e...  |
+|                              | Port 5433 opened for sessionId fundamentos-2pchf5soeeqhl98ej2...  |
+|                              | Waiting for connections...                                        |
++------------------------------+-------------------------------------------------------------------+
+
+💻 Código Completo (Script: 05-2-criar-tunel-rds.sh)
+
+NOME=$1
+NOME_RDS=$2
+INSTANCE_ID=$(aws ec2 describe-instances \
+               --filter "Name=tag:Name,Values=$NOME" \
+               --query "Reservations[].Instances[?State.Name == 'running'].InstanceId[]" \
+               --output text --profile desafios-fundamentais)
+
+if [ -z "$INSTANCE_ID" ]; then
+    echo "Instancia nao localizada"
+    exit 1
+fi
+
+DNS_PRIVADO_DO_RDS=$(aws rds describe-db-instances --db-instance-identifier $NOME_RDS --query 'DBInstances[0].Endpoint.Address' --output text --profile desafios-fundamentais)
+
+if [ -z "$DNS_PRIVADO_DO_RDS" ]; then
+    echo "RDS nao localizado"
+    exit 1
+fi
+
+echo "DNS Privado do RDS: $DNS_PRIVADO_DO_RDS"
+
+
+#create the port forwarding tunnel
+aws ssm start-session --target $INSTANCE_ID \
+                       --document-name AWS-StartPortForwardingSessionToRemoteHost \
+                       --parameters '{"host":["'$DNS_PRIVADO_DO_RDS'"],"portNumber":["'5432'"],"localPortNumber":["'5433'"]}' --profile desafios-fundamentais                       
+
+
+
+
+=====================================================================================================
+
+Dia 4 - Parte 5: Criando rotina com Shell Script e CLI para automação com EC2
+
+• Shell Script
+	- Criar rotina para ligar/desligar porteiro automaticamente
+
+Agora pessoal, percebam que nós temos o seguinte ponto, quando nós lançamos esses recursos, nós temos agora um EC2 que serve para túnel, mas ela pode precisar ficar ou não ligada, porque ela vai servir para fazer essa comunicação.
+
+Podemos marcar para bia-dev, só ser ligada quando eu for estabelecer uma comunicação, se ela tiver a finalidade de servir como baixo um host.
+
+Cria uma rotina para ligar e desligar o porteiro automaticamente.
+
++------------------------------+-------------------------------------------------------------------+
+| v DESAFIOS-FUNDAMENT...      | >_ 06-2-parar-porteiro.sh                                         |
+|   > [ ] aula_03              +-------------------------------------------------------------------+
+|   v [ ] aula_04              |  1  NOME=$1                                                       |
+|     >_ 03-tail.sh            |  2  INSTANCE_ID=$(aws ec2 describe-instances \                    |
+|     [ ] 05-3-dados-ac...     |  3       --filter "Name=tag:Name,Values=$NOME" \                  |
+|     [ ] 05-policy-criar...   |  4       --query "Reservations[].Instances[?State.Name == 'run... |
+|     >_ 06-1-iniciar-tun...   |  5       --output text --profile desafios-fundamentais)           |
+|     >_ 06-2-parar-port...    |  6                                                                |
+|   > [ ] bia                  |  7  #check if my instance_id is empty                             |
+|   v [ ] bia2                 |  8  if [ -z "$INSTANCE_ID" ]; then                                |
+|       docker-compos...       |  9      echo "Instancia nao encontrada"                           |
+|   >_ 01-zip.sh               | 10      exit 1                                                    |
+|   >_ 02-unzip.sh             | 11  fi                                                            |
+|   >_ 04-command_s...         | 12  echo "Instancia encontrada: $INSTANCE_ID"                     |
+|   >_ 05-1-criar-tunel-...    | 13                                                                |
+|   >_ 05-2-criar-tunel...     +-------------------------------------------------------------------+
+|   >_ 06-2-parar-port...      | TERMINAL                                                          |
+|   [ ] bia.zip                +-------------------------------------------------------------------+
+|                              | Connection accepted for session [fundamentos-2pchf5soeeqhl98e...] |
+|                              | ^CTerminate signal received, exiting.                             |
+|                              |                                                                   |
+|                              | Exiting session with sessionId: fundamentos-2pchf5soeeqhl98e...   |
+|                              |                                                                   |
+|                              | ~ % chmod +x 06-2-parar-porteiro.sh                               |
+|                              | ~ % ./06-2-parar-porteiro.sh bia-dev                              |
+|                              | Instancia encontrada: i-04c0b663818ca4306                         |
+|                              | Parando EC2 i-04c0b663818ca4306                                   |
+|                              | Porteiro já está sendo parado...                                  |
+|                              | ~ % _                                                             |
++------------------------------+-------------------------------------------------------------------+
+
+Código completo:
+
+NOME=$1
+INSTANCE_ID=$(aws ec2 describe-instances \
+               --filter "Name=tag:Name,Values=$NOME" \
+               --query "Reservations[].Instances[].InstanceId[]" \
+               --output text --profile desafios-fundamentais)
+
+#check if my instance_id is empty
+if [ -z "$INSTANCE_ID" ]; then
+    echo "Instancia nao encontrada"
+    exit 1
+fi
+echo "Instancia encontrada: $INSTANCE_ID"
+
+
+STATUS_PORTEIRO=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --profile desafios-fundamentais --query "Reservations[].Instances[].State.Name" --output text | grep running)
+if [ "$STATUS_PORTEIRO" == "running" ]; then
+  echo "Parando EC2 $INSTANCE_ID"
+  aws ec2 stop-instances --instance-ids $INSTANCE_ID --profile desafios-fundamentais &> /dev/null &
+  echo "Porteiro já está sendo parado..."
+else
+  echo "Porteiro EC2 com ID $INSTANCE_ID já está parado"
+fi
+
+
+
+
+Código completo:
+
+NOME=$1
+INSTANCE_ID=$(aws ec2 describe-instances \
+               --filter "Name=tag:Name,Values=$NOME" \
+               --query "Reservations[].Instances[].InstanceId[]" \
+               --output text --profile desafios-fundamentais)
+
+#check if my instance_id is empty
+if [ -z "$INSTANCE_ID" ]; then
+    echo "Instancia nao encontrada"
+    exit 1
+fi
+echo "Instancia encontrada: $INSTANCE_ID"
+
+
+STATUS_PORTEIRO=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --profile desafios-fundamentais --query "Reservations[].Instances[].State.Name" --output text | grep running)
+
+if [ "$STATUS_PORTEIRO" != "running" ]; then
+  echo "Iniciando EC2 $INSTANCE_ID"
+  aws ec2 start-instances --instance-ids $INSTANCE_ID --profile desafios-fundamentais &> /dev/null &
+  echo "Aguardando 30 segundos para porteiro ficar pronto"
+  sleep 30
+fi
+
+aws ssm start-session --target $INSTANCE_ID \
+                       --document-name AWS-StartPortForwardingSession \
+                       --parameters '{"portNumber":["3001"],"localPortNumber":["3002"]}' --profile desafios-fundamentais
+
+
+Podemos adaptar para ligar o Docker automaticamente no EC2, porque o túnel está funcional e também para o RDS.
+
+=====================================================================================================
+
+Dia 4 - Parte 6: Desafio da aula 4
+
+Desafio 4
+
+- Crie script que lance o porteiro na zona b (subnet default)
+- Crie script que inicie o porteiro com túnel para o RDS na porta local 5433
+	- Estabeleça comunicação, insira 1 registro manualmente no banco
+- Crie túnel para bia e conecte nela na porta 3002 para ver o registro que foi adicionado
+- Crie script que para a máquina do porteiro
+
+
+Desafio 4 (Conteúdos de apoio)
+• Módulo: Conectividade e Segurança na AWS: AULA 01 à 05
+
+link: https://hotmart.com/pt-BR/club/formacaoaws/products/1930176/content/3ea5Ekapeg

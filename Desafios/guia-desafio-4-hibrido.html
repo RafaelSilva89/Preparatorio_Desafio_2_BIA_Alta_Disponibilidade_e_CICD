@@ -1,0 +1,1871 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Laboratório híbrido do Desafio 4: criar VPC, security groups, RDS PostgreSQL, role IAM e duas EC2 pelo Console da AWS, e testar tudo pelo terminal com túneis SSM e pelo DBeaver.">
+<meta name="color-scheme" content="light dark">
+<title>Desafio 4 Híbrido — Console cria, terminal testa</title>
+<script>
+  /* Aplica o tema salvo antes da primeira pintura, para nao piscar branco no escuro. */
+  (function () {
+    try {
+      var t = localStorage.getItem("desafio4-hibrido-tema");
+      if (t === "dark" || t === "light") {
+        document.documentElement.setAttribute("data-theme", t);
+      }
+    } catch (e) {}
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+
+<style>
+  :root {
+    --bg:        #E9EDEF;
+    --surface:   #FFFFFF;
+    --surface-2: #F3F6F7;
+    --ink:       #0E1619;
+    --ink-2:     #44555C;
+    --ink-3:     #6F8188;
+    --line:      #D3DBDE;
+    --line-2:    #E4EAEC;
+    --accent:    #0A6A72;
+    --accent-2:  #08535A;
+    --accent-soft:#DBECED;
+    --warn:      #A05712;
+    --warn-soft: #FAEDDC;
+    --ok:        #1E6F45;
+    --ok-soft:   #DEF0E6;
+    --stop:      #A13327;
+    --stop-soft: #FAE3E0;
+    --term-bg:   #0D1619;
+    --term-line: #1E2E34;
+    --term-ink:  #D6E3E7;
+    --term-dim:  #7C949B;
+    --shadow:    0 1px 2px rgba(14,22,25,.05), 0 8px 24px -16px rgba(14,22,25,.28);
+    --radius: 10px;
+    --maxw: 1180px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #0B1214;
+      --surface:   #121B1E;
+      --surface-2: #162126;
+      --ink:       #E7EFF1;
+      --ink-2:     #A8BBC1;
+      --ink-3:     #7C9199;
+      --line:      #24343A;
+      --line-2:    #1C282D;
+      --accent:    #5AC6CE;
+      --accent-2:  #8BDBE1;
+      --accent-soft:#10333A;
+      --warn:      #E2A75E;
+      --warn-soft: #2C2216;
+      --ok:        #6FCB95;
+      --ok-soft:   #13291D;
+      --stop:      #EA8B7D;
+      --stop-soft: #2E1A17;
+      --term-bg:   #08100F;
+      --term-line: #1B2A2F;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg:        #0B1214;
+    --surface:   #121B1E;
+    --surface-2: #162126;
+    --ink:       #E7EFF1;
+    --ink-2:     #A8BBC1;
+    --ink-3:     #7C9199;
+    --line:      #24343A;
+    --line-2:    #1C282D;
+    --accent:    #5AC6CE;
+    --accent-2:  #8BDBE1;
+    --accent-soft:#10333A;
+    --warn:      #E2A75E;
+    --warn-soft: #2C2216;
+    --ok:        #6FCB95;
+    --ok-soft:   #13291D;
+    --stop:      #EA8B7D;
+    --stop-soft: #2E1A17;
+    --term-bg:   #08100F;
+    --term-line: #1B2A2F;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -0.015em;
+  }
+
+  code, kbd, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  }
+
+  /* ---------- barra superior ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-in {
+    max-width: var(--maxw); margin: 0 auto; padding: 10px 24px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  }
+  .topbar-id { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+  .topbar-id strong { font-family: "Archivo", sans-serif; font-size: 15px; font-weight: 700; }
+  .topbar-id span { font-size: 12px; color: var(--ink-3); font-family: "IBM Plex Mono", monospace; }
+
+  .prog { display: flex; align-items: center; gap: 10px; }
+  .prog-track { width: 190px; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .prog-fill { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
+  .prog-num {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500;
+    color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 78px;
+  }
+  .btn-ghost {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-3); background: none;
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer;
+  }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--ink-3); }
+
+  /* ---------- estrutura ---------- */
+  .shell { max-width: var(--maxw); margin: 0 auto; padding: 0 24px 96px; display: grid; gap: 40px; grid-template-columns: 218px minmax(0,1fr); }
+  @media (max-width: 940px) { .shell { grid-template-columns: 1fr; gap: 0; } }
+
+  nav.toc { position: sticky; top: 72px; align-self: start; padding: 32px 0; max-height: calc(100vh - 90px); overflow-y: auto; }
+  @media (max-width: 940px) { nav.toc { display: none; } }
+  .toc-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+  .toc a {
+    display: flex; gap: 9px; align-items: baseline; padding: 5px 0;
+    color: var(--ink-2); text-decoration: none; font-size: 13.5px; line-height: 1.35;
+    border-left: 2px solid transparent; padding-left: 10px; margin-left: -12px;
+  }
+  .toc a b { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-3); font-weight: 500; }
+  .toc a:hover { color: var(--ink); }
+  .toc a.on { color: var(--accent); border-left-color: var(--accent); font-weight: 500; }
+  .toc a.on b { color: var(--accent); }
+  .toc a.done b::after { content: "✓"; margin-left: 4px; color: var(--ok); }
+
+  main { padding: 32px 0 0; min-width: 0; }
+
+  /* ---------- abertura ---------- */
+  .hero { padding: 26px 0 34px; border-bottom: 1px solid var(--line); margin-bottom: 40px; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+  }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); line-height: 1.08; font-weight: 700; }
+  .lede { font-size: 17px; color: var(--ink-2); max-width: 64ch; margin-top: 16px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .fact {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px;
+  }
+  .fact b { color: var(--ink-3); font-weight: 500; }
+
+  /* ---------- fases ---------- */
+  .phase { margin: 0 0 60px; scroll-margin-top: 76px; }
+  .phase-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
+  .phase-n {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--accent); background: var(--accent-soft); border-radius: 6px;
+    padding: 6px 9px; line-height: 1; margin-top: 5px; white-space: nowrap;
+  }
+  .phase-head h2 { font-size: clamp(21px, 2.6vw, 27px); font-weight: 600; }
+  .phase-head p { margin: 6px 0 0; color: var(--ink-2); font-size: 15px; max-width: 68ch; }
+  .phase-count {
+    margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--ink-3); white-space: nowrap; padding-top: 9px; font-variant-numeric: tabular-nums;
+  }
+  .phase-count.full { color: var(--ok); }
+
+  /* ---------- passo ---------- */
+  .step {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px 22px; margin-bottom: 14px; box-shadow: var(--shadow); scroll-margin-top: 76px;
+  }
+  .step-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .step-id {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+    color: var(--ink-3); font-variant-numeric: tabular-nums;
+    text-decoration: none; transition: color .12s;
+  }
+  a.step-id:hover, a.step-id:focus-visible { color: var(--accent); }
+  .step h3 { font-size: 17px; font-weight: 600; }
+  .where {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .07em;
+    text-transform: uppercase; padding: 3px 7px; border-radius: 4px; margin-left: auto; white-space: nowrap;
+  }
+  .w-wsl { background: var(--accent-soft); color: var(--accent); }
+  .w-console { background: var(--warn-soft); color: var(--warn); }
+  .w-dbeaver { background: var(--ok-soft); color: var(--ok); }
+  .w-web { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+  .step > p { color: var(--ink-2); font-size: 14.5px; margin: 8px 0 0; max-width: 72ch; }
+
+  /* ---------- comandos ---------- */
+  .cmd { position: relative; margin: 14px 0 0; }
+  .cmd-label, .out-label {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; display: block;
+  }
+  pre {
+    margin: 0; padding: 14px 16px; border-radius: 8px; overflow-x: auto;
+    font-size: 13px; line-height: 1.62; tab-size: 2;
+  }
+  .cmd pre { background: var(--term-bg); color: var(--term-ink); border: 1px solid var(--term-line); }
+  .cmd pre .p { color: #6FCB95; user-select: none; }
+  .cmd pre .c { color: var(--term-dim); }
+  .copy {
+    position: absolute; top: 22px; right: 8px; font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    background: rgba(255,255,255,.07); color: #9FB6BC; border: 1px solid rgba(255,255,255,.13);
+    border-radius: 5px; padding: 4px 8px; cursor: pointer; opacity: 0; transition: opacity .15s;
+  }
+  .cmd:hover .copy, .copy:focus-visible { opacity: 1; }
+  .copy.ok { color: #6FCB95; border-color: #6FCB95; opacity: 1; }
+  .out { margin-top: 14px; }
+  .out pre {
+    background: var(--surface-2); color: var(--ink-2);
+    border: 1px solid var(--line-2); border-left: 3px solid var(--ink-3);
+  }
+  .out.good pre { border-left-color: var(--ok); }
+  .out.bad pre { border-left-color: var(--stop); }
+  .out.clicks pre { border-left-color: var(--warn); color: var(--ink); }
+  p code, li code, td code {
+    background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 4px;
+    padding: 1px 5px; font-size: .875em; color: var(--ink);
+  }
+
+  /* ---------- checklist ---------- */
+  .check { margin: 16px 0 0; padding: 14px 16px; background: var(--surface-2); border-radius: 8px; border: 1px solid var(--line-2); }
+  .check-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+  .check ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  .check li label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  .check input[type=checkbox] {
+    appearance: none; -webkit-appearance: none; flex: 0 0 auto;
+    width: 17px; height: 17px; margin: 3px 0 0; border: 1.5px solid var(--ink-3);
+    border-radius: 4px; background: var(--surface); cursor: pointer; position: relative; transition: .12s;
+  }
+  .check input[type=checkbox]:hover { border-color: var(--accent); }
+  .check input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+  .check input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 5px; top: 1.5px; width: 4px; height: 9px;
+    border: solid var(--surface); border-width: 0 2px 2px 0; transform: rotate(43deg);
+  }
+  .check label span { font-size: 14.5px; color: var(--ink-2); line-height: 1.45; }
+  .check input:checked + span { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line); }
+
+  /* ---------- avisos ---------- */
+  .note { border-radius: 8px; padding: 13px 16px; margin: 14px 0 0; font-size: 14.5px; border: 1px solid; }
+  .note > b { display: block; font-family: "Archivo", sans-serif; font-size: 13px; letter-spacing: .01em; margin-bottom: 3px; }
+  .note p { margin: 0; }
+  .note p + p { margin-top: 7px; }
+  .note ul, .note ol { margin: 6px 0 7px; padding-left: 20px; }
+  .note li + li { margin-top: 3px; }
+  .note pre { margin: 8px 0; background: var(--term-bg); color: var(--term-ink); border: 1px solid var(--term-line); }
+  .n-warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, transparent); color: var(--ink); }
+  .n-warn > b { color: var(--warn); }
+  .n-tip  { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 32%, transparent); color: var(--ink); }
+  .n-tip > b { color: var(--accent); }
+  .n-key  { background: var(--stop-soft); border-color: color-mix(in srgb, var(--stop) 32%, transparent); color: var(--ink); }
+  .n-key > b { color: var(--stop); }
+
+  details.fallback { margin-top: 14px; border: 1px dashed var(--line); border-radius: 8px; padding: 0 14px; background: var(--surface-2); }
+  details.fallback summary { cursor: pointer; padding: 11px 0; font-size: 14px; font-weight: 500; color: var(--ink-2); }
+  details.fallback[open] summary { border-bottom: 1px solid var(--line-2); margin-bottom: 12px; }
+  details.fallback > *:last-child { margin-bottom: 14px; }
+
+  /* ---------- tabelas ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin-top: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 520px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-3); font-weight: 500; background: var(--surface-2);
+  }
+  td:first-child { white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .ascii { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-top: 16px; }
+  .ascii pre { background: none; color: var(--ink-2); font-size: 12px; line-height: 1.5; padding: 20px; }
+
+  footer { max-width: var(--maxw); margin: 0 auto; padding: 28px 24px 60px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+  footer p { margin: 0 0 6px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  @media (max-width: 620px) {
+    .shell, .topbar-in, footer { padding-left: 16px; padding-right: 16px; }
+    .step { padding: 16px; }
+    .where { margin-left: 0; }
+    .prog-track { width: 110px; }
+    td:first-child { white-space: normal; }
+  }
+  /* ---------- impressao ---------- */
+  @media print {
+    :root, :root[data-theme="dark"], :root[data-theme="light"] {
+      --bg: #FFFFFF; --surface: #FFFFFF; --surface-2: #F5F7F8;
+      --ink: #000000; --ink-2: #263338; --ink-3: #55666C;
+      --line: #B9C4C8; --line-2: #DDE4E6;
+      --accent: #0A6A72; --accent-2: #08535A; --accent-soft: #EDF4F5;
+      --warn: #7A430E; --warn-soft: #FBF3E9; --ok: #165634; --ok-soft: #EDF6F1;
+      --stop: #7D2820; --stop-soft: #FBEEEC;
+      --term-bg: #F2F5F6; --term-line: #C8D2D5; --term-ink: #0E1619; --term-dim: #55666C;
+      --shadow: none;
+    }
+    .topbar, nav.toc, .copy, #tema, #reset { display: none !important; }
+    .shell { display: block; max-width: none; padding: 0; }
+    body { background: #fff; }
+    .step, .cmd, .out, .note, .check, .ascii, .tablewrap, details {
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    h2, h3, .step-top, .phase-head { break-after: avoid; page-break-after: avoid; }
+    .phase { margin-bottom: 24px; }
+    .step { box-shadow: none; border-color: #B9C4C8; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="topbar-id">
+      <strong>Desafio 4 · Híbrido</strong>
+      <span>Console cria · terminal testa · us-east-1</span>
+    </div>
+    <div class="prog">
+      <span class="prog-num" id="progNum">0 / 0</span>
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+    <button class="btn-ghost" id="tema" type="button">Tema: claro</button>
+    <button class="btn-ghost" id="reset" type="button">Limpar progresso</button>
+  </div>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc" aria-label="Fases do laboratório">
+    <div class="toc-label">Roteiro</div>
+  </nav>
+
+  <main>
+
+    <header class="hero">
+      <div class="eyebrow">Desafios Fundamentais · Formação AWS · Dia 4 · versão híbrida</div>
+      <h1>Montar o porteiro pelo Console, provar que funciona pelo terminal</h1>
+      <p class="lede">
+        O mesmo desafio do porteiro e dos túneis SSM, agora dividido em dois papéis. O <b>Console da AWS</b> cria cada peça —
+        VPC, security groups, banco, role e máquinas — com cada campo explicado. O <b>terminal</b> e o <b>DBeaver</b>
+        entram só para conectar e testar. Tudo é um laboratório novo, com nomes <code>lab-*</code>: nada do ambiente da BIA é tocado,
+        e no fim você apaga tudo pelo Console.
+      </p>
+      <div class="facts">
+        <span class="fact"><b>região</b> us-east-1</span>
+        <span class="fact"><b>profile</b> formacao_aws</span>
+        <span class="fact"><b>VPC</b> lab-desafio4</span>
+        <span class="fact"><b>porteiro</b> lab-porteiro</span>
+        <span class="fact"><b>app</b> lab-app</span>
+        <span class="fact"><b>RDS</b> lab-pgsql</span>
+        <span class="fact"><b>túneis</b> 5433 · 3002</span>
+      </div>
+    </header>
+
+    <!-- ================================================================ MAPA -->
+    <section class="phase" id="p-mapa" data-title="O que vamos montar">
+      <div class="phase-head">
+        <span class="phase-n">MAPA</span>
+        <div>
+          <h2>O que vamos montar, e quem faz cada parte</h2>
+          <p>Antes do primeiro clique, o desenho inteiro. Cada caixa abaixo é uma fase deste guia.</p>
+        </div>
+      </div>
+
+      <div class="ascii">
+<pre>
+  SEU WINDOWS                                AWS  us-east-1  ·  VPC lab-desafio4 (10.40.0.0/16)
+ +---------------------------+     +-----------------------------------------------------------+
+ | WSL (terminal)            |     |  subnet PÚBLICA  us-east-1b                               |
+ |   aws cli + ssm plugin    |     |  +--------------------+          +--------------------+   |
+ |                           | SSM |  | EC2 lab-porteiro   |  tcp 80  | EC2 lab-app        |   |
+ |   localhost:5433 ---------|=====|=>| sem porta aberta   |---------&gt;| API python :80     |   |
+ |   localhost:3002 ---------|=====|=>| sem key pair       |          | SG lab-sg-app      |   |
+ |                           |     |  | SG lab-sg-porteiro |          +---------+----------+   |
+ | DBeaver -&gt; localhost:5433 |     |  +---------+----------+                    |              |
+ | navegador -&gt; :3002        |     |            | tcp 5432                      | tcp 5432     |
+ +---------------------------+     |  subnets PRIVADAS (a, b)                   |              |
+                                   |            v                               v              |
+                                   |  +---------------------------------------------------+   |
+                                   |  | RDS lab-pgsql  ·  PostgreSQL  ·  NÃO público       |   |
+                                   |  | SG lab-sg-db                                       |   |
+                                   |  +---------------------------------------------------+   |
+                                   +-----------------------------------------------------------+
+   WSL --X--&gt; RDS e WSL --X--&gt; lab-app: nenhum dos dois aceita conexão da internet
+</pre>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Fase</th><th>Console cria</th><th>Terminal / DBeaver testa</th></tr></thead>
+          <tbody>
+            <tr><td>F1</td><td>VPC com subnets públicas e privadas</td><td>Lista as subnets e confere zona e rota</td></tr>
+            <tr><td>F2</td><td>Três security groups, com regras por SG</td><td>Lê as regras e confere as origens</td></tr>
+            <tr><td>F3</td><td>RDS PostgreSQL privado</td><td>Confere status, endpoint e que não é público</td></tr>
+            <tr><td>F4</td><td>Role IAM para o agente do SSM</td><td>—</td></tr>
+            <tr><td>F5</td><td>EC2 <code>lab-porteiro</code></td><td>Sessão SSM dentro da máquina, sem SSH</td></tr>
+            <tr><td>F6</td><td>EC2 <code>lab-app</code> com user data</td><td>Grava a senha pela sessão SSM e testa a API por dentro</td></tr>
+            <tr><td>F7</td><td>—</td><td>Túnel 5433 + DBeaver: cria a tabela e insere o registro</td></tr>
+            <tr><td>F8</td><td>—</td><td>Túnel 3002 + curl e navegador: o registro aparece pela API</td></tr>
+            <tr><td>F9</td><td>Parar e religar pelo Console</td><td>Compara com o <code>04-parar-porteiro.sh</code></td></tr>
+            <tr><td>F10</td><td>Apagar tudo, na ordem certa</td><td>Confirma que nada <code>lab-*</code> sobrou</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note n-tip">
+        <b>Como ler as etiquetas de cada passo</b>
+        <p><b>CONSOLE</b> = navegador, logado no Console da AWS · <b>WSL</b> = terminal Ubuntu · <b>WSL · T1 / T2 / T3</b> = primeira, segunda e terceira aba do terminal (um túnel prende a aba onde roda) · <b>DBEAVER</b> = o cliente de banco no Windows · <b>NAVEGADOR</b> = navegador acessando <code>localhost</code>.</p>
+      </div>
+
+      <div class="note n-warn">
+        <b>Este laboratório cobra por hora enquanto estiver ligado</b>
+        <p>Valores aproximados em us-east-1, sem free tier: cada EC2 <code>t3.micro</code> ≈ US$ 0,0104/h, cada IPv4 público ≈ US$ 0,005/h, o RDS <code>db.t3.micro</code> ≈ US$ 0,018/h mais o disco. Somando tudo, algo perto de <b>US$ 0,06 por hora</b>. O NAT Gateway, que custaria bem mais, fica de fora de propósito. Confira no <i>AWS Pricing Calculator</i> e faça a <a href="#p10">Fase 10</a> no mesmo dia.</p>
+      </div>
+    </section>
+
+    <!-- ================================================================ F0 -->
+    <section class="phase" id="p0" data-title="Preparação">
+      <div class="phase-head">
+        <span class="phase-n">FASE 0</span>
+        <div>
+          <h2>Preparar os dois lados: Console e terminal</h2>
+          <p>O Console precisa de um usuário com permissão para criar recursos. O terminal precisa de credenciais temporárias e do plugin do Session Manager.</p>
+        </div>
+        <span class="phase-count" data-count-for="p0"></span>
+      </div>
+
+      <div class="step" id="passo-0-1">
+        <div class="step-top"><a class="step-id" href="#passo-0-1">0.1</a><h3>Entrar no Console na região certa</h3><span class="where w-console">CONSOLE</span></div>
+        <p>Entre com um usuário que possa criar VPC, EC2, RDS e roles no IAM — um usuário administrador da sua conta. O <code>fundamentos_aws</code> pode não ter permissão de IAM, e criar role é justamente o que ele não costuma poder.</p>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>Canto superior direito  &gt;  seletor de região  &gt;  United States (N. Virginia)  us-east-1</pre></div>
+        <div class="note n-warn">
+          <b>A região some da cabeça, e o recurso some da tela</b>
+          <p>Tudo o que você criar fica preso à região selecionada. Se em algum momento a lista de instâncias aparecer vazia, a primeira coisa a conferir é esse seletor.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Logado no Console com um usuário que pode criar recursos e roles</span></label></li>
+          <li><label><input type="checkbox"><span>Região <code>us-east-1</code> selecionada</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-2">
+        <div class="step-top"><a class="step-id" href="#passo-0-2">0.2</a><h3>Autenticar o terminal e salvar os nomes do laboratório</h3><span class="where w-wsl">WSL</span></div>
+        <p>O terminal só vai <b>ler</b> recursos e abrir sessões. Os nomes ficam num arquivo para cada aba nova carregar com um <code>source</code>.</p>
+        <div class="cmd"><span class="cmd-label">1. Login e identidade</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws login --profile formacao_aws
+<span class="p">$ </span>export AWS_PROFILE=formacao_aws
+<span class="p">$ </span>aws sts get-caller-identity --query Arn --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>arn:aws:iam::xxxxxxxxxxxx:user/fundamentos_aws</pre></div>
+        <div class="cmd"><span class="cmd-label">2. Começar o caderno do laboratório</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>mkdir -p ~/DESAFIOS-FUNDAMENTAIS
+<span class="p">$ </span>cat &gt; ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh &lt;&lt;'FIM'
+export AWS_PROFILE=formacao_aws
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_PAGER=""
+FIM
+<span class="p">$ </span>cat ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>export AWS_PROFILE=formacao_aws
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_PAGER=""</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Trecho</th><th>O que faz</th></tr></thead>
+            <tbody>
+              <tr><td><code>mkdir -p ~/DESAFIOS-FUNDAMENTAIS</code></td><td>Cria a pasta dentro da sua pasta pessoal do Ubuntu (<code>~</code> = <code>/home/seu-usuario</code>). O <code>-p</code> não reclama se a pasta já existir</td></tr>
+              <tr><td><code>cat &gt; ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh</code></td><td>Tudo o que o <code>cat</code> receber vai para esse arquivo. O <code>&gt;</code> cria o arquivo — ou <b>apaga e reescreve</b>, se ele já existir</td></tr>
+              <tr><td><code>&lt;&lt;'FIM'</code></td><td>"Heredoc": as linhas seguintes, até a linha <code>FIM</code>, são o texto entregue ao <code>cat</code>. As aspas em <code>'FIM'</code> fazem o shell gravar o texto exatamente como está, sem trocar nada que comece com <code>$</code></td></tr>
+              <tr><td>as três linhas <code>export ...</code></td><td>O conteúdo gravado: o profile e a região que todo comando <code>aws</code> vai usar, e <code>AWS_PAGER=""</code>, que desliga o paginador — sem ele, respostas longas param num <code>:</code> e escondem o resto</td></tr>
+              <tr><td><code>FIM</code></td><td>Marca o fim do texto. A palavra é só uma convenção, mas precisa estar sozinha na linha, sem espaço antes ou depois</td></tr>
+              <tr><td><code>cat ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh</code></td><td>Sem o <code>&gt;</code>, o <code>cat</code> só mostra o arquivo na tela — é a conferência</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-warn">
+          <b>Rode este bloco uma vez só, no começo</b>
+          <p>Por causa do <code>&gt;</code>, rodar de novo depois das outras fases <b>apaga os nomes já anotados</b> e deixa só as três primeiras linhas. Se isso acontecer, refaça os blocos "Anotar o nome" das fases que você já passou.</p>
+        </div>
+        <p>O arquivo começa só com o profile e a região. Os <b>nomes</b> dos recursos entram um a um, na fase em que cada recurso é criado — procure os blocos <b>"Anotar o nome"</b>. Assim você vê onde cada variável nasce e onde ela é usada.</p>
+        <div class="note n-tip">
+          <b>Por que um arquivo, e não só <code>export</code></b>
+          <p>Uma variável criada com <code>export</code> vive só na aba onde foi digitada. Nas Fases 7 e 8 você abre abas novas para os túneis, e elas começam vazias. O arquivo é o caderno dessas abas: um <code>source</code> e todos os nomes anotados até ali voltam. Ele guarda só nomes — nunca IDs, IPs ou senha.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O <code>get-caller-identity</code> mostra o seu usuário</span></label></li>
+          <li><label><input type="checkbox"><span><code>lab-hibrido.sh</code> criado com as três linhas: profile, região e paginador</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-3">
+        <div class="step-top"><a class="step-id" href="#passo-0-3">0.3</a><h3>Conferir as ferramentas de teste</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws --version
+<span class="p">$ </span>session-manager-plugin --version</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>aws-cli/2.x.x Python/3.x Linux/...
+1.2.x.x</pre></div>
+        <p>O DBeaver fica no Windows e não precisa de nada especial: ele vai enxergar o túnel em <code>localhost</code>, porque o WSL2 repassa as portas abertas no Ubuntu para o Windows.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>AWS CLI v2 e <code>session-manager-plugin</code> respondem</span></label></li>
+          <li><label><input type="checkbox"><span>DBeaver instalado no Windows</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-0-4">
+        <div class="step-top"><a class="step-id" href="#passo-0-4">0.4</a><h3>A permissão do seu usuário para abrir sessões</h3><span class="where w-console">CONSOLE</span></div>
+        <p>Duas identidades diferentes precisam de permissão, e é fácil confundir. A <b>máquina</b> recebe a dela na Fase 4, pela role. O <b>seu usuário</b> precisa poder iniciar a sessão — é o que se confere aqui.</p>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>IAM  &gt;  Users  &gt;  fundamentos_aws  &gt;  aba Permissions</pre></div>
+        <p>Se aparecer <code>AmazonSSMFullAccess</code>, está resolvido. Se o usuário tiver só políticas restritas, crie esta e anexe a ele:</p>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>IAM  &gt;  Policies  &gt;  Create policy  &gt;  JSON
+  (cole o JSON abaixo)  &gt;  Next
+  Policy name   lab-ssm-sessoes
+  Create policy
+IAM  &gt;  Users  &gt;  fundamentos_aws  &gt;  Add permissions  &gt;  Attach policies directly
+  marcar lab-ssm-sessoes  &gt;  Next  &gt;  Add permissions</pre></div>
+        <div class="cmd"><span class="cmd-label">Policy JSON</span><button class="copy" type="button">copiar</button><pre>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "ssm:StartSession",
+      "Resource": [
+        "arn:aws:ec2:us-east-1:*:instance/*",
+        "arn:aws:ssm:us-east-1::document/SSM-SessionManagerRunShell",
+        "arn:aws:ssm:*:*:document/AWS-StartPortForwardingSessionToRemoteHost"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["ssm:TerminateSession", "ssm:ResumeSession"],
+      "Resource": "arn:aws:ssm:*:*:session/${aws:username}-*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ssm:DescribeInstanceInformation",
+        "ec2:DescribeInstances",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeVpcs",
+        "rds:DescribeDBInstances"
+      ],
+      "Resource": "*"
+    }
+  ]
+}</pre></div>
+        <div class="note n-tip">
+          <b>O que cada bloco libera</b>
+          <p>O primeiro deixa abrir dois tipos de sessão — o shell dentro da máquina e o encaminhamento de porta até outro host. O segundo deixa encerrar só as <b>suas</b> sessões (<code>${aws:username}</code>). O terceiro é leitura: o terminal só consulta, quem cria é o Console.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O usuário do terminal tem <code>AmazonSSMFullAccess</code> ou a policy <code>lab-ssm-sessoes</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ F1 -->
+    <section class="phase" id="p1" data-title="Console: VPC">
+      <div class="phase-head">
+        <span class="phase-n">FASE 1</span>
+        <div>
+          <h2>A rede: uma VPC com subnets públicas e privadas</h2>
+          <p>Um assistente do Console cria de uma vez a VPC, quatro subnets, as tabelas de rota e o Internet Gateway. Vale entender cada campo, porque é ele que decide quem sai para a internet.</p>
+        </div>
+        <span class="phase-count" data-count-for="p1"></span>
+      </div>
+
+      <div class="step" id="passo-1-1">
+        <div class="step-top"><a class="step-id" href="#passo-1-1">1.1</a><h3>Criar a VPC com o assistente "VPC and more"</h3><span class="where w-console">CONSOLE</span></div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>VPC  &gt;  Your VPCs  &gt;  Create VPC</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo</th><th>Valor</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td>Resources to create</td><td><code>VPC and more</code></td><td>Cria a VPC já com subnets, rotas e gateway. "VPC only" criaria uma rede vazia, sem saída nenhuma</td></tr>
+              <tr><td>Name tag auto-generation</td><td><code>lab-desafio4</code></td><td>Vira prefixo de tudo: <code>lab-desafio4-vpc</code>, <code>lab-desafio4-subnet-public2-us-east-1b</code>… Facilita achar e apagar depois</td></tr>
+              <tr><td>IPv4 CIDR block</td><td><code>10.40.0.0/16</code></td><td>65 mil endereços privados. Não pode colidir com outra rede que você queira ligar a esta; aqui não há nenhuma</td></tr>
+              <tr><td>IPv6 CIDR block</td><td><code>No IPv6 CIDR block</code></td><td>Não é usado no laboratório</td></tr>
+              <tr><td>Tenancy</td><td><code>Default</code></td><td>"Dedicated" coloca as máquinas em hardware exclusivo — e cobra por isso</td></tr>
+              <tr><td>Number of Availability Zones</td><td><code>2</code></td><td>O RDS exige subnets em <b>pelo menos duas</b> zonas, mesmo rodando numa só</td></tr>
+              <tr><td>Customize AZs</td><td><code>us-east-1a</code> e <code>us-east-1b</code></td><td>Abra e confira: o porteiro vai para a zona b, como pede o desafio</td></tr>
+              <tr><td>Number of public subnets</td><td><code>2</code></td><td>Subnet pública = a tabela de rota dela manda <code>0.0.0.0/0</code> para o Internet Gateway. É onde ficam as EC2</td></tr>
+              <tr><td>Number of private subnets</td><td><code>2</code></td><td>Sem rota para a internet. É onde fica o banco</td></tr>
+              <tr><td>NAT gateways</td><td><code>None</code></td><td>Um NAT daria saída à subnet privada, mas custa ~US$ 0,045/h cada, parado ou não. O banco não precisa de saída</td></tr>
+              <tr><td>VPC endpoints</td><td><code>None</code></td><td>O gateway de S3 é gratuito, mas não é usado aqui</td></tr>
+              <tr><td>DNS options</td><td>as duas marcadas</td><td><b>Enable DNS hostnames</b> e <b>resolution</b> são o que faz o endpoint do RDS virar um IP dentro da VPC. Sem isso, <code>no such host</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>Create VPC  &gt;  aguardar todos os itens ficarem verdes  &gt;  View VPC</pre></div>
+        <div class="note n-tip">
+          <b>A VPC custa alguma coisa?</b>
+          <p><b>Não por existir.</b> A VPC e tudo o que este assistente criou — subnets, tabelas de rota, Internet Gateway, security groups e network ACLs — não têm cobrança própria. O que cobra numa VPC são estes itens:</p>
+          <ul>
+            <li><b>NAT Gateway</b> — por hora e por GB. Evitado: você marcou <code>None</code>.</li>
+            <li><b>VPC endpoint do tipo interface</b> — por hora. Evitado: <code>None</code>.</li>
+            <li><b>Flow Logs</b> — pelo volume de log gravado. Não foi ligado.</li>
+            <li><b>IPv4 público</b> — cerca de US$ 0,005 por hora, por IP. Entra na Fase 5, com o IP público das EC2.</li>
+            <li><b>Tráfego de dados</b> — saída para a internet e tráfego entre zonas diferentes. No laboratório são poucos megabytes.</li>
+          </ul>
+          <p>Com a Fase 1 pronta, essa VPC ainda não está cobrando nada. O relógio começa no RDS (Fase 3) e nas EC2 (Fases 5 e 6) — e para de vez na <a href="#p10">Fase 10</a>.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>VPC <code>lab-desafio4-vpc</code> criada com CIDR <code>10.40.0.0/16</code></span></label></li>
+          <li><label><input type="checkbox"><span>NAT gateways = None</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-2">
+        <div class="step-top"><a class="step-id" href="#passo-1-2">1.2</a><h3>Ler a rede que o assistente criou — só olhar, nada a criar</h3><span class="where w-console">CONSOLE</span></div>
+        <div class="note n-warn">
+          <b>Este passo é só leitura</b>
+          <p>O assistente do passo 1.1 já criou tudo. <b>Não clique em <i>Create route table</i></b> nem em <i>Edit routes</i>: aqui você só abre e confere o que existe.</p>
+        </div>
+
+        <div class="out clicks"><span class="out-label">Console ›  A. Mostrar só o laboratório</span><pre>VPC  &gt;  menu da esquerda, no topo:  Filter by VPC  &gt;  lab-desafio4-vpc</pre></div>
+        <p>A conta tem outras VPCs (a default e as das aulas), e cada uma traz as suas tabelas de rota. Sem o filtro, a lista de <i>Route tables</i> mistura todas — é por isso que aparecem linhas sem nome de outras redes. Com o filtro, todas as telas do menu passam a mostrar só a <code>lab-desafio4-vpc</code>.</p>
+
+        <div class="out clicks"><span class="out-label">Console ›  B. Resource map em tela cheia</span><pre>VPC  &gt;  Your VPCs  &gt;  clicar no link azul do VPC ID da lab-desafio4-vpc  (vpc-xxxxxxxxxxxxxxxxx)
+  a página da VPC abre inteira  &gt;  aba  Resource map</pre></div>
+        <div class="note n-tip">
+          <b>O painel de baixo aparece cortado?</b>
+          <p>Marcar a caixinha da linha abre os detalhes num painel espremido embaixo da lista, e o conteúdo fica escondido. Duas saídas: clicar no <b>link azul do ID</b> (abre a página inteira) ou arrastar para cima a barra fina que separa a lista do painel.</p>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Coluna do Resource map</th><th>O que você deve ver</th></tr></thead>
+            <tbody>
+              <tr><td>VPC</td><td><code>lab-desafio4-vpc</code></td></tr>
+              <tr><td>Subnets (4)</td><td><code>public1-us-east-1a</code>, <code>public2-us-east-1b</code>, <code>private1-us-east-1a</code>, <code>private2-us-east-1b</code></td></tr>
+              <tr><td>Route tables (4)</td><td><code>rtb-public</code>, <code>rtb-private1-us-east-1a</code>, <code>rtb-private2-us-east-1b</code> e a tabela principal, sem nome</td></tr>
+              <tr><td>Network connections (1)</td><td><code>lab-desafio4-igw</code>, o Internet Gateway</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Passe o mouse sobre uma subnet: o mapa acende a linha até a tabela de rota dela e, se for pública, até o Internet Gateway. Nas privadas, a linha para na tabela.</p>
+
+        <div class="out clicks"><span class="out-label">Console ›  C. A lista de tabelas de rota</span><pre>VPC  &gt;  Route tables      (com o filtro do item A ainda ativo)</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Name</th><th>Explicit subnet associations</th><th>Main</th></tr></thead>
+            <tbody>
+              <tr><td><code>lab-desafio4-rtb-public</code></td><td>2 subnets</td><td>No</td></tr>
+              <tr><td><code>lab-desafio4-rtb-private1-us-east-1a</code></td><td>1 subnet</td><td>No</td></tr>
+              <tr><td><code>lab-desafio4-rtb-private2-us-east-1b</code></td><td>1 subnet</td><td>No</td></tr>
+              <tr><td><code>–</code> (sem nome)</td><td>–</td><td>Yes</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>A última linha é a <b>tabela principal</b> (<i>main</i>): toda VPC nasce com uma, e ela vale para qualquer subnet que não tenha tabela própria. Aqui as quatro subnets têm a sua, então a principal fica sem uso. A coluna <i>Main</i> fica no fim da tabela — role para a direita para vê-la.</p>
+
+        <div class="out clicks"><span class="out-label">Console ›  D. Abrir a tabela pública</span><pre>Route tables  &gt;  clicar no link azul do Route table ID da lab-desafio4-rtb-public
+  aba  Routes</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — Routes (2)</span><pre>Destination      Target                   Status   Propagated
+10.40.0.0/16     local                    Active   No
+0.0.0.0/0        igw-xxxxxxxxxxxxxxxxx    Active   No</pre></div>
+        <p>Ainda nessa página, a aba <b>Subnet associations</b> mostra as duas subnets que usam esta tabela: <code>public1-us-east-1a</code> e <code>public2-us-east-1b</code>.</p>
+
+        <div class="out clicks"><span class="out-label">Console ›  E. Abrir uma tabela privada, para comparar</span><pre>Route tables  &gt;  clicar no link azul do Route table ID da lab-desafio4-rtb-private1-us-east-1a
+  aba  Routes</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — Routes (1)</span><pre>Destination      Target   Status   Propagated
+10.40.0.0/16     local    Active   No</pre></div>
+
+        <div class="note n-key">
+          <b>Pública ou privada não é um botão — é a rota</b>
+          <p>Compare as respostas dos itens D e E. Não existe um campo "tipo de subnet": a única diferença entre as duas é a linha <code>0.0.0.0/0 → igw-...</code>.</p>
+          <p><code>10.40.0.0/16 → local</code> aparece nas duas e diz "tráfego para dentro da VPC fica na VPC" — é por ela que o porteiro, numa subnet pública, alcança o banco numa subnet privada. <code>0.0.0.0/0 → igw</code> diz "todo o resto vai para a internet", e só existe na pública. Quem não tem essa rota não sai nem entra da internet, mesmo tendo IP público.</p>
+        </div>
+        <div class="note n-warn">
+          <b>As subnets públicas deste assistente não dão IP público sozinhas</b>
+          <p>A opção <i>Auto-assign public IPv4</i> vem desligada nelas. Por isso, na Fase 5 você vai ligar <b>Auto-assign public IP</b> na hora de lançar cada EC2. Sem IP público, a máquina não chega ao serviço do SSM e nunca aparece como Online — foi o problema da aula de conectividade pública.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Vi a rota <code>0.0.0.0/0 → igw</code> na tabela pública</span></label></li>
+          <li><label><input type="checkbox"><span>Vi que as tabelas privadas não têm essa rota</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-1-3">
+        <div class="step-top"><a class="step-id" href="#passo-1-3">1.3</a><h3>Conferir pelo terminal o que o Console criou</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Anotar o nome — LAB_VPC</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>export LAB_VPC=lab-desafio4-vpc
+<span class="p">$ </span>grep -q '^export LAB_VPC=' ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh \
+  || echo 'export LAB_VPC=lab-desafio4-vpc' &gt;&gt; ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Trecho</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td><code>lab-desafio4-vpc</code></td><td>É o <i>Name tag auto-generation</i> do passo 1.1 (<code>lab-desafio4</code>) mais o sufixo <code>-vpc</code> que o assistente acrescenta</td></tr>
+              <tr><td><code>export LAB_VPC=...</code></td><td>Cria a variável <b>nesta aba</b></td></tr>
+              <tr><td><code>echo '...' &gt;&gt; lab-hibrido.sh</code></td><td>Anota a mesma linha no caderno, para as <b>abas futuras</b>. O <code>&gt;&gt;</code> acrescenta no fim; um <code>&gt;</code> só apagaria o arquivo</td></tr>
+              <tr><td><code>grep -q ... ||</code></td><td>Só anota se a linha ainda não existir. Rodar o bloco duas vezes não duplica nada</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Este mesmo padrão aparece nas próximas fases, uma vez para cada nome.</p>
+        <div class="cmd"><span class="cmd-label">Conferir a VPC e as subnets</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$LAB_VPC" \
+  --query 'Vpcs[0].VpcId' --output text)
+<span class="p">$ </span>echo "$VPC_ID"
+<span class="p">$ </span>aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" \
+  --query 'sort_by(Subnets,&amp;AvailabilityZone)[].{Nome:Tags[?Key==`Name`]|[0].Value,Zona:AvailabilityZone,CIDR:CidrBlock}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>vpc-xxxxxxxxxxxxxxxxx
+---------------------------------------------------------------------------
+|                             DescribeSubnets                             |
++----------------+----------------------------------------+---------------+
+|      CIDR      |                 Nome                   |     Zona      |
++----------------+----------------------------------------+---------------+
+|  10.40.0.0/20  |  lab-desafio4-subnet-public1-us-east-1a |  us-east-1a  |
+|  10.40.128.0/20|  lab-desafio4-subnet-private1-us-east-1a|  us-east-1a  |
+|  10.40.16.0/20 |  lab-desafio4-subnet-public2-us-east-1b |  us-east-1b  |
+|  10.40.144.0/20|  lab-desafio4-subnet-private2-us-east-1b|  us-east-1b  |
++----------------+----------------------------------------+---------------+</pre></div>
+        <p>A tabela ordena só pela zona: dentro da mesma zona, a privada pode vir antes da pública. O que importa são as quatro linhas, duas em cada zona. Se <code>$VPC_ID</code> vier <code>None</code>, o nome da VPC é outro — confira o campo <i>Name tag auto-generation</i> do passo 1.1.</p>
+        <div class="cmd"><span class="cmd-label">As mesmas tabelas de rota do passo 1.2, pelo terminal</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$VPC_ID" \
+  --query 'RouteTables[].{Nome:Tags[?Key==`Name`]|[0].Value,Principal:Associations[?Main]|[0].Main,Rotas:Routes[].[DestinationCidrBlock,GatewayId]}' \
+  --output json</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada (a ordem pode variar)</span><pre>[
+    { "Nome": "lab-desafio4-rtb-public", "Principal": null,
+      "Rotas": [ ["10.40.0.0/16", "local"], ["0.0.0.0/0", "igw-xxxxxxxxxxxxxxxxx"] ] },
+    { "Nome": "lab-desafio4-rtb-private1-us-east-1a", "Principal": null,
+      "Rotas": [ ["10.40.0.0/16", "local"] ] },
+    { "Nome": "lab-desafio4-rtb-private2-us-east-1b", "Principal": null,
+      "Rotas": [ ["10.40.0.0/16", "local"] ] },
+    { "Nome": null, "Principal": true,
+      "Rotas": [ ["10.40.0.0/16", "local"] ] }
+]</pre></div>
+        <p>A resposta real vem com uma chave por linha; aqui está compactada para caber. É a mesma leitura dos itens D e E do passo 1.2: só a <code>rtb-public</code> tem <code>0.0.0.0/0</code> apontando para um <code>igw-</code>. <code>"Principal": true</code> marca a tabela principal, sem nome.</p>
+        <div class="note n-warn">
+          <b>A saída parou com um <code>:</code> na última linha?</b>
+          <p>Não é erro nem terminal travado. Quando a resposta não cabe na tela, o AWS CLI a abre num <b>paginador</b> (o programa <code>less</code>) e mostra <code>:</code> esperando você. Tecle <kbd>Espaço</kbd> para ver o resto e <kbd>q</kbd> para sair. Foi assim que a quarta tabela, a <code>private2-us-east-1b</code>, ficou escondida.</p>
+          <p>O passo 0.2 já grava <code>AWS_PAGER=""</code> no caderno, que desliga o paginador. Se o seu caderno foi criado antes dessa linha existir, acrescente agora:</p>
+          <pre>export AWS_PAGER=""
+grep -q '^export AWS_PAGER=' ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh \
+  || echo 'export AWS_PAGER=""' &gt;&gt; ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh</pre>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Quatro subnets, duas em cada zona</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ F2 -->
+    <section class="phase" id="p2" data-title="Console: security groups">
+      <div class="phase-head">
+        <span class="phase-n">FASE 2</span>
+        <div>
+          <h2>Os firewalls: três security groups que se referenciam</h2>
+          <p>A ordem importa. Uma regra só pode apontar para um SG que já existe, então primeiro nasce o do porteiro — que não tem regra de entrada nenhuma.</p>
+        </div>
+        <span class="phase-count" data-count-for="p2"></span>
+      </div>
+
+      <div class="step" id="passo-2-1">
+        <div class="step-top"><a class="step-id" href="#passo-2-1">2.1</a><h3><code>lab-sg-porteiro</code> — sem entrada, de propósito</h3><span class="where w-console">CONSOLE</span></div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>EC2  &gt;  Network &amp; Security  &gt;  Security Groups  &gt;  Create security group</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo</th><th>Valor</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td>Security group name</td><td><code>lab-sg-porteiro</code></td><td>Não pode começar com <code>sg-</code>: esse prefixo é reservado aos IDs</td></tr>
+              <tr><td>Description</td><td><code>porteiro do lab - acesso so por SSM</code></td><td>Obrigatória. Não aceita acentos</td></tr>
+              <tr><td>VPC</td><td><code>lab-desafio4-vpc</code></td><td>O Console sugere a VPC default. Um SG de outra VPC não aparece na hora de lançar a EC2</td></tr>
+              <tr><td>Inbound rules</td><td><b>nenhuma</b></td><td>O agente do SSM abre a conexão de <b>dentro para fora</b>. Nada precisa entrar</td></tr>
+              <tr><td>Outbound rules</td><td>deixar a padrão (All traffic, 0.0.0.0/0)</td><td>É por essa saída que o agente chega ao SSM, e que o porteiro chega ao banco e à app</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>Create security group</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>lab-sg-porteiro</code> criado na <code>lab-desafio4-vpc</code>, com 0 regras de entrada</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-2">
+        <div class="step-top"><a class="step-id" href="#passo-2-2">2.2</a><h3><code>lab-sg-app</code> — a porta 80 só para o porteiro</h3><span class="where w-console">CONSOLE</span></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo</th><th>Valor</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td>Security group name</td><td><code>lab-sg-app</code></td><td></td></tr>
+              <tr><td>Description</td><td><code>app do lab - porta 80 so a partir do porteiro</code></td><td></td></tr>
+              <tr><td>VPC</td><td><code>lab-desafio4-vpc</code></td><td></td></tr>
+              <tr><td>Inbound › Type</td><td><code>HTTP</code></td><td>Preenche TCP 80 sozinho</td></tr>
+              <tr><td>Inbound › Source</td><td><code>Custom</code> › digite <code>lab-sg</code> e escolha <code>lab-sg-porteiro</code></td><td>A origem é um <b>SG</b>, não um IP: vale para qualquer máquina que use esse SG, mesmo que o IP mude</td></tr>
+              <tr><td>Inbound › Description</td><td><code>porteiro</code></td><td>Daqui a um mês é isso que explica a regra</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-warn">
+          <b>Não escolha "My IP" nem "Anywhere"</b>
+          <p>A app não deve aceitar nada da internet. Quem acessa é você, pelo túnel — e para o SG, quem chega é o porteiro.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>lab-sg-app</code> com uma regra: TCP 80, origem <code>lab-sg-porteiro</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-3">
+        <div class="step-top"><a class="step-id" href="#passo-2-3">2.3</a><h3><code>lab-sg-db</code> — a 5432 para o porteiro e para a app</h3><span class="where w-console">CONSOLE</span></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo</th><th>Valor</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td>Security group name</td><td><code>lab-sg-db</code></td><td></td></tr>
+              <tr><td>Description</td><td><code>rds do lab - 5432 so do porteiro e da app</code></td><td></td></tr>
+              <tr><td>VPC</td><td><code>lab-desafio4-vpc</code></td><td></td></tr>
+              <tr><td>Inbound 1</td><td><code>PostgreSQL</code> · origem <code>lab-sg-porteiro</code> · desc. <code>porteiro</code></td><td>O caminho do túnel 5433 → DBeaver</td></tr>
+              <tr><td>Inbound 2 (Add rule)</td><td><code>PostgreSQL</code> · origem <code>lab-sg-app</code> · desc. <code>app</code></td><td>O caminho da API até o banco</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>lab-sg-db</code> com duas regras 5432, origens <code>lab-sg-porteiro</code> e <code>lab-sg-app</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-2-4">
+        <div class="step-top"><a class="step-id" href="#passo-2-4">2.4</a><h3>Conferir as regras pelo terminal</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=lab-sg-*" \
+  --query 'SecurityGroups[].{Grupo:GroupName,Id:GroupId,Entradas:IpPermissions[].{Porta:FromPort,Origem:UserIdGroupPairs[].GroupId}}' \
+  --output json</pre></div>
+        <p>Confira três coisas: <code>lab-sg-porteiro</code> com <code>"Entradas": []</code>; <code>lab-sg-app</code> com a porta 80 apontando para o <b>ID</b> do porteiro; <code>lab-sg-db</code> com a 5432 apontando para os IDs do porteiro e da app. Nenhum <code>0.0.0.0/0</code> em entrada.</p>
+        <div class="note n-tip">
+          <b>Se o <code>$VPC_ID</code> estiver vazio nesta aba</b>
+          <p>Ele foi criado no passo 1.3 e só vive na aba onde rodou. Repita o primeiro comando do 1.3.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>As três origens são IDs de SG, nunca faixas de IP</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ F3 -->
+    <section class="phase" id="p3" data-title="Console: RDS">
+      <div class="phase-head">
+        <span class="phase-n">FASE 3</span>
+        <div>
+          <h2>O banco: um PostgreSQL que a internet não enxerga</h2>
+          <p>O RDS leva uns 10 minutos para ficar pronto. Por isso ele vem antes das EC2: enquanto cria, você segue para as Fases 4 e 5.</p>
+        </div>
+        <span class="phase-count" data-count-for="p3"></span>
+      </div>
+
+      <div class="step" id="passo-3-1">
+        <div class="step-top"><a class="step-id" href="#passo-3-1">3.1</a><h3>Criar o banco campo a campo</h3><span class="where w-console">CONSOLE</span></div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>Aurora and RDS  &gt;  Databases  &gt;  Create database</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo</th><th>Valor</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td>Database creation method</td><td><code>Full configuration</code></td><td>O "Easy create" esconde justamente os campos de rede que este guia quer mostrar</td></tr>
+              <tr><td>Engine type</td><td><code>PostgreSQL</code></td><td></td></tr>
+              <tr><td>Engine version</td><td>a padrão sugerida</td><td>O cliente <code>psql</code> 16 do Ubuntu avisa com <code>WARNING</code> se o servidor for mais novo — é só aviso</td></tr>
+              <tr><td>Templates</td><td><code>Free tier</code></td><td>Trava as opções nas que cabem no nível gratuito e desliga Multi-AZ</td></tr>
+              <tr><td>DB instance identifier</td><td><code>lab-pgsql</code></td><td>Vira o começo do endpoint: <code>lab-pgsql.xxxx.us-east-1.rds.amazonaws.com</code></td></tr>
+              <tr><td>Master username</td><td><code>postgres</code></td><td></td></tr>
+              <tr><td>Credentials management</td><td><code>Self managed</code></td><td>O Secrets Manager é o certo em produção, mas cobra por segredo</td></tr>
+              <tr><td>Master password</td><td>digite uma senha forte, sem <code>/</code>, <code>"</code>, <code>@</code>, <code>\</code> ou espaço</td><td>Guarde num gerenciador de senhas, <b>nunca</b> num <code>.txt</code> do repositório</td></tr>
+              <tr><td>Instance configuration</td><td><code>db.t3.micro</code> (ou <code>db.t4g.micro</code>)</td><td>As classes do free tier</td></tr>
+              <tr><td>Storage</td><td><code>gp2</code> ou <code>gp3</code>, <code>20</code> GiB</td><td>O mínimo</td></tr>
+              <tr><td>Additional storage configuration</td><td>desmarcar <b>Enable storage autoscaling</b></td><td>Evita o disco crescer sozinho num laboratório</td></tr>
+              <tr><td>Compute resource</td><td><code>Don't connect to an EC2 compute resource</code></td><td>A outra opção cria SGs automáticos com nomes próprios. Você já criou os seus</td></tr>
+              <tr><td>Virtual private cloud (VPC)</td><td><code>lab-desafio4-vpc</code></td><td><b>Não dá para mudar depois.</b> Errar aqui obriga a recriar o banco</td></tr>
+              <tr><td>DB subnet group</td><td><code>Create new DB Subnet Group</code></td><td>Grupo com as subnets da VPC em duas zonas. Você o apaga na Fase 10</td></tr>
+              <tr><td>Public access</td><td><code>No</code></td><td>O ponto do laboratório: o banco não recebe IP público. Só quem está dentro da VPC chega nele</td></tr>
+              <tr><td>VPC security group</td><td><code>Choose existing</code> › <code>lab-sg-db</code> · <b>remova o <code>default</code></b></td><td>O <code>default</code> vem pré-selecionado e deixaria o banco com regras que você não controla</td></tr>
+              <tr><td>Availability Zone</td><td><code>No preference</code></td><td></td></tr>
+              <tr><td>Database authentication</td><td><code>Password authentication</code></td><td></td></tr>
+              <tr><td>Monitoring</td><td>desligar Performance Insights / Enhanced monitoring</td><td>Métricas extras cobram à parte</td></tr>
+              <tr><td>Additional configuration › Initial database name</td><td><code>lab</code></td><td><b>Se ficar vazio, o banco <code>lab</code> não existe</b> e a conexão da Fase 7 falha com <code>database "lab" does not exist</code></td></tr>
+              <tr><td>Backup</td><td>desmarcar <b>Enable automated backups</b></td><td>Laboratório descartável</td></tr>
+              <tr><td>Deletion protection</td><td>desmarcado</td><td>Se marcado, a Fase 10 não consegue apagar</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>Estimated monthly costs  &gt;  conferir o valor  &gt;  Create database</pre></div>
+        <div class="note n-warn">
+          <b>Se escolheu gerar a senha automaticamente</b>
+          <p>Ela aparece <b>uma vez só</b>, no banner azul <i>View connection details</i> logo depois do Create. Fechou o banner, perdeu a senha — aí só com <i>Modify</i> e uma senha nova.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>lab-pgsql</code> em criação, na <code>lab-desafio4-vpc</code></span></label></li>
+          <li><label><input type="checkbox"><span>Public access = No, SG = só <code>lab-sg-db</code></span></label></li>
+          <li><label><input type="checkbox"><span>Initial database name = <code>lab</code></span></label></li>
+          <li><label><input type="checkbox"><span>Senha guardada fora do repositório</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-3-2">
+        <div class="step-top"><a class="step-id" href="#passo-3-2">3.2</a><h3>Enquanto cria: siga para a Fase 4. Depois, confira</h3><span class="where w-wsl">WSL</span></div>
+        <p>Volte a este passo quando o Console mostrar <b>Status: Available</b>.</p>
+        <div class="cmd"><span class="cmd-label">Anotar o nome — LAB_RDS</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>export LAB_RDS=lab-pgsql
+<span class="p">$ </span>grep -q '^export LAB_RDS=' ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh \
+  || echo 'export LAB_RDS=lab-pgsql' &gt;&gt; ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh</pre></div>
+        <p><code>lab-pgsql</code> é o <i>DB instance identifier</i> do passo 3.1. É por ele — e não pelo endpoint, que é longo e muda se o banco for recriado — que o terminal encontra o banco.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>aws rds describe-db-instances --db-instance-identifier "$LAB_RDS" \
+  --query 'DBInstances[0].{Status:DBInstanceStatus,Endpoint:Endpoint.Address,Publico:PubliclyAccessible,Banco:DBName,Versao:EngineVersion}' \
+  --output table</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>--------------------------------------------------------------------------------------------
+|                                   DescribeDBInstances                                    |
++-------+----------------------------------------------------+---------+-----------+-------+
+| Banco |                     Endpoint                       | Publico |  Status   | Versao|
++-------+----------------------------------------------------+---------+-----------+-------+
+|  lab  |  lab-pgsql.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com |  False  | available |  18.x |
++-------+----------------------------------------------------+---------+-----------+-------+</pre></div>
+        <p>O mesmo aparece no Console em <b>Databases › lab-pgsql › Connectivity &amp; security</b>. <code>Publico = False</code> e <code>Banco = lab</code> são as duas colunas que importam.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Status <code>available</code>, <code>Publico = False</code>, <code>Banco = lab</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ F4 -->
+    <section class="phase" id="p4" data-title="Console: role IAM">
+      <div class="phase-head">
+        <span class="phase-n">FASE 4</span>
+        <div>
+          <h2>A identidade da máquina: uma role para o agente do SSM</h2>
+          <p>O agente do SSM já vem instalado no Amazon Linux 2023. Falta ele ter permissão de conversar com o serviço — e essa permissão chega por uma role, não por chave guardada no disco.</p>
+        </div>
+        <span class="phase-count" data-count-for="p4"></span>
+      </div>
+
+      <div class="step" id="passo-4-1">
+        <div class="step-top"><a class="step-id" href="#passo-4-1">4.1</a><h3>Criar a role <code>lab-role-ssm</code></h3><span class="where w-console">CONSOLE</span></div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>IAM  &gt;  Roles  &gt;  Create role
+  Trusted entity type   AWS service
+  Service or use case   EC2
+  Use case              EC2                         &gt;  Next
+  Permissions policies  buscar e marcar  AmazonSSMManagedInstanceCore  &gt;  Next
+  Role name             lab-role-ssm
+  Description           role do lab hibrido - agente SSM nas EC2
+  Create role</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Escolha</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td>Trusted entity = EC2</td><td>Diz <b>quem</b> pode vestir a role: o serviço EC2, em nome das instâncias. É a <i>trust policy</i></td></tr>
+              <tr><td><code>AmazonSSMManagedInstanceCore</code></td><td>Diz <b>o que</b> a máquina pode fazer: registrar-se no SSM e manter sessões. Nada de ler S3, RDS ou outras máquinas</td></tr>
+              <tr><td>Uma role para as duas EC2</td><td>Porteiro e app precisam da mesma coisa. Se um dia a app precisar ler um segredo, ela ganha uma role própria</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-key">
+          <b>Role, instance profile e o seu usuário: três coisas diferentes</b>
+          <p>A <b>role</b> é o conjunto de permissões. O <b>instance profile</b> é o "crachá" que prende a role numa EC2 — o Console cria um com o mesmo nome, por isso na Fase 5 o campo se chama <i>IAM instance profile</i>. O <b>seu usuário</b> (passo 0.4) é quem pede para abrir a sessão. A sessão só abre com os dois lados autorizados.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Role <code>lab-role-ssm</code> criada com <code>AmazonSSMManagedInstanceCore</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ F5 -->
+    <section class="phase" id="p5" data-title="Console: EC2 porteiro">
+      <div class="phase-head">
+        <span class="phase-n">FASE 5</span>
+        <div>
+          <h2>O porteiro: uma EC2 sem porta aberta e sem chave</h2>
+          <p>Agora as peças das fases anteriores se encontram num único formulário. Depois, o primeiro teste pelo terminal: entrar na máquina sem SSH.</p>
+        </div>
+        <span class="phase-count" data-count-for="p5"></span>
+      </div>
+
+      <div class="step" id="passo-5-1">
+        <div class="step-top"><a class="step-id" href="#passo-5-1">5.1</a><h3>Lançar a <code>lab-porteiro</code></h3><span class="where w-console">CONSOLE</span></div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>EC2  &gt;  Instances  &gt;  Launch instances</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo</th><th>Valor</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td>Name</td><td><code>lab-porteiro</code></td><td>Vira a tag <code>Name</code>, que é como o terminal encontra a máquina</td></tr>
+              <tr><td>Application and OS Images</td><td><code>Amazon Linux 2023 AMI</code> · 64-bit (x86)</td><td>Já traz o agente do SSM instalado e ligado</td></tr>
+              <tr><td>Instance type</td><td><code>t3.micro</code></td><td>O porteiro só repassa bytes; não precisa de mais</td></tr>
+              <tr><td>Key pair (login)</td><td><code>Proceed without a key pair</code></td><td>Sem chave não há <code>.pem</code> para guardar ou vazar. O acesso é 100% IAM. O aviso "Not recommended" vale para quem usa SSH — não é o caso</td></tr>
+              <tr><td>Network settings</td><td>clicar em <b>Edit</b></td><td>Sem o Edit, o Console usa a VPC default</td></tr>
+              <tr><td>VPC</td><td><code>lab-desafio4-vpc</code></td><td></td></tr>
+              <tr><td>Subnet</td><td><code>lab-desafio4-subnet-public2-us-east-1b</code></td><td>Pública, na zona b</td></tr>
+              <tr><td>Auto-assign public IP</td><td><code>Enable</code></td><td><b>Obrigatório aqui.</b> Sem IP público e sem NAT, o agente não alcança o SSM</td></tr>
+              <tr><td>Firewall (security groups)</td><td><code>Select existing security group</code> › <code>lab-sg-porteiro</code></td><td>Não deixe o Console criar o <code>launch-wizard-1</code> com SSH aberto</td></tr>
+              <tr><td>Configure storage</td><td><code>8 GiB gp3</code> (padrão)</td><td></td></tr>
+              <tr><td>Advanced details › IAM instance profile</td><td><code>lab-role-ssm</code></td><td>É esquecer este campo e a máquina nunca aparecer no SSM</td></tr>
+              <tr><td>Advanced details › Metadata version</td><td><code>V2 only (token required)</code></td><td>IMDSv2: protege a credencial da role contra ataques de SSRF. Já é o padrão no AL2023</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>Summary (à direita)  &gt;  conferir  &gt;  Launch instance  &gt;  View all instances</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>lab-porteiro</code> em <code>us-east-1b</code>, com IP público</span></label></li>
+          <li><label><input type="checkbox"><span>Sem key pair, SG <code>lab-sg-porteiro</code>, role <code>lab-role-ssm</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-5-2">
+        <div class="step-top"><a class="step-id" href="#passo-5-2">5.2</a><h3>Ver o nó aparecer no SSM pelo Console</h3><span class="where w-console">CONSOLE</span></div>
+        <p>Espere 1 a 3 minutos depois do <i>running</i>: o sistema sobe, o agente pega a credencial da role e se registra.</p>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>Systems Manager  &gt;  Node Tools  &gt;  Fleet Manager
+  a lab-porteiro aparece com  SSM Agent ping status = Online
+
+ou  EC2  &gt;  Instances  &gt;  lab-porteiro  &gt;  Connect  &gt;  aba Session Manager
+  o botão Connect fica habilitado</pre></div>
+        <div class="note n-warn">
+          <b>Passou de 5 minutos e não apareceu?</b>
+          <p>São três causas, nesta ordem: faltou o <i>IAM instance profile</i> (<b>Actions › Security › Modify IAM role</b> resolve sem recriar); faltou o IP público (aí é recriar a instância); ou o SG de saída foi alterado. Depois de trocar a role, reinicie a instância para o agente pegar a credencial mais rápido.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>lab-porteiro</code> Online no Fleet Manager</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-5-3">
+        <div class="step-top"><a class="step-id" href="#passo-5-3">5.3</a><h3>Entrar na máquina pelo terminal, sem SSH</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Anotar o nome — LAB_PORTEIRO</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>export LAB_PORTEIRO=lab-porteiro
+<span class="p">$ </span>grep -q '^export LAB_PORTEIRO=' ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh \
+  || echo 'export LAB_PORTEIRO=lab-porteiro' &gt;&gt; ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh</pre></div>
+        <p><code>lab-porteiro</code> é o campo <i>Name</i> do passo 5.1. O Console grava esse nome como a tag <code>Name</code> da instância, e é essa tag que o filtro <code>tag:Name</code> abaixo procura.</p>
+        <div class="cmd"><span class="cmd-label">1. Descobrir o ID pelo nome e abrir a sessão</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>PORTEIRO_ID=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=$LAB_PORTEIRO" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].InstanceId' --output text)
+<span class="p">$ </span>echo "$PORTEIRO_ID"
+<span class="p">$ </span>aws ssm start-session --target "$PORTEIRO_ID"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>i-xxxxxxxxxxxxxxxxx
+
+Starting session with SessionId: fundamentos_aws-xxxxxxxxxxxxxxxxxxxxxxxxxx
+sh-5.2$</pre></div>
+        <div class="cmd"><span class="cmd-label">2. Dentro do porteiro — a prova de que é SSM</span><button class="copy" type="button">copiar</button><pre><span class="p">sh-5.2$ </span>whoami
+<span class="p">sh-5.2$ </span>hostname -I
+<span class="p">sh-5.2$ </span>ps -ef --forest | grep [s]sm-session-worker
+<span class="p">sh-5.2$ </span>exit</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>ssm-user
+10.40.x.x
+root   3792  1528  0 13:02 ?  00:00:00  \_ /usr/bin/ssm-session-worker fundamentos_aws-xxxx i-xxxx
+
+Exiting session with sessionId: fundamentos_aws-xxxxxxxxxxxxxxxxxxxxxxxxxx.</pre></div>
+        <p>O <code>ssm-session-worker</code> é o processo criado só para a sua sessão. Nenhuma porta 22 foi aberta: o SG do porteiro continua com zero regras de entrada. O IP <code>10.40.x.x</code> é o privado, dentro da VPC da Fase 1.</p>
+        <div class="note n-warn">
+          <b>Se o <code>echo</code> mostrar <code>None</code></b>
+          <p>A instância não está <code>running</code> ou o nome está diferente. <code>TargetNotConnected</code> na sessão é outro caso: a máquina existe, mas o agente ainda não está Online — volte ao passo 5.2.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Abri a sessão e o prompt <code>sh-5.2$</code> apareceu</span></label></li>
+          <li><label><input type="checkbox"><span>Vi o <code>ssm-session-worker</code> e saí com <code>exit</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ F6 -->
+    <section class="phase" id="p6" data-title="Console: EC2 app">
+      <div class="phase-head">
+        <span class="phase-n">FASE 6</span>
+        <div>
+          <h2>A aplicação: uma API mínima que lê o banco</h2>
+          <p>No lugar do cluster da BIA, uma EC2 com um script de 60 linhas em Python. O Console instala tudo pelo <b>user data</b>; o terminal entrega a senha por uma sessão SSM, para ela nunca aparecer no Console.</p>
+        </div>
+        <span class="phase-count" data-count-for="p6"></span>
+      </div>
+
+      <div class="step" id="passo-6-1">
+        <div class="step-top"><a class="step-id" href="#passo-6-1">6.1</a><h3>Lançar a <code>lab-app</code> com user data</h3><span class="where w-console">CONSOLE</span></div>
+        <p>Mesmo formulário do passo 5.1, com três diferenças:</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo</th><th>Valor</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td>Name</td><td><code>lab-app</code></td><td></td></tr>
+              <tr><td>Subnet · Auto-assign public IP</td><td><code>public2-us-east-1b</code> · <code>Enable</code></td><td>O IP público serve só para <b>saída</b>: baixar o pacote do Python e falar com o SSM. O SG não deixa nada entrar</td></tr>
+              <tr><td>Firewall</td><td><code>Select existing</code> › <code>lab-sg-app</code></td><td></td></tr>
+              <tr><td>Advanced details › IAM instance profile</td><td><code>lab-role-ssm</code></td><td>Para você poder entrar na app e gravar a senha</td></tr>
+              <tr><td>Advanced details › User data</td><td>colar o bloco abaixo</td><td>Roda uma vez, como root, no primeiro boot</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cmd"><span class="cmd-label">User data — cole inteiro no campo "User data"</span><button class="copy" type="button">copiar</button><pre>#!/bin/bash
+# lab-app: API minima que le a tabela "tarefas" do RDS.
+# O user data roda uma vez, como root, no primeiro boot da instancia.
+# A senha do banco NAO fica aqui: ela entra depois em /etc/lab-app.env.
+
+dnf install -y python3-psycopg2
+
+mkdir -p /opt/lab-app
+cat &gt; /opt/lab-app/app.py &lt;&lt;'APP'
+import json
+import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+import psycopg2
+
+VERSAO = "lab-app 1.0"
+
+
+def conectar():
+    return psycopg2.connect(
+        host=os.environ["DB_HOST"],
+        port=os.environ.get("DB_PORT", "5432"),
+        dbname=os.environ.get("DB_NAME", "lab"),
+        user=os.environ.get("DB_USER", "postgres"),
+        password=os.environ["DB_PWD"],
+        sslmode="require",
+        connect_timeout=5,
+    )
+
+
+def listar_tarefas():
+    conn = conectar()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT uuid, titulo, importante, created_at "
+                "FROM tarefas ORDER BY created_at"
+            )
+            colunas = [c[0] for c in cur.description]
+            return [dict(zip(colunas, linha)) for linha in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+class Handler(BaseHTTPRequestHandler):
+    def responder(self, status, corpo):
+        dados = json.dumps(corpo, default=str, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(dados)))
+        self.end_headers()
+        self.wfile.write(dados)
+
+    def do_GET(self):
+        if self.path == "/api/versao":
+            self.responder(200, {"versao": VERSAO})
+        elif self.path == "/api/tarefas":
+            try:
+                self.responder(200, listar_tarefas())
+            except KeyError as erro:
+                self.responder(500, {"erro": f"variavel {erro} ausente em /etc/lab-app.env"})
+            except psycopg2.Error as erro:
+                self.responder(500, {"erro": str(erro).strip()})
+        else:
+            self.responder(404, {"erro": "rota nao encontrada"})
+
+
+if __name__ == "__main__":
+    HTTPServer(("0.0.0.0", 80), Handler).serve_forever()
+APP
+
+cat &gt; /etc/systemd/system/lab-app.service &lt;&lt;'UNIT'
+[Unit]
+Description=lab-app - API minima do laboratorio hibrido
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=-/etc/lab-app.env
+ExecStart=/usr/bin/python3 /opt/lab-app/app.py
+DynamicUser=yes
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now lab-app</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Trecho</th><th>O que faz</th></tr></thead>
+            <tbody>
+              <tr><td><code>dnf install -y python3-psycopg2</code></td><td>Instala o driver do PostgreSQL para Python, direto do repositório do Amazon Linux. É por isso que a app precisa de saída para a internet</td></tr>
+              <tr><td><code>cat &gt; ... &lt;&lt;'APP'</code></td><td>Grava tudo até a linha <code>APP</code> num arquivo. As aspas em <code>'APP'</code> impedem o shell de mexer no conteúdo</td></tr>
+              <tr><td><code>/api/versao</code></td><td>Responde sem tocar no banco: prova que a app está de pé</td></tr>
+              <tr><td><code>/api/tarefas</code></td><td>Faz o <code>SELECT</code> na tabela <code>tarefas</code> e devolve JSON. Erro de banco vira JSON com a mensagem, em vez de derrubar a app</td></tr>
+              <tr><td><code>sslmode="require"</code></td><td>O RDS PostgreSQL recusa conexão sem criptografia por padrão</td></tr>
+              <tr><td><code>EnvironmentFile=-/etc/lab-app.env</code></td><td>Lê as variáveis do banco desse arquivo. O <code>-</code> deixa o serviço subir mesmo antes de o arquivo existir</td></tr>
+              <tr><td><code>DynamicUser=yes</code> + <code>CAP_NET_BIND_SERVICE</code></td><td>A app roda com um usuário descartável, sem ser root, e ainda assim pode ouvir a porta 80</td></tr>
+              <tr><td><code>systemctl enable --now</code></td><td>Liga o serviço agora e em todo boot</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note n-key">
+          <b>Por que a senha não está no user data</b>
+          <p>Qualquer pessoa com permissão de ver a instância lê o user data no Console (<b>Actions › Instance settings › Edit user data</b>), em texto puro. Senha ali é senha exposta. Por isso o user data instala e deixa a app pronta, e a senha entra no próximo passo, por uma sessão SSM.</p>
+        </div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>Launch instance  &gt;  esperar  Instance state = Running  e  Status check = 3/3 checks passed</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>lab-app</code> running, SG <code>lab-sg-app</code>, role <code>lab-role-ssm</code></span></label></li>
+          <li><label><input type="checkbox"><span>User data colado inteiro, da linha <code>#!/bin/bash</code> até <code>systemctl enable --now lab-app</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-6-2">
+        <div class="step-top"><a class="step-id" href="#passo-6-2">6.2</a><h3>Entregar a senha à app por uma sessão SSM</h3><span class="where w-wsl">WSL</span></div>
+        <p>O RDS precisa estar <code>available</code> (passo 3.2). Anote o endpoint dele: é a única coisa que você vai colar.</p>
+        <div class="cmd"><span class="cmd-label">Anotar o nome — LAB_APP</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>export LAB_APP=lab-app
+<span class="p">$ </span>grep -q '^export LAB_APP=' ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh \
+  || echo 'export LAB_APP=lab-app' &gt;&gt; ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh</pre></div>
+        <p><code>lab-app</code> é o campo <i>Name</i> do passo 6.1.</p>
+        <div class="cmd"><span class="cmd-label">1. No WSL — abrir a sessão na app</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>APP_ID=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=$LAB_APP" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].InstanceId' --output text)
+<span class="p">$ </span>echo "$APP_ID"
+<span class="p">$ </span>aws ssm start-session --target "$APP_ID"</pre></div>
+        <div class="cmd"><span class="cmd-label">2. Dentro da app — confirmar que o user data rodou</span><button class="copy" type="button">copiar</button><pre><span class="p">sh-5.2$ </span>systemctl is-active lab-app
+<span class="p">sh-5.2$ </span>curl -s localhost/api/versao ; echo</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>active
+{"versao": "lab-app 1.0"}</pre></div>
+        <div class="cmd"><span class="cmd-label">3. Dentro da app — gravar o arquivo de configuração</span><button class="copy" type="button">copiar</button><pre><span class="p">sh-5.2$ </span>read -rp "Endpoint do RDS: " DB_HOST
+<span class="p">sh-5.2$ </span>read -rsp "Senha do banco: " DB_PWD ; echo
+<span class="p">sh-5.2$ </span>printf 'DB_HOST=%s\nDB_NAME=lab\nDB_USER=postgres\nDB_PWD=%s\n' "$DB_HOST" "$DB_PWD" \
+  | sudo tee /etc/lab-app.env &gt; /dev/null
+<span class="p">sh-5.2$ </span>unset DB_PWD
+<span class="p">sh-5.2$ </span>sudo chmod 600 /etc/lab-app.env
+<span class="p">sh-5.2$ </span>sudo systemctl restart lab-app
+<span class="p">sh-5.2$ </span>curl -s localhost/api/tarefas ; echo</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — a tabela ainda não existe, e está certo</span><pre>{"erro": "relation \"tarefas\" does not exist\nLINE 1: ..."}</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Trecho</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td><code>read -rsp</code></td><td>Pergunta a senha sem mostrar na tela e sem gravar no histórico do shell — ao contrário de digitá-la dentro de um comando</td></tr>
+              <tr><td><code>sudo tee</code></td><td><code>/etc</code> é do root. <code>sudo echo ... &gt; arquivo</code> não funciona, porque o <code>&gt;</code> roda sem sudo</td></tr>
+              <tr><td><code>chmod 600</code></td><td>Só o root lê o arquivo. O systemd lê como root e entrega as variáveis à app</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>O erro <code>relation "tarefas" does not exist</code> é a melhor notícia possível aqui: a app <b>conectou</b> no banco, com a senha certa, pela regra do <code>lab-sg-db</code>. Só falta a tabela, que você cria na Fase 7 pelo DBeaver.</p>
+        <div class="note n-warn">
+          <b>Se vier outra mensagem</b>
+          <p><code>timeout expired</code> = a regra 5432 com origem <code>lab-sg-app</code> faltando no <code>lab-sg-db</code>. <code>password authentication failed</code> = senha errada: rode o bloco 3 de novo. <code>database "lab" does not exist</code> = o <i>Initial database name</i> ficou vazio no passo 3.1 — crie o banco pelo DBeaver com <code>CREATE DATABASE lab;</code> conectado no banco <code>postgres</code>.</p>
+        </div>
+        <div class="cmd"><span class="cmd-label">4. Anotar o IP privado da app e sair</span><button class="copy" type="button">copiar</button><pre><span class="p">sh-5.2$ </span>hostname -I
+<span class="p">sh-5.2$ </span>exit</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>/api/versao</code> respondeu de dentro da app</span></label></li>
+          <li><label><input type="checkbox"><span><code>/api/tarefas</code> respondeu <code>relation "tarefas" does not exist</code></span></label></li>
+          <li><label><input type="checkbox"><span>Saí da sessão com <code>exit</code></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ F7 -->
+    <section class="phase" id="p7" data-title="DBeaver pelo túnel">
+      <div class="phase-head">
+        <span class="phase-n">FASE 7</span>
+        <div>
+          <h2>O banco pelo túnel: DBeaver em <code>localhost:5433</code></h2>
+          <p>O DBeaver vai conversar com um banco que não tem IP público, como se ele estivesse no seu computador. Quem faz o disfarce é o porteiro.</p>
+        </div>
+        <span class="phase-count" data-count-for="p7"></span>
+      </div>
+
+      <div class="step" id="passo-7-1">
+        <div class="step-top"><a class="step-id" href="#passo-7-1">7.1</a><h3>Abrir o túnel do banco</h3><span class="where w-wsl">WSL · T1</span></div>
+        <div class="cmd"><span class="cmd-label">1. Aba nova: trazer os nomes anotados e anotar a porta</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh
+<span class="p">$ </span>cat ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh
+<span class="p">$ </span>export PORTA_RDS_LOCAL=5433
+<span class="p">$ </span>grep -q '^export PORTA_RDS_LOCAL=' ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh \
+  || echo 'export PORTA_RDS_LOCAL=5433' &gt;&gt; ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada do cat — os nomes das fases anteriores</span><pre>export AWS_PROFILE=formacao_aws
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_PAGER=""
+export LAB_VPC=lab-desafio4-vpc
+export LAB_RDS=lab-pgsql
+export LAB_PORTEIRO=lab-porteiro
+export LAB_APP=lab-app</pre></div>
+        <p>O <code>source</code> devolve a esta aba tudo o que foi anotado desde a Fase 1. Se faltar alguma linha, volte ao bloco "Anotar o nome" da fase correspondente. A <code>5433</code> é a porta que o DBeaver vai usar no passo 7.2: fica no <b>seu</b> computador, e não é a 5432 para não brigar com um PostgreSQL local.</p>
+        <div class="cmd"><span class="cmd-label">2. Descobrir porteiro e banco pelos nomes e abrir o túnel</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>PORTEIRO_ID=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=$LAB_PORTEIRO" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].InstanceId' --output text)
+<span class="p">$ </span>RDS_HOST=$(aws rds describe-db-instances --db-instance-identifier "$LAB_RDS" \
+  --query 'DBInstances[0].Endpoint.Address' --output text)
+<span class="p">$ </span>echo "porteiro=$PORTEIRO_ID  banco=$RDS_HOST"
+<span class="p">$ </span>aws ssm start-session --target "$PORTEIRO_ID" \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "{\"host\":[\"$RDS_HOST\"],\"portNumber\":[\"5432\"],\"localPortNumber\":[\"$PORTA_RDS_LOCAL\"]}"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>porteiro=i-xxxxxxxxxxxxxxxxx  banco=lab-pgsql.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com
+
+Starting session with SessionId: fundamentos_aws-xxxxxxxxxxxxxxxxxxxxxxxxxx
+Port 5433 opened for sessionId fundamentos_aws-xxxxxxxxxxxxxxxxxxxxxxxxxx.
+Waiting for connections...</pre></div>
+        <div class="note n-key">
+          <b>E agora? O terminal parece travado — é assim mesmo</b>
+          <p>O túnel existe enquanto este comando roda. Deixe a aba <b>T1</b> quieta, do jeito que está, e não aperte nenhuma tecla nela: um <kbd>Ctrl</kbd>+<kbd>C</kbd> derruba o túnel. O próximo passo é no DBeaver.</p>
+        </div>
+        <div class="note n-warn">
+          <b>Se o <code>echo</code> mostrar <code>None</code> em algum lado</b>
+          <p>Não abra o túnel. <code>porteiro=None</code> = a <code>lab-porteiro</code> não está <code>running</code>. <code>banco=None</code> = o RDS ainda não está <code>available</code> ou o identificador é outro.</p>
+        </div>
+        <details class="fallback">
+          <summary>O mesmo túnel com o script do Desafio 4</summary>
+          <p>O <code>02-iniciar-porteiro-tunel-rds.sh</code> recebe nomes por argumento, então funciona com o laboratório sem mudar nada — e ainda liga o porteiro se ele estiver parado:</p>
+          <div class="cmd"><span class="cmd-label">Comando — na pasta do repositório</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>./02-iniciar-porteiro-tunel-rds.sh "$LAB_PORTEIRO" "$LAB_RDS" "$PORTA_RDS_LOCAL"</pre></div>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>Port 5433 opened</code> e <code>Waiting for connections...</code> na T1</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-7-2">
+        <div class="step-top"><a class="step-id" href="#passo-7-2">7.2</a><h3>Criar a conexão no DBeaver</h3><span class="where w-dbeaver">DBEAVER</span></div>
+        <div class="out clicks"><span class="out-label">DBeaver ›</span><pre>Database  &gt;  New Database Connection  &gt;  PostgreSQL  &gt;  Next</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Campo (aba Main)</th><th>Valor</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td>Connect by</td><td><code>Host</code></td><td></td></tr>
+              <tr><td>Host</td><td><code>localhost</code></td><td>O DBeaver não sabe que existe AWS. Para ele, o banco está no seu PC</td></tr>
+              <tr><td>Port</td><td><code>5433</code></td><td>A porta local do túnel — não a 5432 do RDS</td></tr>
+              <tr><td>Database</td><td><code>lab</code></td><td>O <i>Initial database name</i> do passo 3.1</td></tr>
+              <tr><td>Authentication</td><td><code>Database Native</code></td><td></td></tr>
+              <tr><td>Username / Password</td><td><code>postgres</code> / a sua senha</td><td>Marque <b>Save password</b> só se o computador for só seu</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="out clicks"><span class="out-label">DBeaver ›</span><pre>aba SSL  &gt;  marcar  Use SSL
+  SSL mode   require
+Test Connection  &gt;  (baixar o driver, se pedir)  &gt;  Connected  &gt;  Finish</pre></div>
+        <p>No momento do <b>Test Connection</b>, olhe a aba T1: aparece <code>Connection accepted for session</code>. É o túnel sendo usado.</p>
+        <div class="note n-warn">
+          <b>Se o teste falhar</b>
+          <p><code>Connection refused</code> na hora = o túnel da T1 não está aberto (ou você usou a 5432). Demora e dá <code>timeout</code> = o túnel abriu, mas a regra 5432 com origem <code>lab-sg-porteiro</code> falta no <code>lab-sg-db</code>. Se <code>localhost</code> não funcionar no Windows, tente <code>127.0.0.1</code>.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>DBeaver mostrou <b>Connected</b></span></label></li>
+          <li><label><input type="checkbox"><span>A T1 registrou <code>Connection accepted</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-7-3">
+        <div class="step-top"><a class="step-id" href="#passo-7-3">7.3</a><h3>Criar a tabela e inserir o registro à mão</h3><span class="where w-dbeaver">DBEAVER</span></div>
+        <div class="out clicks"><span class="out-label">DBeaver ›</span><pre>clicar com o botão direito na conexão  &gt;  SQL Editor  &gt;  Open SQL script
+colar o SQL abaixo  &gt;  Execute SQL Script  (Alt+X)</pre></div>
+        <div class="cmd"><span class="cmd-label">SQL</span><button class="copy" type="button">copiar</button><pre>CREATE TABLE tarefas (
+  uuid        uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
+  titulo      varchar(255) NOT NULL,
+  importante  boolean      NOT NULL DEFAULT false,
+  created_at  timestamptz  NOT NULL DEFAULT now()
+);
+
+INSERT INTO tarefas (titulo, importante)
+VALUES ('Primeira tarefa, criada pelo DBeaver', false);
+
+INSERT INTO tarefas (titulo, importante)
+VALUES ('Registro manual pelo tunel SSM - lab hibrido', true)
+RETURNING uuid, titulo, created_at;
+
+SELECT uuid, titulo, importante, created_at
+FROM tarefas
+ORDER BY created_at;</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — aba de resultado do SELECT</span><pre>uuid                                 | titulo                                       | importante | created_at
+-------------------------------------+----------------------------------------------+------------+---------------------------
+xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx | Primeira tarefa, criada pelo DBeaver         | false      | 2026-xx-xx 13:41:02.118 +0000
+xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx | Registro manual pelo tunel SSM - lab hibrido | true       | 2026-xx-xx 13:41:02.131 +0000</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Trecho</th><th>Por quê</th></tr></thead>
+            <tbody>
+              <tr><td><code>DEFAULT gen_random_uuid()</code></td><td>O banco gera o identificador sozinho. No Desafio 4 a coluna <code>uuid</code> da BIA não tinha default, e o <code>INSERT</code> manual precisou gerá-lo</td></tr>
+              <tr><td>nomes em minúsculas</td><td>Dispensa as aspas duplas que o <code>"Tarefas"</code> e o <code>"createdAt"</code> da BIA exigiam</td></tr>
+              <tr><td><code>RETURNING</code></td><td>Devolve a linha criada, com o <code>uuid</code> gerado, sem outro <code>SELECT</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>O DBeaver trabalha em <b>auto-commit</b> por padrão (o botão "Auto" na barra): cada comando já fica gravado. Se você desligou, clique em <b>Commit</b>, senão a app da Fase 8 não enxerga as linhas.</p>
+        <details class="fallback">
+          <summary>Prefere o psql no terminal</summary>
+          <p>Numa aba nova (T2), com o túnel da T1 aberto:</p>
+          <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>psql "host=localhost port=5433 user=postgres dbname=lab sslmode=require"</pre></div>
+          <p>Se aparecer <code>WARNING: psql major version 16, server major version 18</code>, é só aviso. Cole o mesmo SQL no prompt <code>lab=&gt;</code> e saia com <code>\q</code>.</p>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Tabela <code>tarefas</code> criada</span></label></li>
+          <li><label><input type="checkbox"><span>O <code>SELECT</code> mostra as duas linhas</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ F8 -->
+    <section class="phase" id="p8" data-title="App pelo túnel">
+      <div class="phase-head">
+        <span class="phase-n">FASE 8</span>
+        <div>
+          <h2>A aplicação pelo túnel: o registro aparece em <code>localhost:3002</code></h2>
+          <p>A volta completa: você gravou no banco por um túnel e agora lê pela aplicação por outro, sem que banco ou app tenham porta aberta para a internet.</p>
+        </div>
+        <span class="phase-count" data-count-for="p8"></span>
+      </div>
+
+      <div class="step" id="passo-8-1">
+        <div class="step-top"><a class="step-id" href="#passo-8-1">8.1</a><h3>Abrir o túnel da app</h3><span class="where w-wsl">WSL · T2</span></div>
+        <p>Abra uma aba nova (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>). A T1 continua com o túnel do banco.</p>
+        <div class="cmd"><span class="cmd-label">1. Aba nova: trazer os nomes anotados e anotar a porta</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh
+<span class="p">$ </span>export PORTA_APP_LOCAL=3002
+<span class="p">$ </span>grep -q '^export PORTA_APP_LOCAL=' ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh \
+  || echo 'export PORTA_APP_LOCAL=3002' &gt;&gt; ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh
+<span class="p">$ </span>echo "$LAB_PORTEIRO | $LAB_APP | $PORTA_APP_LOCAL"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>lab-porteiro | lab-app | 3002</pre></div>
+        <p>A <code>3002</code> é a porta que o navegador vai usar no passo 8.3. Se o <code>echo</code> mostrar algum campo vazio, faltou anotar o nome na fase dele.</p>
+        <div class="cmd"><span class="cmd-label">2. Descobrir porteiro e IP privado da app e abrir o túnel</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>PORTEIRO_ID=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=$LAB_PORTEIRO" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].InstanceId' --output text)
+<span class="p">$ </span>APP_IP=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=$LAB_APP" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text)
+<span class="p">$ </span>echo "porteiro=$PORTEIRO_ID  app=$APP_IP"
+<span class="p">$ </span>aws ssm start-session --target "$PORTEIRO_ID" \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "{\"host\":[\"$APP_IP\"],\"portNumber\":[\"80\"],\"localPortNumber\":[\"$PORTA_APP_LOCAL\"]}"</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>porteiro=i-xxxxxxxxxxxxxxxxx  app=10.40.x.x
+
+Starting session with SessionId: fundamentos_aws-xxxxxxxxxxxxxxxxxxxxxxxxxx
+Port 3002 opened for sessionId fundamentos_aws-xxxxxxxxxxxxxxxxxxxxxxxxxx.
+Waiting for connections...</pre></div>
+        <p>O destino é o <b>IP privado</b> da app, não o público: quem conecta nela é o porteiro, dentro da VPC. <code>app=10.40.x.x</code> no seu terminal tem que ser um IP completo — se aparecer <code>None</code>, a app não está <code>running</code>.</p>
+        <details class="fallback">
+          <summary>O mesmo túnel com o script do Desafio 4</summary>
+          <div class="cmd"><span class="cmd-label">Comando — na pasta do repositório</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>./03-tunel-bia.sh "$LAB_PORTEIRO" "$APP_IP" 80 "$PORTA_APP_LOCAL"</pre></div>
+        </details>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>Port 3002 opened</code> na T2, com destino <code>10.40.x.x</code> completo</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-8-2">
+        <div class="step-top"><a class="step-id" href="#passo-8-2">8.2</a><h3>Ler o registro pela API</h3><span class="where w-wsl">WSL · T3</span></div>
+        <p>Terceira aba. Nenhum IP da AWS aparece nestes comandos — só <code>localhost</code>.</p>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>curl -s http://localhost:3002/api/versao ; echo
+<span class="p">$ </span>curl -s http://localhost:3002/api/tarefas ; echo</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada</span><pre>{"versao": "lab-app 1.0"}
+[{"uuid": "xxxxxxxx-...", "titulo": "Primeira tarefa, criada pelo DBeaver", "importante": false, "created_at": "..."},
+ {"uuid": "xxxxxxxx-...", "titulo": "Registro manual pelo tunel SSM - lab hibrido", "importante": true, "created_at": "..."}]</pre></div>
+        <div class="note n-tip">
+          <b>O caminho que esse <code>curl</code> percorreu</b>
+          <p>WSL:3002 → sessão SSM → porteiro → TCP 80 (liberado pelo <code>lab-sg-app</code>) → app → TCP 5432 (liberado pelo <code>lab-sg-db</code>) → RDS → e todo o caminho de volta. Três security groups, nenhuma regra com <code>0.0.0.0/0</code>.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span><code>/api/tarefas</code> trouxe o registro inserido no DBeaver</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-8-3">
+        <div class="step-top"><a class="step-id" href="#passo-8-3">8.3</a><h3>Ver no navegador e fechar os túneis</h3><span class="where w-web">NAVEGADOR</span></div>
+        <div class="out"><span class="out-label">Endereço</span><pre>http://localhost:3002/api/tarefas</pre></div>
+        <p>O WSL2 repassa a porta para o Windows, então o Chrome ou o Edge abrem sem configuração. Esse JSON, ao lado das abas com <code>Waiting for connections</code>, é o print do laboratório.</p>
+        <p>Terminou? Agora sim: em <b>T2</b> e depois em <b>T1</b>, tecle <kbd>Ctrl</kbd>+<kbd>C</kbd>. Cada aba responde <code>Exiting session with sessionId</code>.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>O navegador mostrou o JSON com os dois registros</span></label></li>
+          <li><label><input type="checkbox"><span>Os dois túneis foram fechados com <kbd>Ctrl</kbd>+<kbd>C</kbd></span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ F9 -->
+    <section class="phase" id="p9" data-title="Console: parar e religar">
+      <div class="phase-head">
+        <span class="phase-n">FASE 9</span>
+        <div>
+          <h2>Parar e religar pelo Console</h2>
+          <p>Se você vai continuar outro dia, pare em vez de apagar. Se terminou, pule direto para a <a href="#p10">Fase 10</a>.</p>
+        </div>
+        <span class="phase-count" data-count-for="p9"></span>
+      </div>
+
+      <div class="step" id="passo-9-1">
+        <div class="step-top"><a class="step-id" href="#passo-9-1">9.1</a><h3>Parar as duas EC2 e o banco</h3><span class="where w-console">CONSOLE</span></div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>EC2  &gt;  Instances  &gt;  marcar lab-porteiro e lab-app  &gt;  Instance state  &gt;  Stop instance  &gt;  Stop
+
+Aurora and RDS  &gt;  Databases  &gt;  lab-pgsql  &gt;  Actions  &gt;  Stop temporarily
+  (não precisa de snapshot)  &gt;  Stop temporarily</pre></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Estado parado</th><th>O que continua cobrando</th><th>Cuidado</th></tr></thead>
+            <tbody>
+              <tr><td>EC2 stopped</td><td>O disco EBS (8 GiB cada)</td><td>O IP público é devolvido e muda ao religar. O privado se mantém</td></tr>
+              <tr><td>RDS stopped</td><td>O armazenamento de 20 GiB</td><td><b>Religa sozinho depois de 7 dias</b>, regra da AWS</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cmd"><span class="cmd-label">Conferir pelo terminal</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>source ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh
+<span class="p">$ </span>aws ec2 describe-instances --filters "Name=tag:Name,Values=lab-*" \
+  --query 'Reservations[].Instances[].{Nome:Tags[?Key==`Name`]|[0].Value,Estado:State.Name}' --output table
+<span class="p">$ </span>aws rds describe-db-instances --db-instance-identifier "$LAB_RDS" \
+  --query 'DBInstances[0].DBInstanceStatus' --output text</pre></div>
+        <div class="note n-tip">
+          <b>O mesmo pelo script do Desafio 4</b>
+          <p><code>./04-parar-porteiro.sh lab-porteiro</code> para a máquina pelo nome. O Console é ótimo para aprender e para uma vez; o script é o que você agenda e roda todo dia.</p>
+        </div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>As duas EC2 <code>stopped</code> e o RDS <code>stopped</code></span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-9-2">
+        <div class="step-top"><a class="step-id" href="#passo-9-2">9.2</a><h3>Religar outro dia</h3><span class="where w-console">CONSOLE</span></div>
+        <div class="out clicks"><span class="out-label">Console ›</span><pre>Aurora and RDS  &gt;  Databases  &gt;  lab-pgsql  &gt;  Actions  &gt;  Start      (primeiro: leva alguns minutos)
+EC2  &gt;  Instances  &gt;  marcar as duas  &gt;  Instance state  &gt;  Start instance</pre></div>
+        <p>Ligue o banco primeiro. A app sobe sozinha pelo systemd e já encontra o <code>/etc/lab-app.env</code>. Depois, repita as Fases 7 e 8: os comandos descobrem os IDs e IPs de novo, pelo nome.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Sei religar na ordem: banco, depois as EC2</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ F10 -->
+    <section class="phase" id="p10" data-title="Console: apagar tudo">
+      <div class="phase-head">
+        <span class="phase-n">FASE 10</span>
+        <div>
+          <h2>Apagar o laboratório inteiro, na ordem certa</h2>
+          <p>A AWS não apaga um recurso enquanto outro depende dele. Seguir a ordem abaixo evita as mensagens de <code>DependencyViolation</code>.</p>
+        </div>
+        <span class="phase-count" data-count-for="p10"></span>
+      </div>
+
+      <div class="step" id="passo-10-1">
+        <div class="step-top"><a class="step-id" href="#passo-10-1">10.1</a><h3>Encerrar as EC2 e apagar o banco</h3><span class="where w-console">CONSOLE</span></div>
+        <div class="out clicks"><span class="out-label">Console ›  1. EC2</span><pre>EC2  &gt;  Instances  &gt;  marcar lab-porteiro e lab-app  &gt;  Instance state  &gt;  Terminate (delete) instance  &gt;  Terminate</pre></div>
+        <div class="out clicks"><span class="out-label">Console ›  2. RDS</span><pre>Aurora and RDS  &gt;  Databases  &gt;  lab-pgsql  &gt;  Actions  &gt;  Delete
+  desmarcar  Create final snapshot
+  desmarcar  Retain automated backups
+  marcar     I acknowledge that upon instance deletion, automated backups...
+  digitar    delete me   &gt;  Delete</pre></div>
+        <p><i>Stop</i> e <i>Terminate</i> são coisas diferentes: <b>Terminate</b> apaga a instância e o disco dela, sem volta. O RDS leva alguns minutos em <code>Deleting</code>; espere sumir da lista antes do próximo passo.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>As duas EC2 em <code>Terminated</code></span></label></li>
+          <li><label><input type="checkbox"><span><code>lab-pgsql</code> sumiu da lista de Databases</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-10-2">
+        <div class="step-top"><a class="step-id" href="#passo-10-2">10.2</a><h3>Subnet group, security groups, VPC e role</h3><span class="where w-console">CONSOLE</span></div>
+        <div class="out clicks"><span class="out-label">Console ›  3. DB subnet group</span><pre>Aurora and RDS  &gt;  Subnet groups  &gt;  o grupo da lab-desafio4-vpc  &gt;  Delete</pre></div>
+        <div class="out clicks"><span class="out-label">Console ›  4. Security groups — nesta ordem</span><pre>EC2  &gt;  Security Groups  &gt;  lab-sg-db        &gt;  Actions  &gt;  Delete security groups
+EC2  &gt;  Security Groups  &gt;  lab-sg-app       &gt;  Actions  &gt;  Delete security groups
+EC2  &gt;  Security Groups  &gt;  lab-sg-porteiro  &gt;  Actions  &gt;  Delete security groups</pre></div>
+        <div class="note n-tip">
+          <b>Por que essa ordem</b>
+          <p>O <code>lab-sg-db</code> tem regras apontando para o app e o porteiro; o <code>lab-sg-app</code> aponta para o porteiro. Um SG citado numa regra de outro não pode ser apagado. Apagando de quem aponta para quem é apontado, nada fica preso. Se ainda assim der erro de dependência, espere 2 minutos: a interface de rede do RDS demora a sumir.</p>
+        </div>
+        <div class="out clicks"><span class="out-label">Console ›  5. VPC</span><pre>VPC  &gt;  Your VPCs  &gt;  lab-desafio4-vpc  &gt;  Actions  &gt;  Delete VPC
+  a tela lista o que vai junto: subnets, route tables, internet gateway
+  digitar  delete  &gt;  Delete</pre></div>
+        <div class="out clicks"><span class="out-label">Console ›  6. IAM</span><pre>IAM  &gt;  Roles  &gt;  lab-role-ssm  &gt;  Delete  &gt;  digitar lab-role-ssm  &gt;  Delete
+IAM  &gt;  Policies  &gt;  lab-ssm-sessoes  &gt;  Delete        (só se você criou no passo 0.4)</pre></div>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>DB subnet group apagado</span></label></li>
+          <li><label><input type="checkbox"><span>Três SGs apagados, na ordem db → app → porteiro</span></label></li>
+          <li><label><input type="checkbox"><span>VPC <code>lab-desafio4-vpc</code> apagada</span></label></li>
+          <li><label><input type="checkbox"><span>Role <code>lab-role-ssm</code> apagada</span></label></li>
+        </ul></div>
+      </div>
+
+      <div class="step" id="passo-10-3">
+        <div class="step-top"><a class="step-id" href="#passo-10-3">10.3</a><h3>Provar pelo terminal que nada sobrou</h3><span class="where w-wsl">WSL</span></div>
+        <div class="cmd"><span class="cmd-label">Comando</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>echo "== EC2 lab-* nao encerradas ==" ; aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=lab-*" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+  --query 'Reservations[].Instances[].InstanceId' --output text
+<span class="p">$ </span>echo "== RDS ==" ; aws rds describe-db-instances \
+  --query "DBInstances[?DBInstanceIdentifier=='lab-pgsql'].DBInstanceStatus" --output text
+<span class="p">$ </span>echo "== VPC ==" ; aws ec2 describe-vpcs --filters "Name=tag:Name,Values=lab-desafio4-vpc" \
+  --query 'Vpcs[].VpcId' --output text
+<span class="p">$ </span>echo "== Elastic IPs ==" ; aws ec2 describe-addresses --query 'Addresses[].PublicIp' --output text</pre></div>
+        <div class="out good"><span class="out-label">Resposta esperada — nada abaixo de cada título</span><pre>== EC2 lab-* nao encerradas ==
+
+== RDS ==
+
+== VPC ==
+
+== Elastic IPs ==
+</pre></div>
+        <p>O último comando pode mostrar Elastic IPs de <b>outros</b> laboratórios — este não criou nenhum. Se aparecer algum IP que você não usa mais, libere em <b>EC2 › Elastic IPs › Release</b>: IP alocado e parado é cobrado.</p>
+        <div class="cmd"><span class="cmd-label">Por último, o caderno do laboratório</span><button class="copy" type="button">copiar</button><pre><span class="p">$ </span>rm ~/DESAFIOS-FUNDAMENTAIS/lab-hibrido.sh</pre></div>
+        <p>Sem recursos na AWS, os nomes anotados não servem para mais nada. Se for refazer o laboratório, o passo 0.2 cria o arquivo de novo.</p>
+        <div class="check"><div class="check-label">Checklist</div><ul>
+          <li><label><input type="checkbox"><span>Nenhuma EC2, RDS ou VPC <code>lab-*</code> restante</span></label></li>
+          <li><label><input type="checkbox"><span><code>lab-hibrido.sh</code> apagado</span></label></li>
+        </ul></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ ANEXO A -->
+    <section class="phase" id="p-anexo-a" data-title="Console × CLI">
+      <div class="phase-head">
+        <span class="phase-n">ANEXO A</span>
+        <div>
+          <h2>Cada clique do Console, e o comando que faz o mesmo</h2>
+          <p>O Console e o CLI chamam a mesma API. Esta tabela liga o que você fez aqui ao que fez no guia do Desafio 4 pelo terminal.</p>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Ação</th><th>No Console</th><th>No CLI</th></tr></thead>
+          <tbody>
+            <tr><td>Criar VPC</td><td>VPC › Create VPC › VPC and more</td><td><code>aws ec2 create-vpc</code> + <code>create-subnet</code> ×4 + <code>create-internet-gateway</code> + <code>create-route-table</code>… — o assistente faz uns 15 comandos</td></tr>
+            <tr><td>Criar SG</td><td>EC2 › Security Groups › Create</td><td><code>aws ec2 create-security-group</code></td></tr>
+            <tr><td>Regra por SG</td><td>Inbound rules › Source: Custom › sg</td><td><code>aws ec2 authorize-security-group-ingress --ip-permissions "...UserIdGroupPairs=[{GroupId=...}]"</code></td></tr>
+            <tr><td>Criar RDS</td><td>Aurora and RDS › Create database</td><td><code>aws rds create-db-subnet-group</code> + <code>aws rds create-db-instance</code></td></tr>
+            <tr><td>Criar role</td><td>IAM › Roles › Create role</td><td><code>aws iam create-role</code> + <code>attach-role-policy</code> + <code>create-instance-profile</code> + <code>add-role-to-instance-profile</code></td></tr>
+            <tr><td>Lançar EC2</td><td>EC2 › Launch instances</td><td><code>aws ec2 run-instances</code> — o <code>01-lancar-porteiro-zona-b.sh</code></td></tr>
+            <tr><td>Ver nó no SSM</td><td>Systems Manager › Fleet Manager</td><td><code>aws ssm describe-instance-information</code></td></tr>
+            <tr><td>Parar EC2</td><td>Instance state › Stop</td><td><code>aws ec2 stop-instances</code> — o <code>04-parar-porteiro.sh</code></td></tr>
+            <tr><td>Parar RDS</td><td>Actions › Stop temporarily</td><td><code>aws rds stop-db-instance</code></td></tr>
+            <tr><td>Túnel</td><td>— (o Console só abre shell, não encaminha porta)</td><td><code>aws ssm start-session --document-name AWS-StartPortForwardingSessionToRemoteHost</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note n-tip">
+        <b>O que o Console faz por você sem avisar</b>
+        <p>Cria o instance profile junto com a role, sugere o SG default no RDS, sugere um <code>launch-wizard</code> com SSH aberto na EC2, escolhe a VPC default. Pelo CLI nada disso acontece sozinho — é por isso que o script do Desafio 4 precisou descobrir cada peça. Aprender os dois é entender o que cada botão esconde.</p>
+      </div>
+    </section>
+
+    <!-- ================================================================ ANEXO B -->
+    <section class="phase" id="p-anexo-b" data-title="Quando der errado">
+      <div class="phase-head">
+        <span class="phase-n">ANEXO B</span>
+        <div>
+          <h2>Quando der errado: sintoma, causa e onde olhar no Console</h2>
+          <p>Os erros abaixo são os que realmente aparecem neste tipo de montagem — vários deles apareceram no Desafio 4.</p>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Sintoma</th><th>Causa provável</th><th>Onde conferir no Console</th></tr></thead>
+          <tbody>
+            <tr><td>Nó não aparece no Fleet Manager</td><td>Sem IAM instance profile, ou sem IP público</td><td>EC2 › instância › aba Security (IAM role) e Details (Public IPv4)</td></tr>
+            <tr><td><code>TargetNotConnected</code></td><td>Agente ainda não Online</td><td>Systems Manager › Fleet Manager</td></tr>
+            <tr><td><code>AccessDeniedException</code> no <code>start-session</code></td><td>Seu usuário sem <code>ssm:StartSession</code> para aquele documento</td><td>IAM › Users › Permissions (passo 0.4)</td></tr>
+            <tr><td><code>Group names may not be in the format sg-*</code></td><td>Nome de SG começando com <code>sg-</code></td><td>Renomeie para <code>lab-sg-...</code></td></tr>
+            <tr><td>DBeaver: <code>Connection refused</code></td><td>Túnel da T1 fechado, ou porta 5432 em vez de 5433</td><td>A aba T1 precisa mostrar <code>Waiting for connections</code></td></tr>
+            <tr><td>DBeaver ou app: <code>timeout</code></td><td>Regra 5432 faltando no <code>lab-sg-db</code></td><td>EC2 › Security Groups › lab-sg-db › Inbound rules</td></tr>
+            <tr><td><code>no pg_hba.conf entry ... no encryption</code></td><td>Conexão sem SSL</td><td>DBeaver › aba SSL › Use SSL / <code>sslmode=require</code></td></tr>
+            <tr><td><code>database "lab" does not exist</code></td><td>Initial database name vazio</td><td>RDS › lab-pgsql › Configuration › DB name</td></tr>
+            <tr><td><code>password authentication failed</code></td><td>Senha errada</td><td>RDS › Modify › New master password (e refaça o 6.2)</td></tr>
+            <tr><td><code>relation "tarefas" does not exist</code></td><td>Tabela ainda não criada, ou criada em outro banco</td><td>DBeaver: a conexão aponta para o banco <code>lab</code>?</td></tr>
+            <tr><td><code>lookup ... no such host</code> no túnel</td><td>Host vazio, <code>None</code> ou exemplo copiado (<code>x.x</code>)</td><td>Rode o <code>echo</code> antes de abrir o túnel</td></tr>
+            <tr><td>Túnel 3002 abre, <code>curl</code> não responde</td><td>Regra 80 faltando no <code>lab-sg-app</code>, ou serviço parado</td><td>SG lab-sg-app; na app: <code>systemctl status lab-app</code></td></tr>
+            <tr><td>SG não apaga: <code>DependencyViolation</code></td><td>Outro SG ou uma interface de rede ainda o usa</td><td>EC2 › Network Interfaces, filtrando pelo SG</td></tr>
+            <tr><td>Conta cobrando depois de tudo</td><td>RDS religou em 7 dias, EIP solto, snapshot guardado</td><td>Billing › Bills, RDS › Snapshots, EC2 › Elastic IPs</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <p>Versão híbrida do Desafio 4 da mentoria <b>Desafios Fundamentais</b> — Formação AWS, por Henrylle Maia.</p>
+  <p>Montada a partir das aulas de apoio do módulo de Conectividade e Segurança (acesso público, SSM em subnet pública e privada, permissões do usuário) e do roteiro pelo terminal em <span class="mono">guia-desafio-4.html</span>.</p>
+  <p>Contas, IDs, IPs e endpoints aparecem mascarados como <span class="mono">xxxx</span>. Os valores do Console são os de 2026 e podem mudar de nome ou de lugar — a lógica de cada campo continua a mesma.</p>
+</footer>
+
+<script>
+(function () {
+  var STORE = "desafio4-hibrido-v1";
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.phase"));
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORE) || "{}"); }
+    catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
+  }
+
+  var state = load();
+  var boxes = [];
+
+  sections.forEach(function (sec) {
+    var list = Array.prototype.slice.call(sec.querySelectorAll('input[type="checkbox"]'));
+    list.forEach(function (box, i) {
+      box.dataset.k = sec.id + ":" + i;
+      if (state[box.dataset.k]) { box.checked = true; }
+      box.addEventListener("change", function () {
+        state[box.dataset.k] = box.checked;
+        save(state);
+        render();
+      });
+      boxes.push(box);
+    });
+  });
+
+  /* ---- sumario ---- */
+  var toc = document.getElementById("toc");
+  var links = {};
+  sections.forEach(function (sec) {
+    var badge = sec.querySelector(".phase-n");
+    var raw = badge ? badge.textContent.trim() : "";
+    var short;
+    if (/^FASE/i.test(raw)) { short = "F" + raw.replace(/\D/g, ""); }
+    else if (/^ANEXO/i.test(raw)) { short = "A." + raw.slice(-1); }
+    else { short = raw.slice(0, 4); }
+    var a = document.createElement("a");
+    a.href = "#" + sec.id;
+    a.innerHTML = "<b>" + short + "</b><span>" + (sec.dataset.title || "") + "</span>";
+    toc.appendChild(a);
+    links[sec.id] = a;
+  });
+
+  /* ---- progresso ---- */
+  var fill = document.getElementById("progFill");
+  var num = document.getElementById("progNum");
+
+  function render() {
+    var done = boxes.filter(function (b) { return b.checked; }).length;
+    var pct = boxes.length ? Math.round((done / boxes.length) * 100) : 0;
+    fill.style.width = pct + "%";
+    num.textContent = done + " / " + boxes.length;
+
+    sections.forEach(function (sec) {
+      var list = Array.prototype.slice.call(sec.querySelectorAll('input[type="checkbox"]'));
+      var ok = list.filter(function (b) { return b.checked; }).length;
+      var counter = sec.querySelector("[data-count-for]");
+      if (counter && list.length) {
+        counter.textContent = ok + "/" + list.length;
+        counter.classList.toggle("full", ok === list.length);
+      }
+      var link = links[sec.id];
+      if (link) { link.classList.toggle("done", list.length > 0 && ok === list.length); }
+    });
+  }
+
+  document.getElementById("reset").addEventListener("click", function () {
+    if (!window.confirm("Desmarcar todos os itens do checklist?")) { return; }
+    state = {};
+    save(state);
+    boxes.forEach(function (b) { b.checked = false; });
+    render();
+  });
+
+  /* ---- copiar comandos (o prompt em .p fica de fora) ---- */
+  Array.prototype.forEach.call(document.querySelectorAll(".copy"), function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = btn.parentNode.querySelector("pre");
+      if (!pre) { return; }
+      var text = Array.prototype.map.call(pre.childNodes, function (n) {
+        if (n.nodeType === 1 && n.classList.contains("p")) { return ""; }
+        return n.textContent;
+      }).join("");
+
+      var done = function () {
+        btn.textContent = "copiado";
+        btn.classList.add("ok");
+        setTimeout(function () { btn.textContent = "copiar"; btn.classList.remove("ok"); }, 1600);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text, done); });
+      } else {
+        fallback(text, done);
+      }
+    });
+  });
+
+  function fallback(text, done) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  /* ---- secao ativa ---- */
+  if ("IntersectionObserver" in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          Object.keys(links).forEach(function (id) { links[id].classList.remove("on"); });
+          if (links[en.target.id]) { links[en.target.id].classList.add("on"); }
+        }
+      });
+    }, { rootMargin: "-80px 0px -70% 0px" });
+    sections.forEach(function (s) { obs.observe(s); });
+  }
+
+  /* ---- tema: todo clique inverte; o sistema decide so o estado inicial ---- */
+  var TEMA_STORE = "desafio4-hibrido-tema";
+  var btnTema = document.getElementById("tema");
+
+  function sistemaEscuro() {
+    try { return window.matchMedia("(prefers-color-scheme: dark)").matches; }
+    catch (e) { return false; }
+  }
+  function lerTema() {
+    try {
+      var t = localStorage.getItem(TEMA_STORE);
+      if (t === "light" || t === "dark") { return t; }
+    } catch (e) {}
+    return sistemaEscuro() ? "dark" : "light";
+  }
+  function aplicarTema(t, gravar) {
+    document.documentElement.setAttribute("data-theme", t);
+    if (btnTema) {
+      btnTema.textContent = (t === "dark") ? "Tema: escuro" : "Tema: claro";
+      btnTema.setAttribute("aria-label", (t === "dark")
+        ? "Tema escuro. Clique para mudar para o tema claro."
+        : "Tema claro. Clique para mudar para o tema escuro.");
+    }
+    if (gravar) {
+      try { localStorage.setItem(TEMA_STORE, t); } catch (e) {}
+    }
+  }
+  if (btnTema) {
+    aplicarTema(lerTema(), false);
+    btnTema.addEventListener("click", function () {
+      var atual = document.documentElement.getAttribute("data-theme");
+      aplicarTema(atual === "dark" ? "light" : "dark", true);
+    });
+  }
+
+  /* ---- impressao: abre os blocos recolhiveis e devolve o estado depois ---- */
+  var recolhidos = [];
+  window.addEventListener("beforeprint", function () {
+    recolhidos = Array.prototype.filter.call(
+      document.querySelectorAll("details"),
+      function (d) { return !d.open; }
+    );
+    recolhidos.forEach(function (d) { d.open = true; });
+  });
+  window.addEventListener("afterprint", function () {
+    recolhidos.forEach(function (d) { d.open = false; });
+    recolhidos = [];
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

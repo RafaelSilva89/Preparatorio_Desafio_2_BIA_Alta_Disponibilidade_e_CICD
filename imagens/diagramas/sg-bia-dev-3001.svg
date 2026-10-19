@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 556" role="img" aria-labelledby="d3sg-t d3sg-d" font-family="Arial,'Helvetica Neue',Helvetica,sans-serif">
+<title id="d3sg-t">SG bia-dev: só a porta 3001 entra, a saída é livre</title>
+<desc id="d3sg-d">À esquerda, o navegador chega à EC2 bia-dev pela porta 3001, a única liberada pelo SG bia-dev, e cai no container da BIA, que escuta na 8080. Tentativas da internet nas portas 22, 80 e 5432 batem no SG e são bloqueadas. À direita, a saída é livre: a EC2 fala com ECR, GitHub e npm na 443, com o RDS bia na 5432 e com o serviço SSM na 443. Você entra no terminal pelo SSM sem nenhuma porta de entrada, porque é o agente da EC2 que abre a conexão de dentro para fora.</desc>
+<defs><marker id="d3sgmG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2E7D32"/></marker><marker id="d3sgmR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#A13327"/></marker><marker id="d3sgmO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B04F00"/></marker><marker id="d3sgmP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#A21CAF"/></marker></defs>
+<rect x="0" y="0" width="1000" height="556" fill="#fff"/>
+<text x="20" y="26" font-size="12" fill="#5B6573" font-weight="bold">ENTRADA · o SG decide quem entra</text>
+<text x="720" y="26" font-size="12" fill="#5B6573" font-weight="bold">SAÍDA · liberada (All traffic)</text>
+
+<rect x="20" y="44" width="200" height="72" rx="4" fill="#fff" stroke="#7D8998" stroke-width="1.5"/>
+<svg x="32" y="58" width="28" height="28" aria-hidden="true" viewBox="0 0 48 48"><path fill="#242f3e" fill-rule="evenodd" d="M6.025 44c.499-9.915 8.37-17.822 17.975-17.822 3.248 0 6.430.914 9.205 2.644 5.149 3.211 8.448 8.961 8.769 15.178zm8.167-30.122c0-5.446 4.4-9.878 9.809-9.878 5.407 0 9.806 4.432 9.806 9.878 0 5.447-4.399 9.879-9.806 9.879-5.409 0-9.809-4.432-9.809-9.879m20.071 13.247a19.4 19.4 0 0 0-5.565-2.354 11.890 11.890 0 0 0 7.109-10.893C35.807 7.329 30.510 2 24.001 2c-6.512 0-11.809 5.329-11.809 11.878 0 4.877 2.938 9.072 7.125 10.900C10.545 26.981 4 35.200 4 45a1 1 0 0 0 1 1h38a1 1 0 0 0 1-1c0-7.281-3.731-14.130-9.737-17.875"/></svg>
+<text x="70" y="74" font-size="14" fill="#232F3E" font-weight="bold">Navegador</text>
+<text x="70" y="94" font-size="12" fill="#3B4450" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">http://IP:3001</text>
+
+<rect x="20" y="160" width="200" height="150" rx="4" fill="#F5F7FA" stroke="#7D8998" stroke-width="1.5"/>
+<text x="32" y="184" font-size="14" fill="#232F3E" font-weight="bold">Internet</text>
+<text x="32" y="204" font-size="12" fill="#3B4450">qualquer outra porta</text>
+<text x="32" y="296" font-size="11" fill="#5B6573">robôs varrem IPs o tempo todo</text>
+<path d="M150,216 L288,216" fill="none" stroke="#A13327" stroke-width="2" marker-end="url(#d3sgmR)"/>
+<path d="M150,246 L288,246" fill="none" stroke="#A13327" stroke-width="2" marker-end="url(#d3sgmR)"/>
+<path d="M150,276 L288,276" fill="none" stroke="#A13327" stroke-width="2" marker-end="url(#d3sgmR)"/>
+<text x="40" y="220" font-size="12" fill="#A13327" font-weight="bold" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">:22  SSH</text>
+<text x="40" y="250" font-size="12" fill="#A13327" font-weight="bold" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">:80  web</text>
+<text x="40" y="280" font-size="12" fill="#A13327" font-weight="bold" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">:5432 banco</text>
+
+<rect x="292" y="44" width="26" height="286" fill="#FDECEA" stroke="#A13327" stroke-width="1.5" stroke-dasharray="5,3"/>
+<text x="305" y="222" font-size="17" fill="#A13327" font-weight="bold" text-anchor="middle">✗</text>
+<text x="305" y="252" font-size="17" fill="#A13327" font-weight="bold" text-anchor="middle">✗</text>
+<text x="305" y="282" font-size="17" fill="#A13327" font-weight="bold" text-anchor="middle">✗</text>
+<text x="305" y="350" font-size="13" fill="#A13327" font-weight="bold" text-anchor="middle">SG bia-dev</text>
+<text x="305" y="366" font-size="12" fill="#3B4450" text-anchor="middle">o porteiro</text>
+
+<path d="M220,80 L340,80 L340,172 L376,172" fill="none" stroke="#2E7D32" stroke-width="2.5" marker-end="url(#d3sgmG)"/>
+<text x="256" y="70" font-size="13" fill="#2E7D32" font-weight="bold" style="paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">:3001 ✓</text>
+
+<rect x="360" y="44" width="280" height="286" fill="#FFF4EA" stroke="#ED7100" stroke-width="1.5"/>
+<svg x="372" y="56" width="36" height="36" aria-hidden="true" viewBox="0 0 48 48"><path fill="#ed7100" fill-rule="evenodd" d="M9 39h30V9H9zm37-26v-2h-5V8a1 1 0 0 0-1-1h-3V2h-2v5h-4V2h-2v5h-4V2h-2v5h-4V2h-2v5h-4V2h-2v5H8a1 1 0 0 0-1 1v3H2v2h5v4H2v2h5v4H2v2h5v4H2v2h5v4H2v2h5v3a1 1 0 0 0 1 1h3v5h2v-5h4v5h2v-5h4v5h2v-5h4v5h2v-5h4v5h2v-5h3a1 1 0 0 0 1-1v-3h5v-2h-5v-4h5v-2h-5v-4h5v-2h-5v-4h5v-2h-5v-4z"/></svg>
+<text x="418" y="74" font-size="16" fill="#232F3E" font-weight="bold">EC2 bia-dev</text>
+<text x="418" y="92" font-size="12" fill="#3B4450">a sua máquina de trabalho</text>
+<rect x="380" y="134" width="240" height="76" fill="#fff" stroke="#7D8998" stroke-width="1.5"/>
+<text x="394" y="156" font-size="14" fill="#232F3E" font-weight="bold">container bia (Docker)</text>
+<text x="394" y="176" font-size="12" fill="#3B4450" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">3001 (host) → 8080 (app)</text>
+<text x="394" y="196" font-size="12" fill="#3B4450">compose.yml: 3001:8080</text>
+<rect x="380" y="246" width="240" height="64" fill="#fff" stroke="#7D8998" stroke-width="1.5"/>
+<text x="394" y="270" font-size="14" fill="#232F3E" font-weight="bold">SSM Agent</text>
+<text x="394" y="290" font-size="12" fill="#3B4450">liga para fora e traz o terminal</text>
+
+<rect x="720" y="44" width="260" height="64" fill="#fff" stroke="#7D8998" stroke-width="1.5"/>
+<text x="734" y="68" font-size="14" fill="#232F3E" font-weight="bold">ECR · GitHub · npm</text>
+<text x="734" y="88" font-size="12" fill="#3B4450">imagens, código e pacotes</text>
+<path d="M640,76 L716,76" fill="none" stroke="#B04F00" stroke-width="2.5" marker-end="url(#d3sgmO)"/>
+<text x="676" y="68" font-size="12" fill="#B04F00" font-weight="bold" text-anchor="middle" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">:443</text>
+
+<rect x="720" y="138" width="260" height="72" fill="#FAEBFC" stroke="#C925D1" stroke-width="1.5"/>
+<text x="734" y="162" font-size="14" fill="#232F3E" font-weight="bold">RDS bia</text>
+<text x="734" y="182" font-size="12" fill="#3B4450">o SG bia-db aceita o SG bia-dev</text>
+<text x="734" y="200" font-size="12" fill="#3B4450">(Fase 10 · migrations)</text>
+<path d="M640,174 L716,174" fill="none" stroke="#A21CAF" stroke-width="2.5" marker-end="url(#d3sgmP)"/>
+<text x="676" y="166" font-size="12" fill="#A21CAF" font-weight="bold" text-anchor="middle" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">:5432</text>
+
+<rect x="720" y="246" width="260" height="64" fill="#fff" stroke="#7D8998" stroke-width="1.5"/>
+<text x="734" y="270" font-size="14" fill="#232F3E" font-weight="bold">Serviço SSM (AWS)</text>
+<text x="734" y="290" font-size="12" fill="#3B4450">o ponto de encontro</text>
+<path d="M640,278 L716,278" fill="none" stroke="#B04F00" stroke-width="2.5" marker-end="url(#d3sgmO)"/>
+<text x="676" y="270" font-size="12" fill="#B04F00" font-weight="bold" text-anchor="middle" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">:443</text>
+
+<rect x="720" y="380" width="260" height="60" rx="4" fill="#fff" stroke="#7D8998" stroke-width="1.5"/>
+<svg x="732" y="396" width="28" height="28" aria-hidden="true" viewBox="0 0 48 48"><path fill="#242f3e" fill-rule="evenodd" d="M6.025 44c.499-9.915 8.37-17.822 17.975-17.822 3.248 0 6.430.914 9.205 2.644 5.149 3.211 8.448 8.961 8.769 15.178zm8.167-30.122c0-5.446 4.4-9.878 9.809-9.878 5.407 0 9.806 4.432 9.806 9.878 0 5.447-4.399 9.879-9.806 9.879-5.409 0-9.809-4.432-9.809-9.879m20.071 13.247a19.4 19.4 0 0 0-5.565-2.354 11.890 11.890 0 0 0 7.109-10.893C35.807 7.329 30.510 2 24.001 2c-6.512 0-11.809 5.329-11.809 11.878 0 4.877 2.938 9.072 7.125 10.900C10.545 26.981 4 35.200 4 45a1 1 0 0 0 1 1h38a1 1 0 0 0 1-1c0-7.281-3.731-14.130-9.737-17.875"/></svg>
+<text x="770" y="404" font-size="14" fill="#232F3E" font-weight="bold">Você (WSL)</text>
+<text x="770" y="424" font-size="12" fill="#3B4450" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">aws ssm start-session</text>
+<path d="M850,380 L850,314" fill="none" stroke="#B04F00" stroke-width="2.5" marker-end="url(#d3sgmO)"/>
+<text x="858" y="352" font-size="12" fill="#B04F00" font-weight="bold" font-family="'IBM Plex Mono',Consolas,'Courier New',monospace">:443</text>
+
+<rect x="20" y="384" width="620" height="56" rx="4" fill="#EEF7F0" stroke="#2E7D32" stroke-width="1.5"/>
+<text x="36" y="406" font-size="13" fill="#1E6F45" font-weight="bold">Stateful: a resposta volta sozinha</text>
+<text x="36" y="426" font-size="12" fill="#232F3E">A resposta ao navegador sai sem regra extra; o que a EC2 pede lá fora volta sozinho.</text>
+
+<rect x="20" y="462" width="960" height="80" fill="#F5F7FA" stroke="#7D8998" stroke-width="1"/>
+<text x="36" y="486" font-size="14" fill="#232F3E" font-weight="bold">Regra de ouro do Security Group</text>
+<text x="36" y="510" font-size="13" fill="#232F3E">Entrada: tudo fechado por padrão. Só passa o que uma regra libera (aqui, só TCP 3001 de 0.0.0.0/0).</text>
+<text x="36" y="530" font-size="13" fill="#232F3E">Saída: liberada. Por isso o terminal (SSM), o git, o docker pull e o banco funcionam sem abrir porta de entrada.</text>
+</svg>
